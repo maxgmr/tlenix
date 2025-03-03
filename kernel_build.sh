@@ -21,7 +21,8 @@ PKG_VER=${KERNEL_VERSION}.arch1
 SRC_NAME=linux-${PKG_VER%.*}          # linux-X.Y.Z
 SRC_TAG=v${PKG_VER%.*}-${PKG_VER##*.} # vX.Y.Z-arch1
 
-cd kernel_build || exit 1
+mkdir -p src
+cd src || exit 1
 
 # download kernel
 wget https://www.kernel.org/pub/linux/kernel/v${KERNEL_MAJOR}.x/${LINUX_NAME}.tar.{xz,sign} || exit 1
