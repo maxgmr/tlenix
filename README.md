@@ -1,6 +1,6 @@
 # tlenix
 
-Custom x86_64 OS based on the Linux kernel. Boots from a USB.
+Custom x86_64 OS built upon the Linux kernel. Boots from a USB.
 
 ## Setup - USB UEFI Boot
 
