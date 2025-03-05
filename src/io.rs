@@ -11,7 +11,10 @@ use crate::{
 /// Print to stdout using format syntax.
 #[macro_export]
 macro_rules! print {
-    ($($arg:tt)*) => ($crate::io::_print_str(format_args!($($arg)*)));
+    ($($arg:tt)*) => (
+        #[allow(clippy::used_underscore_items)]
+        $crate::io::_print_str(format_args!($($arg)*))
+    );
 }
 
 /// Print, with a newline, to stdout using format syntax.
@@ -24,7 +27,10 @@ macro_rules! println {
 /// Print to stderr using format syntax.
 #[macro_export]
 macro_rules! eprint {
-    ($($arg:tt)*) => ($crate::io::_print_err(format_args!($($arg)*)));
+    ($($arg:tt)*) => (
+        #[allow(clippy::used_underscore_items)]
+        $crate::io::_print_err(format_args!($($arg)*))
+    );
 }
 
 /// Print, with a newline, to stderr using format syntax.
@@ -37,30 +43,26 @@ macro_rules! eprintln {
 /// Represents stdout.
 #[derive(Debug)]
 struct Stdout;
-impl Write for Stdout {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        // SAFETY: The caller is only able to choose the string itself. The syscall number, stream,
-        // pointer, and string length are all set properly. The pointer is never written to.
-        unsafe {
-            print_helper(s, STDOUT);
-        }
-        Ok(())
-    }
-}
 
 /// Represents stderr.
 #[derive(Debug)]
 struct Stderr;
-impl Write for Stderr {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        // SAFETY: The caller is only able to choose the string itself. The syscall number, stream,
-        // pointer, and string length are all set properly. The pointer is never written to.
-        unsafe {
-            print_helper(s, STDERR);
-        }
-        Ok(())
-    }
+
+macro_rules! write_str_impl {
+    [$(($t:ty, $fd:expr)),*] => {
+        $(impl Write for $t {
+            fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                // SAFETY: The caller is only able to choose the string itself. Everything else
+                // is chosen statically or based on the string length.
+                unsafe {
+                    syscall!(SyscallNum::Write, $fd, s.as_ptr() as usize, s.len());
+                }
+                Ok(())
+            }
+        })*
+    };
 }
+write_str_impl![(Stdout, STDOUT), (Stderr, STDERR)];
 
 /// For [print] and [println] use only.
 #[doc(hidden)]
@@ -72,15 +74,4 @@ pub fn _print_str(args: Arguments<'_>) {
 #[doc(hidden)]
 pub fn _print_err(args: Arguments<'_>) {
     Stderr.write_fmt(args).unwrap();
-}
-
-/// Print the given string to the given file descriptor.
-///
-/// # Safety
-///
-/// The caller must ensure the file descriptor is valid!
-unsafe fn print_helper(s: &str, fd: usize) {
-    unsafe {
-        syscall!(SyscallNum::Write, fd, s.as_ptr() as usize, s.len());
-    }
 }
