@@ -1,0 +1,24 @@
+[package]
+name = "tlenix"
+version = "0.1.0-alpha.1"
+authors = ["Max Gilmour <mgilmour@maxgmr.ca>"]
+edition = "2024"
+description = "Custom OS built upon the Linux kernel"
+readme = "README.md"
+homepage = "https://github.com/maxgmr/tlenix"
+repository = "https://github.com/maxgmr/tlenix"
+license = "GPL-3.0"
+keywords = ["os"]
+categories = []
+exclude = []
+include = []
+
+[lib]
+name = "tlenix_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tlenix_init"
+path = "src/init/main.rs"
+
+[dependencies]
