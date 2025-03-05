@@ -25,6 +25,7 @@ const TLENIX_PANIC_TITLE: &str = "tlenix";
 pub extern "C" fn _start() -> ! {
     welcome_msg();
 
+    // TODO better loop
     loop {}
 }
 
