@@ -13,6 +13,8 @@ const TLENIX_PANIC_TITLE: &str = "tlenix";
 pub extern "C" fn _start() -> ! {
     welcome_msg();
 
+    print!("{}\n", 3.146);
+
     panic!("I'm panicking because of how awesome things are!");
     loop {}
 }
