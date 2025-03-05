@@ -10,6 +10,8 @@
     clippy::all,
     clippy::pedantic
 )]
+#![feature(custom_test_frameworks)]
+#![cfg_attr(test, test_runner(tlenix_core::custom_test_runner))]
 
 use core::panic::PanicInfo;
 
@@ -22,6 +24,8 @@ const TLENIX_PANIC_TITLE: &str = "tlenix";
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
     welcome_msg();
+
+    println!("您们好, 我是马克斯 :)");
 
     loop {}
 }
@@ -36,6 +40,6 @@ fn panic(info: &PanicInfo<'_>) -> ! {
 
     eprintln!("{} {}", TLENIX_PANIC_TITLE, info);
 
-    // Halt system
+    // TODO halt system
     loop {}
 }

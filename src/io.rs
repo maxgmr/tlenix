@@ -75,3 +75,6 @@ pub fn _print_str(args: Arguments<'_>) {
 pub fn _print_err(args: Arguments<'_>) {
     Stderr.write_fmt(args).unwrap();
 }
+
+#[cfg(test)]
+mod tests;
