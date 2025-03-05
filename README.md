@@ -51,7 +51,7 @@ Create a new GRUB configuration at `/mnt/boot/grub/grub.cfg`. Here's an example:
 set default=0
 set timeout=30
 
-menuentry "tlenix 0.1.0" {
+menuentry "tlenix" {
     linux /boot/vmlinuz-linux root=/dev/sda2 rw
     initrd /boot/initramfs-linux.img
 }
