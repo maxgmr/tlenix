@@ -25,8 +25,6 @@ const TLENIX_PANIC_TITLE: &str = "tlenix";
 pub extern "C" fn _start() -> ! {
     welcome_msg();
 
-    println!("您们好, 我是马克斯 :)");
-
     loop {}
 }
 

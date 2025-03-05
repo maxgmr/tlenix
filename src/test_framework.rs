@@ -1,8 +1,11 @@
 //! Custom test framework for `tlenix_core` tests.
 
+#[cfg(test)]
 use core::panic::PanicInfo;
 
-use crate::{eprintln, print, println};
+#[cfg(test)]
+use crate::eprintln;
+use crate::{print, println};
 
 /// [Testable] types can be run as tests and should panic if their test fails.
 pub trait Testable {
@@ -29,6 +32,7 @@ pub fn custom_test_runner(tests: &[&dyn Testable]) {
 }
 
 /// Display failure and panic message.
+#[cfg(test)]
 pub fn test_panic_handler(info: &PanicInfo<'_>) -> ! {
     eprintln!("[FAIL!]");
     eprintln!("Error:\n{}", info);
