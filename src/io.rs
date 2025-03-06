@@ -12,8 +12,7 @@ use crate::{
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => (
-        #[allow(clippy::used_underscore_items)]
-        $crate::io::_print_str(format_args!($($arg)*))
+        $crate::io::__print_str(format_args!($($arg)*))
     );
 }
 
@@ -28,8 +27,7 @@ macro_rules! println {
 #[macro_export]
 macro_rules! eprint {
     ($($arg:tt)*) => (
-        #[allow(clippy::used_underscore_items)]
-        $crate::io::_print_err(format_args!($($arg)*))
+        $crate::io::__print_err(format_args!($($arg)*))
     );
 }
 
@@ -66,13 +64,13 @@ write_str_impl![(Stdout, STDOUT), (Stderr, STDERR)];
 
 /// For [print] and [println] use only.
 #[doc(hidden)]
-pub fn _print_str(args: Arguments<'_>) {
+pub fn __print_str(args: Arguments<'_>) {
     Stdout.write_fmt(args).unwrap();
 }
 
 /// For [eprint] and [eprintln] use only.
 #[doc(hidden)]
-pub fn _print_err(args: Arguments<'_>) {
+pub fn __print_err(args: Arguments<'_>) {
     Stderr.write_fmt(args).unwrap();
 }
 

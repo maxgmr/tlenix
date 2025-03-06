@@ -1,10 +1,14 @@
 //! All the Linux error codes returned by the [errno](https://www.man7.org/linux/man-pages/man3/errno.3.html)
 //! syscall.
 
+use num_enum::TryFromPrimitive;
+
+const ERRNO_MATCH_FAIL_MSG: &str = "returned number does not match Errno variant";
+
 /// The Linux error codes returned by the
 /// [errno](https://www.man7.org/linux/man-pages/man3/errno.3.html) syscall.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(usize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
+#[repr(i32)]
 #[non_exhaustive]
 #[allow(missing_docs)]
 pub enum Errno {
@@ -274,6 +278,21 @@ impl Errno {
             Ekeyrejected => "Key was rejected by service",
             Eownerdead => "Owner died",
             Enotrecoverable => "State not recoverable",
+        }
+    }
+}
+impl Errno {
+    /// Convert a raw syscall return value to a [Result].
+    #[doc(hidden)]
+    pub fn __from_ret(value: usize) -> Result<usize, Errno> {
+        // Ok to lose sign of value, that's the point of the check!
+        #[allow(clippy::cast_sign_loss)]
+        if value > -4096_isize as usize {
+            // Truncation of the error value is guaranteed to never occur due to the above check.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+            Err(Errno::try_from(-(value as i32)).expect(ERRNO_MATCH_FAIL_MSG))
+        } else {
+            Ok(value)
         }
     }
 }

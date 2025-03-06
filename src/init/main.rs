@@ -27,15 +27,19 @@ const TLENIX_PANIC_TITLE: &str = "tlenix";
 /// This function panics if the system fails to power off properly.
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
+    // Align stack pointer
+    unsafe {
+        core::arch::asm!("and rsp, -16", options(nostack));
+    }
     welcome_msg();
 
-    for _ in 0..100_000_000 {
-        core::hint::spin_loop();
-    }
+    let path: &str = "test_files/test.txt\0";
+    let read_buf: [u8; 255] = tlenix_core::fs::read_from_file(path)
+        .inspect_err(|e| tlenix_core::eprintln!("{}", e.as_str()))
+        .unwrap();
+    println!("{}", str::from_utf8(&read_buf).unwrap());
 
-    tlenix_core::system::expect_power_off();
-
-    panic!("Power off AND handler failed!");
+    loop {}
 }
 
 fn welcome_msg() {

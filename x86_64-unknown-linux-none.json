@@ -5,7 +5,18 @@
   "target-endian": "little",
   "target-pointer-width": "64",
   "target-c-int-width": "32",
+  "max-atomic-width": 64,
+  "metadata": {
+    "description": null,
+    "std": false,
+    "tier": null
+  },
   "os": "linux",
+  "stack-probes": {
+    "kind": "inline"
+  },
+  "has-rpath": true,
+  "has-thread-local": true,
   "executables": true,
   "linker-flavor": "ld.lld",
   "linker": "rust-lld",

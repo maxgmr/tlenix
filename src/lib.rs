@@ -16,12 +16,16 @@
 use core::panic::PanicInfo;
 
 pub mod consts;
+pub mod fs;
 pub mod io;
 pub mod syscalls;
 pub mod system;
+
 mod test_framework;
 
-pub use syscalls::SyscallNum;
+// Re-exports
+
+pub use syscalls::{Errno, SyscallNum};
 
 pub use test_framework::custom_test_runner;
 
@@ -33,6 +37,10 @@ pub use test_framework::custom_test_runner;
 #[cfg(test)]
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
+    // Align stack pointer
+    unsafe {
+        core::arch::asm!("and rsp, -16", options(nostack));
+    }
     test_main();
 
     // TODO replace with a better loop
