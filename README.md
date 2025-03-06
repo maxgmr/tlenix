@@ -71,9 +71,11 @@ Make some nodes that the kernel also needs:
 
 ### 7. Add tlenix init
 
-Build the binary: `./build_init.sh`
+Grab the `init` binary from the [Releases](https://github.com/maxgmr/tlenix/releases/latest) page.
 
-Copy the binary to the USB: `cp init/init /mnt/sbin/`
+Rename it to `init`, then copy it to the USB: `sudo cp init /mnt/sbin/init`
+
+Make sure the file path matches your `root=` argument in your `grub.cfg` from step 5!
 
 ### 8. Reboot and run!
 
