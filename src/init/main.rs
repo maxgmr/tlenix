@@ -21,11 +21,21 @@ const WELCOME_MSG: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_V
 const TLENIX_PANIC_TITLE: &str = "tlenix";
 
 /// Entry point.
+///
+/// # Panics
+///
+/// This function panics if the system fails to power off properly.
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
     welcome_msg();
 
-    loop {}
+    for _ in 0..100_000_000 {
+        core::hint::spin_loop();
+    }
+
+    tlenix_core::system::expect_power_off();
+
+    panic!("Power off AND handler failed!");
 }
 
 fn welcome_msg() {
@@ -38,6 +48,6 @@ fn panic(info: &PanicInfo<'_>) -> ! {
 
     eprintln!("{} {}", TLENIX_PANIC_TITLE, info);
 
-    // TODO halt system
+    // TODO use a better loop
     loop {}
 }

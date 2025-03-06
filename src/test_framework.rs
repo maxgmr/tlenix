@@ -28,7 +28,10 @@ pub fn custom_test_runner(tests: &[&dyn Testable]) {
         test.run();
     }
     println!("\n=======");
-    println!("All {} test(s) passed successfully! :D", tests.len());
+    println!(
+        "[ALL_PASS] All {} test(s) passed successfully! :D",
+        tests.len()
+    );
 }
 
 /// Display failure and panic message.
@@ -37,6 +40,7 @@ pub fn test_panic_handler(info: &PanicInfo<'_>) -> ! {
     eprintln!("[FAIL!]");
     eprintln!("Error:\n{}", info);
 
-    // TODO exit process sadly
+    // TODO use a better loop
+    #[allow(clippy::empty_loop)]
     loop {}
 }

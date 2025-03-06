@@ -18,6 +18,7 @@ use core::panic::PanicInfo;
 pub mod consts;
 pub mod io;
 pub mod syscalls;
+pub mod system;
 mod test_framework;
 
 pub use syscalls::SyscallNum;
@@ -25,13 +26,17 @@ pub use syscalls::SyscallNum;
 pub use test_framework::custom_test_runner;
 
 /// Entry point for library tests.
+///
+/// # Panics
+///
+/// Panics if the system fails to power off.
 #[cfg(test)]
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
-    #[cfg(test)]
     test_main();
 
-    // TODO exit happily
+    // TODO replace with a better loop
+    #[allow(clippy::empty_loop)]
     loop {}
 }
 
