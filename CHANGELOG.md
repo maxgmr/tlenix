@@ -9,14 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Shell.
 
-## [0.1.0-alpha.1] - UNRELEASED
+## [0.1.0-alpha.1] - 2025-03-05
 
 ### Added
 
 - Initial release.
 - Welcome message.
 - `print!`, `println!`, `eprint`, and `eprintln!` macros.
-
-### Changed
-
-### Removed
+- Test suite.
