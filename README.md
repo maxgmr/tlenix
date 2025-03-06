@@ -79,4 +79,4 @@ Make sure the file path matches your `root=` argument in your `grub.cfg` from st
 
 ### 8. Reboot and run!
 
-If you don't boot into GRUB with `tlenek` as an option, make sure that your USB stick is at the top of boot priority in your computer's BIOS settings.
+If you don't boot into GRUB with `tlenix` as an option, make sure that your USB stick is at the top of boot priority in your computer's BIOS settings.
