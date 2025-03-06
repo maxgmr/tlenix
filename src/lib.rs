@@ -32,6 +32,7 @@ pub extern "C" fn _start() -> ! {
     test_main();
 
     // TODO exit happily
+    #[allow(clippy::empty_loop)]
     loop {}
 }
 

@@ -26,6 +26,7 @@ pub extern "C" fn _start() -> ! {
     welcome_msg();
 
     // TODO better loop
+    #[allow(clippy::empty_loop)]
     loop {}
 }
 
