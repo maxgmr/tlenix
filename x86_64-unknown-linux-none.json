@@ -11,5 +11,5 @@
   "linker": "rust-lld",
   "panic-strategy": "abort",
   "target-family": ["unix"],
-  "features": "+sse2,+avx512f"
+  "features": "+sse2,+avx2"
 }
