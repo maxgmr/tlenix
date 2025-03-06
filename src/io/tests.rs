@@ -98,3 +98,8 @@ fn uni_fmt() {
 fn cn_fmt() {
     print!("您们好, 我是马克斯 :)");
 }
+
+#[test_case]
+fn temp_fail() {
+    panic!();
+}
