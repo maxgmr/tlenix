@@ -43,7 +43,7 @@ macro_rules! syscall {
 ///
 /// If the syscall is successful, the value is returned within the [`Ok`].
 ///
-/// If the syscall is _unsuccessful_, an [`Errno`] is returned within the [`Ok`].
+/// If the syscall is _unsuccessful_, an [`Errno`] is returned within the [`Err`].
 #[macro_export]
 macro_rules! syscall_result {
     ($($arg:expr),*) => {

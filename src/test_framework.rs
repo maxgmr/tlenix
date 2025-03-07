@@ -1,10 +1,5 @@
 //! Custom test framework for `tlenix_core` tests.
 
-#[cfg(test)]
-use core::panic::PanicInfo;
-
-#[cfg(test)]
-use crate::eprintln;
 use crate::{print, println};
 
 /// [`Testable`] types can be run as tests and should panic if their test fails.
@@ -36,11 +31,11 @@ pub fn custom_test_runner(tests: &[&dyn Testable]) {
 
 /// Display failure and panic message.
 #[cfg(test)]
-pub fn test_panic_handler(info: &PanicInfo<'_>) -> ! {
+pub fn test_panic_handler(info: &core::panic::PanicInfo<'_>) -> ! {
+    use crate::{eprintln, sleep_loop_forever};
+
     eprintln!("[FAIL!]");
     eprintln!("Error:\n{}", info);
 
-    // TODO use a better loop
-    #[allow(clippy::empty_loop)]
-    loop {}
+    sleep_loop_forever()
 }

@@ -15,7 +15,7 @@
 
 use core::panic::PanicInfo;
 
-use tlenix_core::println;
+use tlenix_core::{println, sleep_loop, sleep_loop_forever};
 
 const WELCOME_MSG: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION"));
 const TLENIX_PANIC_TITLE: &str = "tlenix";
@@ -35,9 +35,7 @@ pub extern "C" fn _start() -> ! {
     }
     welcome_msg();
 
-    // TODO use a better loop
-    #[allow(clippy::empty_loop)]
-    loop {}
+    sleep_loop().unwrap()
 }
 
 fn welcome_msg() {
@@ -46,11 +44,6 @@ fn welcome_msg() {
 
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
-    use tlenix_core::eprintln;
-
-    eprintln!("{} {}", TLENIX_PANIC_TITLE, info);
-
-    // TODO use a better loop
-    #[allow(clippy::empty_loop)]
-    loop {}
+    tlenix_core::eprintln!("{} {}", TLENIX_PANIC_TITLE, info);
+    sleep_loop_forever()
 }

@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Shell.
 
+## [0.1.0-alpha.3] - 2025-03-06
+
+### Added
+
+- Thread sleep function.
+
+### Changed
+
+- Improved endless loop that wastes fewer CPU cycles.
+
 ## [0.1.0-alpha.2] - 2025-03-06
 
 ### Added
