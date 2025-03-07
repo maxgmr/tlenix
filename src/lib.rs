@@ -32,9 +32,6 @@ pub use syscalls::{Errno, SyscallNum};
 
 pub use test_framework::custom_test_runner;
 
-/// Intel 8253/8254 sends an IRQ0 (timer interrupt) once every ~52.9254 ms.
-const PIT_IRQ_PERIOD: u64 = 54_925_400;
-
 /// Entry point for library tests.
 ///
 /// # Panics
@@ -60,7 +57,7 @@ pub extern "C" fn _start() -> ! {
 ///
 /// This function returns an error if [`thread::sleep`] returns an error.
 pub fn sleep_loop() -> Result<!, Errno> {
-    let sleep_duration = core::time::Duration::from_nanos(PIT_IRQ_PERIOD);
+    let sleep_duration = core::time::Duration::from_nanos(consts::PIT_IRQ_PERIOD);
     loop {
         thread::sleep(&sleep_duration)?;
     }
