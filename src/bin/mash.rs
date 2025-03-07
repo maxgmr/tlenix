@@ -15,10 +15,14 @@
 
 use core::panic::PanicInfo;
 
-use tlenix_core::{println, sleep_loop, sleep_loop_forever};
+use tlenix_core::{
+    consts::EXIT_SUCCESS, io::Console, print, println, process::exit, sleep_loop_forever,
+};
 
-const WELCOME_MSG: &str = "Welcome to MASH!";
-const TLENIX_PANIC_TITLE: &str = "tlenix";
+const MASH_PANIC_TITLE: &str = "mash";
+const PROMPT: &str = ":} ";
+
+const LINE_MAX: usize = 1024;
 
 /// Entry point.
 ///
@@ -33,19 +37,27 @@ pub extern "C" fn _start() -> ! {
     unsafe {
         core::arch::asm!("and rsp, -16", options(nostack));
     }
-    welcome_msg();
 
-    // TODO
+    println!();
 
-    sleep_loop().unwrap()
-}
+    let console = Console::open_console().unwrap();
 
-fn welcome_msg() {
-    println!("{WELCOME_MSG}");
+    loop {
+        print!("{PROMPT}");
+        let line: [u8; LINE_MAX] = console.read_line().unwrap();
+        // TODO test exit
+        if &line[..4] == b"exit" {
+            exit(EXIT_SUCCESS)
+        }
+        // TODO just echo everything back
+        if line[0] != 0 {
+            println!("{}", str::from_utf8(&line).unwrap());
+        }
+    }
 }
 
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
-    tlenix_core::eprintln!("{} {}", TLENIX_PANIC_TITLE, info);
+    tlenix_core::eprintln!("{} {}", MASH_PANIC_TITLE, info);
     sleep_loop_forever()
 }

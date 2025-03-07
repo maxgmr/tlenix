@@ -11,14 +11,23 @@
     clippy::pedantic
 )]
 #![feature(custom_test_frameworks)]
+#![feature(concat_bytes)]
 #![cfg_attr(test, test_runner(tlenix_core::custom_test_runner))]
 
 use core::panic::PanicInfo;
 
-use tlenix_core::{println, sleep_loop, sleep_loop_forever};
+use tlenix_core::{
+    data::NullTermStr, nulltermstr, println, process::execute_process, sleep_loop,
+    sleep_loop_forever,
+};
 
 const WELCOME_MSG: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION"));
 const TLENIX_PANIC_TITLE: &str = "tlenix";
+
+#[cfg(debug_assertions)]
+const SHELL_PATH: NullTermStr<44> = nulltermstr!(b"target/x86_64-unknown-linux-none/debug/mash");
+#[cfg(not(debug_assertions))]
+const SHELL_PATH: NullTermStr<10> = nulltermstr!(b"/bin/mash");
 
 /// Entry point.
 ///
@@ -34,6 +43,9 @@ pub extern "C" fn _start() -> ! {
         core::arch::asm!("and rsp, -16", options(nostack));
     }
     welcome_msg();
+
+    // Launch shell
+    execute_process(&SHELL_PATH).unwrap();
 
     sleep_loop().unwrap()
 }
