@@ -2,10 +2,36 @@
 
 const TO_NULL_TERM_STR_ERR_MSG: &str = "input is too long for NullTermStr buffer";
 
+/// Directly create a [`NullTermStr`] which can be evaluated at compile time.
+///
+/// The first literal is the literal byte string, and the second literal within the brackets is the
+/// length of the [`NullTermStr`] (_not_ the byte string!)
+///
+/// # Examples
+///
+/// ```
+/// // The byte array itself is 13 bytes long, but with the null terminator it'd be 14.
+/// const MY_NULL_TERM_STR: NullTermStr<14> = nulltermstr!(b"Hello, world!"[14]);
+/// ```
+#[macro_export]
+macro_rules! nulltermstr {
+    ($s:literal[$n:literal]) => {
+        NullTermStr::__raw_nulltermstr_do_not_use(*concat_bytes!($s, b"\0"))
+    };
+}
+
 /// A null-terminated byte slice of a static length.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NullTermStr<const N: usize>([u8; N]);
 impl<const N: usize> NullTermStr<N> {
+    /// This should NOT BE USED DIRECTLY! Giving this bytes which _aren't_ null-terminated breaks
+    /// _the whole point of this type!_ This function is just for the [`nulltermstr`] macro.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn __raw_nulltermstr_do_not_use(bytes: [u8; N]) -> Self {
+        Self(bytes)
+    }
+
     /// Returns a raw pointer to the [`NullTermStr`]'s buffer.
     #[must_use]
     #[inline]
@@ -93,5 +119,12 @@ mod tests {
         let expected = *b"Hello, world!\0";
         let result = NullTermStr::<14>::from(TEST_BYTES);
         assert_eq!(result.bytes(), expected);
+    }
+
+    #[test_case]
+    fn nts_macro() {
+        let expected = *b"Hello, world!\0";
+        let result = nulltermstr!(b"Hello, world!"[14]);
+        assert_eq!(expected, result.bytes());
     }
 }

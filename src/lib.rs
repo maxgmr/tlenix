@@ -12,6 +12,7 @@
 #![feature(generic_const_exprs)]
 #![feature(never_type)]
 #![feature(custom_test_frameworks)]
+#![feature(concat_bytes)]
 #![test_runner(test_framework::custom_test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
