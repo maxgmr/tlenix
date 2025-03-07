@@ -7,7 +7,7 @@ use core::panic::PanicInfo;
 use crate::eprintln;
 use crate::{print, println};
 
-/// [Testable] types can be run as tests and should panic if their test fails.
+/// [`Testable`] types can be run as tests and should panic if their test fails.
 pub trait Testable {
     /// Run the test and panic on failure.
     fn run(&self);
