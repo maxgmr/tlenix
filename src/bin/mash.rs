@@ -46,12 +46,16 @@ pub extern "C" fn _start() -> ! {
         print!("{PROMPT}");
         let line: [u8; LINE_MAX] = console.read_line().unwrap();
         // TODO test exit
-        if &line[..4] == b"exit" {
+        if &line[..5] == b"exit\0" {
             exit(EXIT_SUCCESS)
         }
         // TODO just echo everything back
         if line[0] != 0 {
-            println!("{}", str::from_utf8(&line).unwrap());
+            if let Ok(utf8_line) = str::from_utf8(&line) {
+                println!("{utf8_line}");
+            } else {
+                println!("UTF-8 error :(");
+            }
         }
     }
 }
