@@ -13,7 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Thread sleep function.
+
 ### Changed
+
+- Improved endless loop that wastes less CPU cycles.
 
 ### Removed
 

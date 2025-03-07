@@ -10,12 +10,10 @@
 #![cfg_attr(test, no_main)]
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
+#![feature(never_type)]
 #![feature(custom_test_frameworks)]
 #![test_runner(test_framework::custom_test_runner)]
 #![reexport_test_harness_main = "test_main"]
-
-#[cfg(test)]
-use core::panic::PanicInfo;
 
 pub mod consts;
 pub mod data;
@@ -33,11 +31,14 @@ pub use syscalls::{Errno, SyscallNum};
 
 pub use test_framework::custom_test_runner;
 
+/// Intel 8253/8254 sends an IRQ0 (timer interrupt) once every ~52.9254 ms.
+const PIT_IRQ_PERIOD: u64 = 54_925_400;
+
 /// Entry point for library tests.
 ///
 /// # Panics
 ///
-/// Panics if the system fails to power off.
+/// This function panics if the sleep loop returns an error.
 #[cfg(test)]
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
@@ -49,7 +50,27 @@ pub extern "C" fn _start() -> ! {
     }
     test_main();
 
-    // TODO replace with a better loop
+    sleep_loop().unwrap()
+}
+
+/// Endlessly loop, sleeping the thread.
+///
+/// # Errors
+///
+/// This function returns an error if [`thread::sleep`] returns an error.
+pub fn sleep_loop() -> Result<!, Errno> {
+    let sleep_duration = core::time::Duration::from_nanos(PIT_IRQ_PERIOD);
+    loop {
+        thread::sleep(&sleep_duration)?;
+    }
+}
+
+/// Endlessly loop, sleeping the thread.
+///
+/// If [`thread::sleep`] returns an error for whatever reason, an empty loop is used as a fallback.
+pub fn sleep_loop_forever() -> ! {
+    let _ = sleep_loop();
+    // Fallback loop if `sleep_loop` breaks
     #[allow(clippy::empty_loop)]
     loop {}
 }
@@ -57,6 +78,6 @@ pub extern "C" fn _start() -> ! {
 /// Panic handler for library tests.
 #[cfg(test)]
 #[panic_handler]
-fn panic(info: &PanicInfo<'_>) -> ! {
+fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
     test_framework::test_panic_handler(info)
 }
