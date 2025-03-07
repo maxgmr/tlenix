@@ -28,17 +28,15 @@ const TLENIX_PANIC_TITLE: &str = "tlenix";
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
     // Align stack pointer
+    //
+    // SAFETY: Valid ASM instruction with valid, statically-chosen arguments.
     unsafe {
         core::arch::asm!("and rsp, -16", options(nostack));
     }
     welcome_msg();
 
-    let path: &str = "test_files/test.txt\0";
-    let read_buf: [u8; 255] = tlenix_core::fs::read_from_file(path)
-        .inspect_err(|e| tlenix_core::eprintln!("{}", e.as_str()))
-        .unwrap();
-    println!("{}", str::from_utf8(&read_buf).unwrap());
-
+    // TODO use a better loop
+    #[allow(clippy::empty_loop)]
     loop {}
 }
 
@@ -53,5 +51,6 @@ fn panic(info: &PanicInfo<'_>) -> ! {
     eprintln!("{} {}", TLENIX_PANIC_TITLE, info);
 
     // TODO use a better loop
+    #[allow(clippy::empty_loop)]
     loop {}
 }
