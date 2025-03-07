@@ -8,6 +8,8 @@
 )]
 #![no_std]
 #![cfg_attr(test, no_main)]
+#![allow(incomplete_features)]
+#![feature(generic_const_exprs)]
 #![feature(custom_test_frameworks)]
 #![test_runner(test_framework::custom_test_runner)]
 #![reexport_test_harness_main = "test_main"]
@@ -16,12 +18,17 @@
 use core::panic::PanicInfo;
 
 pub mod consts;
+pub mod data;
+pub mod fs;
 pub mod io;
 pub mod syscalls;
 pub mod system;
+
 mod test_framework;
 
-pub use syscalls::SyscallNum;
+// Re-exports
+
+pub use syscalls::{Errno, SyscallNum};
 
 pub use test_framework::custom_test_runner;
 
@@ -33,6 +40,12 @@ pub use test_framework::custom_test_runner;
 #[cfg(test)]
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
+    // Align stack pointer
+    //
+    // SAFETY: Valid ASM instruction with valid, statically-chosen arguments.
+    unsafe {
+        core::arch::asm!("and rsp, -16", options(nostack));
+    }
     test_main();
 
     // TODO replace with a better loop

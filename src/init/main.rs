@@ -27,15 +27,17 @@ const TLENIX_PANIC_TITLE: &str = "tlenix";
 /// This function panics if the system fails to power off properly.
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
+    // Align stack pointer
+    //
+    // SAFETY: Valid ASM instruction with valid, statically-chosen arguments.
+    unsafe {
+        core::arch::asm!("and rsp, -16", options(nostack));
+    }
     welcome_msg();
 
-    for _ in 0..100_000_000 {
-        core::hint::spin_loop();
-    }
-
-    tlenix_core::system::expect_power_off();
-
-    panic!("Power off AND handler failed!");
+    // TODO use a better loop
+    #[allow(clippy::empty_loop)]
+    loop {}
 }
 
 fn welcome_msg() {
@@ -49,5 +51,6 @@ fn panic(info: &PanicInfo<'_>) -> ! {
     eprintln!("{} {}", TLENIX_PANIC_TITLE, info);
 
     // TODO use a better loop
+    #[allow(clippy::empty_loop)]
     loop {}
 }

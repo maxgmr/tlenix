@@ -3,11 +3,13 @@
 
 use core::arch::asm;
 
+mod errno;
 mod nums;
 
+pub use errno::Errno;
 pub use nums::SyscallNum;
 
-/// Invoke a Linux syscall, getting a [usize] in return.
+/// Invoke a Linux syscall, getting a [`usize`] in return.
 ///
 /// # Safety
 ///
@@ -35,6 +37,18 @@ macro_rules! syscall {
     ($cn:expr, $a0:expr, $a1:expr, $a2:expr, $a3:expr, $a4:expr, $a5:expr) => {
         $crate::syscalls::syscall_6($cn, $a0, $a1, $a2, $a3, $a4, $a5)
     };
+}
+
+/// Invoke a Linux syscall, returning a [`Result`].
+///
+/// If the syscall is successful, the value is returned within the [`Ok`].
+///
+/// If the syscall is _unsuccessful_, an [`Errno`] is returned within the [`Ok`].
+#[macro_export]
+macro_rules! syscall_result {
+    ($($arg:expr),*) => {
+        $crate::Errno::__from_ret($crate::syscall!($($arg),*))
+    }
 }
 
 /// Invoke a Linux syscall with 0 args.

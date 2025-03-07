@@ -1,6 +1,6 @@
 [package]
 name = "tlenix"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 authors = ["Max Gilmour <mgilmour@maxgmr.ca>"]
 edition = "2024"
 description = "Custom OS built upon the Linux kernel"
@@ -22,3 +22,4 @@ name = "tlenix_init"
 path = "src/init/main.rs"
 
 [dependencies]
+num_enum = { version = "0.7.3", default-features = false }

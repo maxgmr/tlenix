@@ -1,6 +1,6 @@
 //! Functionality related to the computer system itself.
 
-use super::{SyscallNum, consts::REBOOT_FAIL, syscall};
+use super::{SyscallNum, consts::SYSCALL_FAIL, syscall};
 
 const LINUX_REBOOT_MAGIC1: usize = 0xfee1_dead;
 const LINUX_REBOOT_MAGIC2C: usize = 0x2011_2000;
@@ -26,7 +26,7 @@ enum RebootCmd {
 ///
 /// This function panics if it is unable to shut down the system.
 pub fn expect_power_off() {
-    assert!(power_off_syscall() != REBOOT_FAIL, "Failed to power off!");
+    assert!(power_off_syscall() != SYSCALL_FAIL, "Failed to power off!");
 }
 
 /// Wrapper for the [reboot](https://man7.org/linux/man-pages/man2/reboot.2.html) syscall with the
@@ -46,5 +46,5 @@ fn power_off_syscall() -> i32 {
         );
     }
     // Shouldn't return!
-    REBOOT_FAIL
+    SYSCALL_FAIL
 }
