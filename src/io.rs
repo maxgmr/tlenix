@@ -14,8 +14,12 @@ use crate::{
     thread::sleep,
 };
 
+#[cfg(not(debug_assertions))]
 /// Path to the Linux system console device.
-const DEV_CONSOLE_PATH: NullTermStr<13> = nulltermstr!(b"/dev/console"[13]);
+const DEV_CONSOLE_PATH: NullTermStr<13> = nulltermstr!(b"/dev/console");
+#[cfg(debug_assertions)]
+/// Path to the Linux system console device.
+const DEV_CONSOLE_PATH: NullTermStr<9> = nulltermstr!(b"/dev/tty");
 /// Byte representing the "backspace" character.
 const BACKSP_BYTE: u8 = 8;
 

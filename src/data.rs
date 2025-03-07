@@ -15,7 +15,7 @@ const TO_NULL_TERM_STR_ERR_MSG: &str = "input is too long for NullTermStr buffer
 /// ```
 #[macro_export]
 macro_rules! nulltermstr {
-    ($s:literal[$n:literal]) => {
+    ($s:literal) => {
         NullTermStr::__raw_nulltermstr_do_not_use(*concat_bytes!($s, b"\0"))
     };
 }
@@ -124,7 +124,7 @@ mod tests {
     #[test_case]
     fn nts_macro() {
         let expected = *b"Hello, world!\0";
-        let result = nulltermstr!(b"Hello, world!"[14]);
+        let result = nulltermstr!(b"Hello, world!");
         assert_eq!(expected, result.bytes());
     }
 }
