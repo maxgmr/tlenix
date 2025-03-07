@@ -62,13 +62,13 @@ macro_rules! write_str_impl {
 }
 write_str_impl![(Stdout, STDOUT), (Stderr, STDERR)];
 
-/// For [print] and [println] use only.
+/// For [`print`] and [`println`] use only.
 #[doc(hidden)]
 pub fn __print_str(args: Arguments<'_>) {
     Stdout.write_fmt(args).unwrap();
 }
 
-/// For [eprint] and [eprintln] use only.
+/// For [`eprint`] and [`eprintln`] use only.
 #[doc(hidden)]
 pub fn __print_err(args: Arguments<'_>) {
     Stderr.write_fmt(args).unwrap();
