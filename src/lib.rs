@@ -23,6 +23,7 @@ pub mod fs;
 pub mod io;
 pub mod syscalls;
 pub mod system;
+pub mod thread;
 
 mod test_framework;
 
