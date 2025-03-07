@@ -88,10 +88,10 @@ pub fn __print_err(args: Arguments<'_>) {
 /// Struct to read from and write to the [system console](https://en.wikipedia.org/wiki/Linux_console).
 /// Contains a file descriptor for the system console.
 #[derive(Debug)]
-pub struct ConsoleReader(FileDescriptor);
-impl ConsoleReader {
+pub struct Console(FileDescriptor);
+impl Console {
     /// Opens the [system console](https://en.wikipedia.org/wiki/Linux_console), returning its file
-    /// descriptor as a [`ConsoleReader`].
+    /// descriptor as a [`Console`].
     ///
     /// # Errors
     ///
