@@ -282,7 +282,7 @@ impl Errno {
     }
 }
 impl Errno {
-    /// Convert a raw syscall return value to a [Result].
+    /// Convert a raw syscall return value to a [`Result`].
     #[doc(hidden)]
     pub fn __from_ret(value: usize) -> Result<usize, Errno> {
         // Ok to lose sign of value, that's the point of the check!
