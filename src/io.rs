@@ -103,7 +103,7 @@ impl Console {
     pub fn open_console() -> Result<Self, Errno> {
         open_no_create(
             &DEV_CONSOLE_PATH,
-            &(OpenFlags::O_RDWR | OpenFlags::O_NDELAY),
+            &(OpenFlags::O_RDWR | OpenFlags::O_NONBLOCK),
         )
         .map(Self)
     }
@@ -117,10 +117,10 @@ impl Console {
     pub fn read_console_byte(&self) -> Result<u8, Errno> {
         let dur = Duration::from_nanos(PIT_IRQ_PERIOD);
         loop {
-            let result = read_byte(self.0)?;
-            match result {
-                Some(0) | None => sleep(&dur)?, // Nothing read, sleep then loop again...
-                Some(byte) => return Ok(byte),  // Got a byte! Return it
+            match read_byte(self.0) {
+                Ok(None) | Err(Errno::Eagain) => sleep(&dur)?, // Nothing read, sleep then loop
+                Err(e) => return Err(e),                       // Propagate other errors
+                Ok(Some(b)) => return Ok(b),                   // Got a byte! Return it!
             }
         }
     }
@@ -147,8 +147,6 @@ impl Console {
         let mut i: usize = 0;
         while i < N {
             let read_byte = self.read_console_byte()?;
-            // We want to see what we're typing!
-            self.write_console_byte(read_byte)?;
             result[i] = read_byte;
 
             if read_byte == BACKSP_BYTE {
