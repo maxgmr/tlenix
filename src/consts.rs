@@ -1,5 +1,10 @@
 //! Generally-useful constants.
 
+/// C standard successful exit code.
+pub const EXIT_SUCCESS: usize = 0;
+/// C standard failure exit code.
+pub const EXIT_FAILURE: usize = 1;
+
 /// The standard input stream.
 pub const STDIN: usize = 0;
 /// The standard output stream.
