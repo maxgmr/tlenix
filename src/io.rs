@@ -2,7 +2,12 @@
 
 use core::fmt::{Arguments, Write};
 
-use crate::{Errno, data::NullTermStr};
+use crate::{
+    Errno,
+    data::NullTermStr,
+    fs::{OpenFlags, open_no_create},
+    nulltermstr,
+};
 
 use super::{
     SyscallNum,
@@ -12,7 +17,7 @@ use super::{
 };
 
 /// Path to the Linux system console device.
-const DEV_CONSOLE_PATH: [u8; 12] = *b"/dev/console";
+const DEV_CONSOLE_PATH: NullTermStr<13> = nulltermstr!(b"/dev/console"[13]);
 
 /// Print to stdout using format syntax.
 #[macro_export]
@@ -84,12 +89,12 @@ pub fn __print_err(args: Arguments<'_>) {
 ///
 /// # Errors
 ///
-/// This function returns an [`Errno`] if the [open](https://www.man7.org/linux/man-pages/man2/open.2.html)
-/// syscall returns an error.
+/// This function propagates any errors from the underlying [`open_no_create`]
 pub fn open_console() -> Result<FileDescriptor, Errno> {
-    // Make sure path is null-terminated
-    let path_null_termd = NullTermStr::<13>::from(DEV_CONSOLE_PATH);
-    todo!()
+    open_no_create(
+        &DEV_CONSOLE_PATH,
+        &(OpenFlags::O_RDWR | OpenFlags::O_NDELAY),
+    )
 }
 
 #[cfg(test)]
