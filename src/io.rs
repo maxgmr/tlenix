@@ -2,7 +2,7 @@
 
 use core::fmt::{Arguments, Write};
 
-use crate::{
+use super::{
     SyscallNum,
     consts::{STDERR, STDOUT},
     syscall,
