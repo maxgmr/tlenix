@@ -2,11 +2,17 @@
 
 use core::fmt::{Arguments, Write};
 
+use crate::{Errno, data::NullTermStr};
+
 use super::{
     SyscallNum,
     consts::{STDERR, STDOUT},
+    fs::FileDescriptor,
     syscall,
 };
+
+/// Path to the Linux system console device.
+const DEV_CONSOLE_PATH: [u8; 12] = *b"/dev/console";
 
 /// Print to stdout using format syntax.
 #[macro_export]
@@ -72,6 +78,18 @@ pub fn __print_str(args: Arguments<'_>) {
 #[doc(hidden)]
 pub fn __print_err(args: Arguments<'_>) {
     Stderr.write_fmt(args).unwrap();
+}
+
+/// Opens the [system console](https://en.wikipedia.org/wiki/Linux_console), returning its [`FileDescriptor`].
+///
+/// # Errors
+///
+/// This function returns an [`Errno`] if the [open](https://www.man7.org/linux/man-pages/man2/open.2.html)
+/// syscall returns an error.
+pub fn open_console() -> Result<FileDescriptor, Errno> {
+    // Make sure path is null-terminated
+    let path_null_termd = NullTermStr::<13>::from(DEV_CONSOLE_PATH);
+    todo!()
 }
 
 #[cfg(test)]
