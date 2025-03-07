@@ -2,6 +2,12 @@
 
 Custom x86_64 OS built upon the Linux kernel. Boots from a USB.
 
+## Components
+
+`init`: Responsible for booting up the system. Starts up `mash`.
+
+`mash`: **Ma**x's **Sh**ell. An extremely primitive command-line-interface shell.
+
 ## Setup - USB UEFI Boot
 
 ### 0. Watch out!
@@ -69,13 +75,17 @@ Make some nodes that the kernel also needs:
 
 /dev/null character device: `mknod -m 666 /mnt/dev/null c 1 3`
 
-### 7. Add tlenix init
+### 7. Install tlenix
 
-Grab the `init` binary from the [Releases](https://github.com/maxgmr/tlenix/releases/latest) page.
+Grab the binaries from the [Releases](https://github.com/maxgmr/tlenix/releases/latest) page.
 
-Rename it to `init`, then copy it to the USB: `sudo cp init /mnt/sbin/init`
+Pay attention to _where_ you're installing each binary!
 
-Make sure the file path matches your `root=` argument in your `grub.cfg` from step 5!
+Install `init`: `sudo cp init /mnt/sbin/init`
+
+Install `mash`: `sudo cp mash /mnt/bin/mash`
+
+Make sure the `init` file path matches the `root=` argument in your `grub.cfg` from step 5!
 
 ### 8. Reboot and run!
 

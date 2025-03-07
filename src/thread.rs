@@ -2,9 +2,7 @@
 
 use core::time::Duration;
 
-use crate::{Errno, SyscallNum};
-
-use super::syscall_result;
+use crate::{Errno, SyscallNum, syscall_result};
 
 /// Corresponds to the [timespec](https://www.man7.org/linux/man-pages/man3/timespec.3type.html)
 /// type in C.

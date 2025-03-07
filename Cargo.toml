@@ -1,6 +1,6 @@
 [package]
 name = "tlenix"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 authors = ["Max Gilmour <mgilmour@maxgmr.ca>"]
 edition = "2024"
 description = "Custom OS built upon the Linux kernel"
@@ -12,14 +12,12 @@ keywords = ["os"]
 categories = []
 exclude = []
 include = []
+default-run = "init"
 
 [lib]
 name = "tlenix_core"
 path = "src/lib.rs"
 
-[[bin]]
-name = "tlenix_init"
-path = "src/init/main.rs"
-
 [dependencies]
+bitflags = "2.9.0"
 num_enum = { version = "0.7.3", default-features = false }

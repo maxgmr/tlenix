@@ -1,12 +1,27 @@
 //! Functionality related to input and output.
 
-use core::fmt::{Arguments, Write};
+use core::{
+    fmt::{Arguments, Write},
+    time::Duration,
+};
 
 use crate::{
-    SyscallNum,
-    consts::{STDERR, STDOUT},
-    syscall,
+    Errno, SyscallNum,
+    consts::{PIT_IRQ_PERIOD, STDERR, STDOUT},
+    data::NullTermStr,
+    fs::{FileDescriptor, OpenFlags, open_no_create, read_byte, write_byte},
+    nulltermstr, syscall,
+    thread::sleep,
 };
+
+#[cfg(not(debug_assertions))]
+/// Path to the Linux system console device.
+const DEV_CONSOLE_PATH: NullTermStr<13> = nulltermstr!(b"/dev/console");
+#[cfg(debug_assertions)]
+/// Path to the Linux system console device.
+const DEV_CONSOLE_PATH: NullTermStr<9> = nulltermstr!(b"/dev/tty");
+/// Byte representing the "backspace" character.
+const BACKSP_BYTE: u8 = 8;
 
 /// Print to stdout using format syntax.
 #[macro_export]
@@ -72,6 +87,84 @@ pub fn __print_str(args: Arguments<'_>) {
 #[doc(hidden)]
 pub fn __print_err(args: Arguments<'_>) {
     Stderr.write_fmt(args).unwrap();
+}
+
+/// Struct to read from and write to the [system console](https://en.wikipedia.org/wiki/Linux_console).
+/// Contains a file descriptor for the system console.
+#[derive(Debug)]
+pub struct Console(FileDescriptor);
+impl Console {
+    /// Opens the [system console](https://en.wikipedia.org/wiki/Linux_console), returning its file
+    /// descriptor as a [`Console`].
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors from the underlying [`open_no_create`].
+    pub fn open_console() -> Result<Self, Errno> {
+        open_no_create(
+            &DEV_CONSOLE_PATH,
+            &(OpenFlags::O_RDWR | OpenFlags::O_NONBLOCK),
+        )
+        .map(Self)
+    }
+
+    /// Reads a single byte from the [system console](https://en.wikipedia.org/wiki/Linux_console),
+    /// looping until a byte is read.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors from the underlying [`read_byte`] and [`sleep`].
+    pub fn read_console_byte(&self) -> Result<u8, Errno> {
+        let dur = Duration::from_nanos(PIT_IRQ_PERIOD);
+        loop {
+            match read_byte(self.0) {
+                Ok(None) | Err(Errno::Eagain) => sleep(&dur)?, // Nothing read, sleep then loop
+                Err(e) => return Err(e),                       // Propagate other errors
+                Ok(Some(b)) => return Ok(b),                   // Got a byte! Return it!
+            }
+        }
+    }
+
+    /// Writes a single byte to the [system console](https://en.wikipedia.org/wiki/Linux_console),
+    /// returning the number of bytes written.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors from the underlying [`write_byte`] function.
+    pub fn write_console_byte(&self, byte: u8) -> Result<usize, Errno> {
+        write_byte(self.0, byte)
+    }
+
+    /// Read a line of up to `N` bytes from the console.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors from the underlying [`Self::read_console_byte`] and
+    /// [`Self::write_console_byte`] functions.
+    pub fn read_line<const N: usize>(&self) -> Result<[u8; N], Errno> {
+        let mut result = [0x00; N];
+
+        let mut i: usize = 0;
+        while i < N {
+            let read_byte = self.read_console_byte()?;
+            result[i] = read_byte;
+
+            if read_byte == BACKSP_BYTE {
+                // Handle backspace
+                result[i] = 0;
+                // Don't advance the index for backspace!
+            } else if read_byte == b'\n' {
+                // Handle newline
+                result[i] = 0;
+                // End early
+                return Ok(result);
+            } else {
+                // Advance index and continue
+                i += 1;
+            }
+        }
+        Ok(result)
+    }
 }
 
 #[cfg(test)]
