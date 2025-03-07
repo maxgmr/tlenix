@@ -20,6 +20,7 @@ pub mod consts;
 pub mod data;
 pub mod fs;
 pub mod io;
+pub mod process;
 pub mod syscalls;
 pub mod system;
 pub mod thread;
