@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Planned]
 
 - Shell.
+- Miri analysis in CI.
 
 ## [0.1.0-alpha.4] - UNRELEASED
 
