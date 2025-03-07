@@ -1,23 +1,23 @@
 //! Functionality related to input and output.
 
-use core::fmt::{Arguments, Write};
-
-use crate::{
-    Errno,
-    data::NullTermStr,
-    fs::{OpenFlags, open_no_create},
-    nulltermstr,
+use core::{
+    fmt::{Arguments, Write},
+    time::Duration,
 };
 
-use super::{
-    SyscallNum,
-    consts::{STDERR, STDOUT},
-    fs::FileDescriptor,
-    syscall,
+use crate::{
+    Errno, SyscallNum,
+    consts::{PIT_IRQ_PERIOD, STDERR, STDOUT},
+    data::NullTermStr,
+    fs::{FileDescriptor, OpenFlags, open_no_create, read_byte, write_byte},
+    nulltermstr, syscall,
+    thread::sleep,
 };
 
 /// Path to the Linux system console device.
 const DEV_CONSOLE_PATH: NullTermStr<13> = nulltermstr!(b"/dev/console"[13]);
+/// Byte representing the "backspace" character.
+const BACKSP_BYTE: u8 = 8;
 
 /// Print to stdout using format syntax.
 #[macro_export]
@@ -85,16 +85,84 @@ pub fn __print_err(args: Arguments<'_>) {
     Stderr.write_fmt(args).unwrap();
 }
 
-/// Opens the [system console](https://en.wikipedia.org/wiki/Linux_console), returning its [`FileDescriptor`].
-///
-/// # Errors
-///
-/// This function propagates any errors from the underlying [`open_no_create`]
-pub fn open_console() -> Result<FileDescriptor, Errno> {
-    open_no_create(
-        &DEV_CONSOLE_PATH,
-        &(OpenFlags::O_RDWR | OpenFlags::O_NDELAY),
-    )
+/// Struct to read from and write to the [system console](https://en.wikipedia.org/wiki/Linux_console).
+/// Contains a file descriptor for the system console.
+#[derive(Debug)]
+pub struct ConsoleReader(FileDescriptor);
+impl ConsoleReader {
+    /// Opens the [system console](https://en.wikipedia.org/wiki/Linux_console), returning its file
+    /// descriptor as a [`ConsoleReader`].
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors from the underlying [`open_no_create`].
+    pub fn open_console() -> Result<Self, Errno> {
+        open_no_create(
+            &DEV_CONSOLE_PATH,
+            &(OpenFlags::O_RDWR | OpenFlags::O_NDELAY),
+        )
+        .map(Self)
+    }
+
+    /// Reads a single byte from the [system console](https://en.wikipedia.org/wiki/Linux_console),
+    /// looping until a byte is read.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors from the underlying [`read_byte`] and [`sleep`].
+    pub fn read_console_byte(&self) -> Result<u8, Errno> {
+        let dur = Duration::from_nanos(PIT_IRQ_PERIOD);
+        loop {
+            let result = read_byte(self.0)?;
+            match result {
+                Some(0) | None => sleep(&dur)?, // Nothing read, sleep then loop again...
+                Some(byte) => return Ok(byte),  // Got a byte! Return it
+            }
+        }
+    }
+
+    /// Writes a single byte to the [system console](https://en.wikipedia.org/wiki/Linux_console),
+    /// returning the number of bytes written.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors from the underlying [`write_byte`] function.
+    pub fn write_console_byte(&self, byte: u8) -> Result<usize, Errno> {
+        write_byte(self.0, byte)
+    }
+
+    /// Read a line of up to `N` bytes from the console.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors from the underlying [`Self::read_console_byte`] and
+    /// [`Self::write_console_byte`] functions.
+    pub fn read_line<const N: usize>(&self) -> Result<[u8; N], Errno> {
+        let mut result = [0x00; N];
+
+        let mut i: usize = 0;
+        while i < N {
+            let read_byte = self.read_console_byte()?;
+            // We want to see what we're typing!
+            self.write_console_byte(read_byte)?;
+            result[i] = read_byte;
+
+            if read_byte == BACKSP_BYTE {
+                // Handle backspace
+                result[i] = 0;
+                // Don't advance the index for backspace!
+            } else if read_byte == b'\n' {
+                // Handle newline
+                result[i] = 0;
+                // End early
+                return Ok(result);
+            } else {
+                // Advance index and continue
+                i += 1;
+            }
+        }
+        Ok(result)
+    }
 }
 
 #[cfg(test)]
