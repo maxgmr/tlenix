@@ -61,13 +61,13 @@ pub struct FileDescriptor(usize);
 
 /// Read a single byte from a file at the given [`FileDescriptor`].
 ///
-/// # Errors
+/// Will return [`None`] if the end of file has been reached.
 ///
-/// Will return [`Errno::Espipe`] if no bytes were read (i.e. end of file).
+/// # Errors
 ///
 /// Will propagate any error if the underlying [read](https://www.man7.org/linux/man-pages/man2/read.2.html)
 /// syscall fails.
-pub fn read_byte(file_descriptor: FileDescriptor) -> Result<u8, Errno> {
+pub fn read_byte(file_descriptor: FileDescriptor) -> Result<Option<u8>, Errno> {
     let mut byte: u8 = 0x00;
 
     let bytes_read = unsafe {
@@ -80,10 +80,32 @@ pub fn read_byte(file_descriptor: FileDescriptor) -> Result<u8, Errno> {
     };
 
     if bytes_read == 0 {
-        return Err(Errno::Espipe);
+        return Ok(None);
     }
 
-    Ok(byte)
+    Ok(Some(byte))
+}
+
+/// Writes a single byte to the file at the given [`FileDescriptor`]. Returns the number of bytes
+/// written.
+///
+/// # Errors
+///
+/// Can return any errors associated with the [write](https://www.man7.org/linux/man-pages/man2/write.2.html) Linux syscall.
+pub fn write_byte(file_descriptor: FileDescriptor, byte: u8) -> Result<usize, Errno> {
+    // SAFETY: The pointer to the byte is valid. The buffer size is statically-chosen and matches
+    // the single byte being written. Any issues with user-given arguments are handled gracefully
+    // by the underlying syscall.
+    let bytes_written = unsafe {
+        syscall_result!(
+            SyscallNum::Write,
+            file_descriptor.0,
+            &raw const byte as usize,
+            1
+        )?
+    };
+
+    Ok(bytes_written)
 }
 
 /// Read from a file into a buffer.
@@ -169,19 +191,15 @@ mod tests {
     fn read_byte() {
         let test_file = open_no_create(&TEST_PATH, &OpenFlags::O_RDONLY).unwrap();
         for &expected_byte in &TEST_PATH_CONTENTS {
-            let byte = super::read_byte(test_file).unwrap();
+            let byte = super::read_byte(test_file).unwrap().unwrap();
             print!("{}", str::from_utf8(&[byte]).unwrap_or("�"));
             assert_eq!(byte, expected_byte);
         }
         println!();
 
-        match super::read_byte(test_file) {
-            Err(Errno::Espipe) => (), // OK!
-            Err(errno) => {
-                eprintln!("{:?}", errno);
-                panic!("Wrong error!")
-            }
-            Ok(byte) => {
+        match super::read_byte(test_file).unwrap() {
+            None => (), // OK!
+            Some(byte) => {
                 println!("BAD BYTE: '{}'", str::from_utf8(&[byte]).unwrap_or("�"));
                 panic!("Read too many bytes!");
             }
