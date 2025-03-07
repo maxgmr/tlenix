@@ -59,6 +59,33 @@ bitflags! {
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FileDescriptor(usize);
 
+/// Read a single byte from a file at the given [`FileDescriptor`].
+///
+/// # Errors
+///
+/// Will return [`Errno::Espipe`] if no bytes were read (i.e. end of file).
+///
+/// Will propagate any error if the underlying [read](https://www.man7.org/linux/man-pages/man2/read.2.html)
+/// syscall fails.
+pub fn read_byte(file_descriptor: FileDescriptor) -> Result<u8, Errno> {
+    let mut byte: u8 = 0x00;
+
+    let bytes_read = unsafe {
+        syscall_result!(
+            SyscallNum::Read,
+            file_descriptor.0,
+            &raw mut byte as usize,
+            1
+        )?
+    };
+
+    if bytes_read == 0 {
+        return Err(Errno::Espipe);
+    }
+
+    Ok(byte)
+}
+
 /// Read from a file into a buffer.
 ///
 /// # Errors
@@ -124,18 +151,41 @@ pub fn open_no_create<const N: usize>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eprintln;
+    use crate::{eprintln, nulltermstr, print, println};
+
+    const TEST_PATH: NullTermStr<20> = nulltermstr!(b"test_files/test.txt"[20]);
+    const TEST_PATH_CONTENTS: [u8; 68] =
+        *b"Hello! I hope you can read me without any issues! - Max (\xE9\xA9\xAC\xE5\x85\x8B\xE6\x96\xAF)\n";
 
     #[test_case]
     fn read_file() {
-        const TEST_PATH: [u8; 19] = *b"test_files/test.txt";
-        const TEST_PATH_CONTENTS: [u8; 67] =
-        *b"Hello! I hope you can read me without any issues! - Max (\xE9\xA9\xAC\xE5\x85\x8B\xE6\x96\xAF)";
-
-        let result_bytes: [u8; 256] = read_from_file::<20, 256>(&NullTermStr::from(TEST_PATH))
+        let result_bytes: [u8; 256] = read_from_file(&TEST_PATH)
             .inspect_err(|e| eprintln!("{}", e.as_str()))
             .unwrap();
-        assert_eq!(&result_bytes[..67], TEST_PATH_CONTENTS);
+        assert_eq!(&result_bytes[..68], TEST_PATH_CONTENTS);
+    }
+
+    #[test_case]
+    fn read_byte() {
+        let test_file = open_no_create(&TEST_PATH, &OpenFlags::O_RDONLY).unwrap();
+        for &expected_byte in &TEST_PATH_CONTENTS {
+            let byte = super::read_byte(test_file).unwrap();
+            print!("{}", str::from_utf8(&[byte]).unwrap_or("�"));
+            assert_eq!(byte, expected_byte);
+        }
+        println!();
+
+        match super::read_byte(test_file) {
+            Err(Errno::Espipe) => (), // OK!
+            Err(errno) => {
+                eprintln!("{:?}", errno);
+                panic!("Wrong error!")
+            }
+            Ok(byte) => {
+                println!("BAD BYTE: '{}'", str::from_utf8(&[byte]).unwrap_or("�"));
+                panic!("Read too many bytes!");
+            }
+        }
     }
 
     #[test_case]
