@@ -1,6 +1,6 @@
 //! Functionality related to the computer system itself.
 
-use super::{SyscallNum, consts::SYSCALL_FAIL, syscall};
+use crate::{SyscallNum, consts::SYSCALL_FAIL, syscall};
 
 const LINUX_REBOOT_MAGIC1: usize = 0xfee1_dead;
 const LINUX_REBOOT_MAGIC2C: usize = 0x2011_2000;
