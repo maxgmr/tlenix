@@ -35,13 +35,6 @@ pub extern "C" fn _start() -> ! {
     }
     welcome_msg();
 
-    tlenix_core::thread::sleep(&core::time::Duration::new(1, 500_000_000)).unwrap();
-    for i in (1..=10).rev() {
-        println!("{i}...");
-        tlenix_core::thread::sleep(&core::time::Duration::from_secs(1)).unwrap();
-    }
-    println!("BLASTOFF!");
-
     sleep_loop().unwrap()
 }
 
