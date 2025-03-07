@@ -21,6 +21,7 @@ use tlenix_core::{
 
 const MASH_PANIC_TITLE: &str = "mash";
 const PROMPT: &str = ":} ";
+const EXIT_BYTES: &[u8] = b"exit\0";
 
 const LINE_MAX: usize = 1024;
 
@@ -46,7 +47,7 @@ pub extern "C" fn _start() -> ! {
         print!("{PROMPT}");
         let line: [u8; LINE_MAX] = console.read_line().unwrap();
         // TODO test exit
-        if &line[..5] == b"exit\0" {
+        if &line[..5] == EXIT_BYTES {
             exit(EXIT_SUCCESS)
         }
         // TODO just echo everything back
