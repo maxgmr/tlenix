@@ -9,7 +9,7 @@ mod nums;
 pub use errno::Errno;
 pub use nums::SyscallNum;
 
-/// Invoke a Linux syscall, getting a [usize] in return.
+/// Invoke a Linux syscall, getting a [`usize`] in return.
 ///
 /// # Safety
 ///
@@ -39,11 +39,11 @@ macro_rules! syscall {
     };
 }
 
-/// Invoke a Linux syscall, returning a [Result].
+/// Invoke a Linux syscall, returning a [`Result`].
 ///
-/// If the syscall is successful, the value is returned within the [Ok].
+/// If the syscall is successful, the value is returned within the [`Ok`].
 ///
-/// If the syscall is _unsuccessful_, an [Errno] is returned within the [Ok].
+/// If the syscall is _unsuccessful_, an [`Errno`] is returned within the [`Ok`].
 #[macro_export]
 macro_rules! syscall_result {
     ($($arg:expr),*) => {
