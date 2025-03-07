@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Improved endless loop that wastes less CPU cycles.
+- Improved endless loop that wastes fewer CPU cycles.
 
 ### Removed
 
