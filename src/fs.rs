@@ -175,7 +175,7 @@ mod tests {
     use super::*;
     use crate::{eprintln, nulltermstr, print, println};
 
-    const TEST_PATH: NullTermStr<20> = nulltermstr!(b"test_files/test.txt"[20]);
+    const TEST_PATH: NullTermStr<20> = nulltermstr!(b"test_files/test.txt");
     const TEST_PATH_CONTENTS: [u8; 68] =
         *b"Hello! I hope you can read me without any issues! - Max (\xE9\xA9\xAC\xE5\x85\x8B\xE6\x96\xAF)\n";
 
