@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Planned]
 
-- Miri analysis in CI.
+## [0.1.0-alpha.5] - UNRELEASED
+
+### Added
+
+- Colourful `mash` prompt.
+- Show basename in `mash` prompt.
+- `poweroff` command.
+- `reboot` command.
+
+### Changed
+
+### Removed
 
 ## [0.1.0-alpha.4] - 2025-03-07
 
