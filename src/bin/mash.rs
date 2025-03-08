@@ -16,11 +16,15 @@
 use core::panic::PanicInfo;
 
 use tlenix_core::{
-    consts::EXIT_SUCCESS, io::Console, print, println, process::exit, sleep_loop_forever,
+    consts::EXIT_SUCCESS, fs::get_current_working_directory, io::Console, print, println,
+    process::exit, sleep_loop_forever,
 };
 
 const MASH_PANIC_TITLE: &str = "mash";
-const PROMPT: &str = "\u{001b}[94mMASH\u{001b}[92;1m:}\u{001b}[0m ";
+
+const PROMPT_START: &str = "\u{001b}[94mMASH\u{001b}[0m";
+const PROMPT_FINISH: &str = "\u{001b}[92;1m:}\u{001b}[0m";
+
 const EXIT_BYTES: &[u8] = b"exit\0";
 
 const LINE_MAX: usize = 1024;
@@ -44,7 +48,7 @@ pub extern "C" fn _start() -> ! {
     let console = Console::open_console().unwrap();
 
     loop {
-        print!("{PROMPT}");
+        prompt();
         let line: [u8; LINE_MAX] = console.read_line().unwrap();
         // Exit if `exit` is typed
         if &line[..5] == EXIT_BYTES {
@@ -60,6 +64,25 @@ pub extern "C" fn _start() -> ! {
             }
         }
     }
+}
+
+/// Print the MASH shell prompt.
+fn prompt() {
+    // TODO clean this up
+    let mut cwd_backup: [u8; LINE_MAX] = [0x00_u8; LINE_MAX];
+    cwd_backup[0] = b'?';
+    let cwd_str_backup = "?";
+    let cwd: &[u8; LINE_MAX] = &get_current_working_directory().unwrap_or(cwd_backup);
+    let cwd_str: &str = str::from_utf8(cwd).unwrap_or(cwd_str_backup);
+    let cwd_str_trimmed: &str = cwd_str.trim_end_matches('\0');
+    let basename: &str = cwd_str_trimmed
+        .rsplit_once('/')
+        .map_or(
+            cwd_str_trimmed,
+            |(_, last)| if last.is_empty() { "/" } else { last },
+        );
+
+    print!("{PROMPT_START} {basename} {PROMPT_FINISH} ");
 }
 
 #[panic_handler]
