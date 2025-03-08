@@ -16,8 +16,8 @@
 use core::panic::PanicInfo;
 
 use tlenix_core::{
-    consts::EXIT_SUCCESS, fs::get_current_working_directory, io::Console, print, println,
-    process::exit, sleep_loop_forever,
+    consts::EXIT_FAILURE, consts::EXIT_SUCCESS, fs::get_current_working_directory, io::Console,
+    print, println, process::exit, sleep_loop_forever, system::expect_power_off,
 };
 
 const MASH_PANIC_TITLE: &str = "mash";
@@ -26,6 +26,7 @@ const PROMPT_START: &str = "\u{001b}[94mMASH\u{001b}[0m";
 const PROMPT_FINISH: &str = "\u{001b}[92;1m:}\u{001b}[0m";
 
 const EXIT_BYTES: &[u8] = b"exit\0";
+const POWEROFF_BYTES: &[u8] = b"poweroff\0";
 
 const LINE_MAX: usize = 1024;
 
@@ -53,6 +54,11 @@ pub extern "C" fn _start() -> ! {
         // Exit if `exit` is typed
         if &line[..5] == EXIT_BYTES {
             exit(EXIT_SUCCESS)
+        }
+        // Poweroff if `poweroff` is typed
+        if &line[..9] == POWEROFF_BYTES {
+            expect_power_off();
+            exit(EXIT_FAILURE)
         }
 
         // TODO just echo everything back for now
