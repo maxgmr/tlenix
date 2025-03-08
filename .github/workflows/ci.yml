@@ -25,12 +25,6 @@ jobs:
       - name: Add rust-src
         run: rustup component add rust-src
 
-      - name: Add cargo-deny
-        run: cargo install --locked cargo-deny
-
-      - name: Add cargo-audit
-        run: cargo install --locked cargo-audit
-
       - name: Check formatting
         run: cargo fmt -- --check
 
@@ -38,10 +32,14 @@ jobs:
         run: cargo clippy -- -D warnings
 
       - name: Check cargo-deny
-        run: cargo-deny --all-features check
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check cargo-audit
-        run: cargo audit
+      - name: Check carg-audit
+        uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build
         run: cargo build --verbose
