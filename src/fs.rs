@@ -206,7 +206,7 @@ pub fn get_current_working_directory<const N: usize>() -> Result<[u8; N], Errno>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{eprintln, nulltermstr, print, println, thread::sleep};
+    use crate::{eprintln, nulltermstr, print, println};
 
     const TEST_PATH: NullTermStr<20> = nulltermstr!(b"test_files/test.txt");
     const TEST_PATH_CONTENTS: [u8; 68] =
