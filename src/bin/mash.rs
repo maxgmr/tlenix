@@ -20,7 +20,7 @@ use tlenix_core::{
 };
 
 const MASH_PANIC_TITLE: &str = "mash";
-const PROMPT: &str = ":} ";
+const PROMPT: &str = "\u{001b}[94mMASH\u{001b}[92;1m:}\u{001b}[0m ";
 const EXIT_BYTES: &[u8] = b"exit\0";
 
 const LINE_MAX: usize = 1024;
