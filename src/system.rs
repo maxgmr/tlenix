@@ -1,6 +1,6 @@
 //! Functionality related to the computer system itself.
 
-use crate::{SyscallNum, consts::SYSCALL_FAIL, syscall};
+use crate::{Errno, SyscallNum, syscall_result};
 
 const LINUX_REBOOT_MAGIC1: usize = 0xfee1_dead;
 const LINUX_REBOOT_MAGIC2C: usize = 0x2011_2000;
@@ -20,31 +20,63 @@ enum RebootCmd {
     SwSuspend = 0xd000_fce1,
 }
 
-/// Attempt to power off the computer.
+/// Attempts to reboot the computer.
+///
+/// # Errors
+///
+/// This function propagates the error from the underlying [reboot](https://man7.org/linux/man-pages/man2/reboot.2.html)
+/// Linux syscall if the system fails to reboot.
 ///
 /// # Panics
 ///
-/// This function panics if it is unable to shut down the system.
-pub fn expect_power_off() {
-    assert!(power_off_syscall() != SYSCALL_FAIL, "Failed to power off!");
+/// This function panics if the underlying system call somehow returns a success but fails to
+/// reboot the system.
+pub fn reboot() -> Result<!, Errno> {
+    reboot_syscall(RebootCmd::Restart)
 }
 
-/// Wrapper for the [reboot](https://man7.org/linux/man-pages/man2/reboot.2.html) syscall with the
-/// `op` argument set to `LINUX_REBOOT_CMD_POWER_OFF`.
+/// Attempts to power off the computer.
 ///
-/// Stop the system and remove power from the system (if possible).
-#[must_use]
-fn power_off_syscall() -> i32 {
-    // SAFETY
+/// # Errors
+///
+/// This function propagates the error from the underlying [reboot](https://man7.org/linux/man-pages/man2/reboot.2.html)
+/// Linux syscall if the system fails to power off.
+///
+/// # Panics
+///
+/// This function panics if the underlying system call somehow returns a success but fails to power
+/// off the system.
+pub fn power_off() -> Result<!, Errno> {
+    reboot_syscall(RebootCmd::PowerOff)
+}
+
+/// Wrapper for the [reboot](https://man7.org/linux/man-pages/man2/reboot.2.html) syscall.
+///
+/// Performs the given [`RebootCmd`].
+///
+/// # Errors
+///
+/// This function errors if:
+///
+/// - Problem getting user-space data under [`RebootCmd::Restart2`].
+/// - Bad magic numbers or `operation`.
+/// - The calling process has insufficient privilege to call `reboot`.
+///
+/// # Panics
+///
+/// This function panics if reboot returns a success (this function is only intended to be used
+/// with `operation` values that stop or restart the system).
+fn reboot_syscall(operation: RebootCmd) -> Result<!, Errno> {
+    // SAFETY: Arguments are correct, and the values passable to the `op` argument are restricted
+    // to correct ones by the `RebootCmd` enum.
     unsafe {
-        syscall!(
+        Err(syscall_result!(
             SyscallNum::Reboot,
             LINUX_REBOOT_MAGIC1,
             LINUX_REBOOT_MAGIC2C,
-            RebootCmd::PowerOff as usize,
+            operation as usize,
             "".as_ptr() as usize
-        );
+        )
+        .expect_err("reboot syscall somehow returned success"))
     }
-    // Shouldn't return!
-    SYSCALL_FAIL
 }
