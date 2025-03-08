@@ -39,3 +39,32 @@ fn brk(brk_addr: usize) -> Result<usize, Errno> {
     // SAFETY: The `brk` syscall handles bad address values internally. The arguments are correct.
     unsafe { syscall_result!(SyscallNum::Brk, brk_addr) }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test_case]
+    #[allow(clippy::cast_sign_loss)]
+    fn alloc_and_dealloc() {
+        // 4 KiB
+        let increase = 4096;
+        let decrease = -4096;
+
+        let initial_break = change_program_break(0).unwrap();
+
+        let new_break = change_program_break(increase).unwrap();
+        assert_eq!(new_break, initial_break + (increase as usize));
+
+        let new_break = change_program_break(decrease).unwrap();
+        assert_eq!(initial_break, new_break);
+    }
+
+    #[test_case]
+    #[allow(clippy::cast_possible_wrap)]
+    fn oob() {
+        let current_break = change_program_break(0).unwrap();
+        let takeaway = -((current_break as isize) + 1);
+        assert_eq!(change_program_break(takeaway), Err(Errno::Enomem));
+    }
+}
