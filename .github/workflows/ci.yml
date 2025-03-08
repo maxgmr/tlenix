@@ -25,11 +25,23 @@ jobs:
       - name: Add rust-src
         run: rustup component add rust-src
 
+      - name: Add cargo-deny
+        run: cargo install --locked cargo-deny
+
+      - name: Add cargo-audit
+        run: cargo install --locked cargo-audit
+
       - name: Check formatting
         run: cargo fmt -- --check
 
       - name: Check clippy
         run: cargo clippy -- -D warnings
+
+      - name: Check cargo-deny
+        run: cargo-deny --all-features check
+
+      - name: Check cargo-audit
+        run: cargo audit
 
       - name: Build
         run: cargo build --verbose
