@@ -170,10 +170,43 @@ pub fn open_no_create<const N: usize>(
     Ok(FileDescriptor(raw_fd))
 }
 
+/// Wrapper around the [chdir](https://man7.org/linux/man-pages/man2/chdir.2.html) Linux syscall.
+///
+/// Change the current working directory to the given `path`.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s returned by the underlying syscall.
+pub fn change_dir<const N: usize>(path: &NullTermStr<N>) -> Result<(), Errno> {
+    unsafe {
+        syscall_result!(SyscallNum::Chdir, path.as_ptr() as usize)?;
+    }
+    Ok(())
+}
+
+/// Wrapper around the [getcwd](https://man7.org/linux/man-pages/man2/getcwd.2.html) Linux syscall.
+///
+/// Return a null-terminated buffer filled with the bytes of the path to the current working
+/// directory.
+///
+/// # Errors
+///
+/// This function propagates and [`Errno`]s returned by the underlying syscall.
+pub fn get_current_working_directory<const N: usize>() -> Result<[u8; N], Errno> {
+    let mut buffer = [0x00_u8; N];
+
+    // SAFETY: The raw pointer to the buffer is dropped and the buffer is moved out. The arguments
+    // are correct. The length matches the buffer.
+    unsafe {
+        syscall_result!(SyscallNum::Getcwd, &raw mut buffer as usize, buffer.len())?;
+    }
+    Ok(buffer)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{eprintln, nulltermstr, print, println};
+    use crate::{eprintln, nulltermstr, print, println, thread::sleep};
 
     const TEST_PATH: NullTermStr<20> = nulltermstr!(b"test_files/test.txt");
     const TEST_PATH_CONTENTS: [u8; 68] =
@@ -231,5 +264,47 @@ mod tests {
             Err(Errno::Eperm) => (), // OK!
             _ => panic!("expected Err(Errno::Eperm)"),
         }
+    }
+
+    #[test_case]
+    fn cwd() {
+        let working_directory: [u8; 256] = get_current_working_directory().unwrap();
+        let expected: &[u8] = b"tlenix\0";
+        let cwd_window = working_directory.windows(7);
+        for cur_window in cwd_window {
+            if cur_window == expected {
+                return;
+            }
+        }
+        println!("{}", str::from_utf8(&working_directory).unwrap());
+        panic!("cwd doesn't end with 'tlenix\\0'...");
+    }
+
+    #[test_case]
+    fn cwd_too_small() {
+        assert_eq!(get_current_working_directory::<1>(), Err(Errno::Erange));
+    }
+
+    #[test_case]
+    fn chdir() {
+        let cwd = get_current_working_directory::<256>().unwrap();
+        let old_path: NullTermStr<257> = NullTermStr::from(cwd);
+
+        let new_path = nulltermstr!(b"/");
+
+        change_dir(&new_path).unwrap();
+        let cwd = get_current_working_directory::<256>().unwrap();
+
+        // Clean up after yourself!
+        change_dir(&old_path).unwrap();
+        assert_eq!(&cwd[..2], b"/\0");
+    }
+
+    #[test_case]
+    fn chdir_enoent() {
+        assert_eq!(
+            change_dir(&nulltermstr!(b"/path_that_doesnt_exist")),
+            Err(Errno::Enoent)
+        );
     }
 }
