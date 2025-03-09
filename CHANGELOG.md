@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Tests now return with success or failure.
+
 ### Removed
 
 ## [0.1.0-alpha.5] - 2025-03-08
