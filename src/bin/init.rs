@@ -42,6 +42,11 @@ pub extern "C" fn _start() -> ! {
     unsafe {
         core::arch::asm!("and rsp, -16", options(nostack));
     }
+
+    #[cfg(test)]
+    tlenix_core::process::exit(tlenix_core::consts::EXIT_SUCCESS);
+
+    #[allow(unreachable_code)]
     welcome_msg();
 
     // Launch shell

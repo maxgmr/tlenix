@@ -51,9 +51,13 @@ pub extern "C" fn _start() -> ! {
         core::arch::asm!("and rsp, -16", options(nostack));
     }
 
-    println!();
+    #[cfg(test)]
+    tlenix_core::process::exit(tlenix_core::consts::EXIT_SUCCESS);
 
+    #[allow(unreachable_code)]
     let console = Console::open_console().unwrap();
+
+    println!();
 
     loop {
         prompt();

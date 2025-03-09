@@ -46,12 +46,13 @@ pub extern "C" fn _start() -> ! {
     // Align stack pointer
     //
     // SAFETY: Valid ASM instruction with valid, statically-chosen arguments.
+
     unsafe {
         core::arch::asm!("and rsp, -16", options(nostack));
     }
     test_main();
 
-    sleep_loop().unwrap()
+    process::exit(consts::EXIT_SUCCESS);
 }
 
 /// Endlessly loop, sleeping the thread.
