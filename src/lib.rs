@@ -25,7 +25,6 @@ pub mod process;
 pub mod syscalls;
 pub mod system;
 pub mod thread;
-pub mod tlalloc;
 
 mod test_framework;
 
