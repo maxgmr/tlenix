@@ -133,7 +133,35 @@ pub fn read_from_file<const PATHN: usize, const BUFN: usize>(
     Ok(buf)
 }
 
-/// Opens a file at the given path, returning its given [`FileDescriptor`].
+/// Reads from a file descriptor into a provided `buffer`. Wrapper around the
+/// [read](https://www.man7.org/linux/man-pages/man2/read.2.html) Linux syscall.
+///
+/// Returns the number of bytes read (0 indicates end of file).
+///
+/// # Errors
+///
+/// This function propagates any errors returned by the underlying
+/// [read](https://www.man7.org/linux/man-pages/man2/read.2.html) syscall.
+pub fn read<const N: usize>(
+    file_descriptor: FileDescriptor,
+    buffer: &mut [u8; N],
+) -> Result<usize, Errno> {
+    let buf_ptr = buffer.as_mut_ptr();
+
+    // SAFETY: The arguments are correct and the length is guaranteed to match the array. The
+    // mutable raw pointer to the array is not accessed after mutating the array and goes out of
+    // scope right after.
+    unsafe {
+        syscall_result!(
+            SyscallNum::Read,
+            file_descriptor.0,
+            buf_ptr as usize,
+            buffer.len()
+        )
+    }
+}
+
+/// Opens a file at the given path, returning its [`FileDescriptor`].
 ///
 /// Wrapper around the [open](https://www.man7.org/linux/man-pages/man2/open.2.html) Linux syscall.
 ///
@@ -218,6 +246,40 @@ mod tests {
             .inspect_err(|e| eprintln!("{}", e.as_str()))
             .unwrap();
         assert_eq!(&result_bytes[..68], TEST_PATH_CONTENTS);
+    }
+
+    #[test_case]
+    fn read_large() {
+        let fd = open_no_create(&TEST_PATH, &OpenFlags::O_RDONLY).unwrap();
+        let mut buffer = [0x00_u8; 256];
+        assert_eq!(read(fd, &mut buffer), Ok(68));
+        assert_eq!(buffer[..68], TEST_PATH_CONTENTS);
+    }
+
+    #[test_case]
+    fn read_16() {
+        let fd = open_no_create(&TEST_PATH, &OpenFlags::O_RDONLY).unwrap();
+        let mut buffer = [0x00_u8; 16];
+        assert_eq!(read(fd, &mut buffer), Ok(16));
+        assert_eq!(buffer, TEST_PATH_CONTENTS[..16]);
+    }
+
+    #[test_case]
+    fn read_mult() {
+        let fd = open_no_create(&TEST_PATH, &OpenFlags::O_RDONLY).unwrap();
+        let mut buffer = [0x00_u8; 16];
+        assert_eq!(read(fd, &mut buffer), Ok(16));
+        assert_eq!(buffer, TEST_PATH_CONTENTS[..16]);
+        assert_eq!(read(fd, &mut buffer), Ok(16));
+        assert_eq!(buffer, TEST_PATH_CONTENTS[16..32]);
+        assert_eq!(read(fd, &mut buffer), Ok(16));
+        assert_eq!(buffer, TEST_PATH_CONTENTS[32..48]);
+        assert_eq!(read(fd, &mut buffer), Ok(16));
+        assert_eq!(buffer, TEST_PATH_CONTENTS[48..64]);
+        assert_eq!(read(fd, &mut buffer), Ok(4));
+        assert_eq!(buffer[..4], TEST_PATH_CONTENTS[64..]);
+        // Check EOF
+        assert_eq!(read(fd, &mut buffer), Ok(0));
     }
 
     #[test_case]
