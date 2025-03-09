@@ -43,3 +43,14 @@ fn fallback_page_size() -> usize {
     );
     PAGE_SIZE_FALLBACK
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::println;
+
+    #[test_case]
+    fn page_size() {
+        println!("{}", page_size());
+    }
+}
