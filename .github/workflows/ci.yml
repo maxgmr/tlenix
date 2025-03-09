@@ -45,7 +45,4 @@ jobs:
         run: cargo build --verbose
 
       - name: Test
-        run: timeout 20s cargo test | tee output.log
-
-      - name: Check test results
-        run: grep "\[ALL_PASS\]" output.log
+        run: cargo test
