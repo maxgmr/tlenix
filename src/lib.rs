@@ -16,6 +16,10 @@
 #![test_runner(test_framework::custom_test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+// Specify that compiler should try to include `alloc`
+#[allow(unused_extern_crates)]
+extern crate alloc;
+
 pub mod consts;
 pub mod data;
 pub mod fs;
