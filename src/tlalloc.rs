@@ -43,7 +43,7 @@ fn fallback_page_size() -> usize {
     // Unable to get access to `auxv`, forced to use fallback.
     #[cfg(debug_assertions)]
     eprintln!(
-        "Warning: forced to use fallback value ({})",
+        "Warning: failed to get page size from /proc/self/auxv; forced to use fallback value {}",
         PAGE_SIZE_FALLBACK
     );
     PAGE_SIZE_FALLBACK
