@@ -2,7 +2,12 @@
 
 use lazy_static::lazy_static;
 
-use crate::{Errno, data::NullTermStr, eprintln, fs::read_from_file, nulltermstr};
+use crate::{
+    data::NullTermStr,
+    eprintln,
+    fs::{OpenFlags, open_no_create, read},
+    nulltermstr,
+};
 
 const AUXV_PATH: NullTermStr<16> = nulltermstr!(b"/proc/self/auxv");
 
@@ -15,23 +20,23 @@ lazy_static! {
 
 /// Get the system page size.
 fn page_size() -> usize {
+    let mut buf = [0_u8; 16];
+    let Ok(fd) = open_no_create(&AUXV_PATH, &OpenFlags::O_RDONLY) else {
+        // Failed to open auxiliary vector :(
+        return fallback_page_size();
+    };
+
     let mut auxv_entry: [usize; 2] = [0; 2];
-    loop {
-        let Ok(buf): Result<[u8; 16], Errno> = read_from_file(&AUXV_PATH) else {
-            return fallback_page_size();
-        };
 
-        if buf[15] == b'\0' {
-            return fallback_page_size();
-        }
-
+    while read(fd, &mut buf) == Ok(16) {
         auxv_entry[0] = usize::from_ne_bytes(buf[0..8].try_into().unwrap());
         auxv_entry[1] = usize::from_ne_bytes(buf[8..16].try_into().unwrap());
         if auxv_entry[0] == 6 {
-            // AT_PAGESZ entry!
-            return auxv_entry[1];
+            return auxv_entry[1]; // AT_PAGESZ entry
         }
     }
+    // Didn't find AT_PAGESZ :(
+    fallback_page_size()
 }
 
 fn fallback_page_size() -> usize {
