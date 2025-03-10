@@ -17,7 +17,9 @@
 use core::panic::PanicInfo;
 
 use tlenix_core::{
-    data::NullTermStr, nulltermstr, println, process::execute_process, sleep_loop,
+    data::{NullTermStr, NullTermString},
+    nulltermstr, println,
+    process::execute_process,
     sleep_loop_forever,
 };
 
@@ -49,10 +51,12 @@ pub extern "C" fn _start() -> ! {
     #[allow(unreachable_code)]
     welcome_msg();
 
-    // Launch shell
-    execute_process(&SHELL_PATH).unwrap();
-
-    sleep_loop().unwrap()
+    // Launch shell with no args
+    loop {
+        execute_process(&[NullTermString::from(SHELL_PATH)]).unwrap();
+        println!("Restarting shell...");
+        println!("(Enter the \"poweroff\" command to shut down)");
+    }
 }
 
 fn welcome_msg() {
