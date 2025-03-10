@@ -63,6 +63,11 @@ impl From<&[u8]> for NullTermString {
         Self(bytes)
     }
 }
+impl<const N: usize> From<NullTermStr<N>> for NullTermString {
+    fn from(value: NullTermStr<N>) -> Self {
+        Self::from(value.bytes())
+    }
+}
 
 /// A null-terminated byte array of a static length.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
