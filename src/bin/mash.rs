@@ -13,16 +13,19 @@
 #![feature(custom_test_frameworks)]
 #![cfg_attr(test, test_runner(tlenix_core::custom_test_runner))]
 
+extern crate alloc;
+
+use alloc::{string::String, vec::Vec};
 use core::panic::PanicInfo;
 
 use tlenix_core::{
-    consts::EXIT_SUCCESS,
+    consts::{EXIT_FAILURE, EXIT_SUCCESS},
+    data::NullTermString,
     eprintln,
     fs::get_current_working_directory,
     io::Console,
     print, println,
-    process::exit,
-    sleep_loop_forever,
+    process::{execute_process, exit},
     system::{power_off, reboot},
 };
 
@@ -30,10 +33,6 @@ const MASH_PANIC_TITLE: &str = "mash";
 
 const PROMPT_START: &str = "\u{001b}[94mmash\u{001b}[0m";
 const PROMPT_FINISH: &str = "\u{001b}[92;1m:}\u{001b}[0m";
-
-const EXIT_BYTES: &[u8] = b"exit\0";
-const POWEROFF_BYTES: &[u8] = b"poweroff\0";
-const REBOOT_BYTES: &[u8] = b"reboot\0";
 
 const LINE_MAX: usize = 1024;
 
@@ -61,28 +60,31 @@ pub extern "C" fn _start() -> ! {
 
     loop {
         prompt();
-        let line: [u8; LINE_MAX] = console.read_line().unwrap();
+        let line = console.read_line_vec(LINE_MAX).unwrap();
+        let line_str = String::from_utf8_lossy(&line);
+        let argv: Vec<&str> = line_str.split_whitespace().collect();
 
-        if &line[..5] == EXIT_BYTES {
-            // Exit if `exit` is typed
-            exit(EXIT_SUCCESS)
-        } else if &line[..9] == POWEROFF_BYTES {
-            // Poweroff if `poweroff` is typed
-            let errno = power_off().unwrap_err();
-            // `power_off` should shut down the machine, so if we've made it this far, it's
-            // an error!
-            eprintln!("poweroff fail: {}", errno.as_str());
-        } else if &line[..7] == REBOOT_BYTES {
-            // Reboot if `reboot` is typed
-            let errno = reboot().unwrap_err();
-            // `reboot` should reboot the machine, so if we've made it this far, it's an error!
-            eprintln!("reboot fail: {}", errno.as_str());
-        } else if line[0] != 0 {
-            // TODO just echo everything back for now
-            if let Ok(utf8_line) = str::from_utf8(&line) {
-                println!("{utf8_line}");
-            } else {
-                println!("UTF-8 error :(");
+        // Do nothing if nothing was typed
+        if argv.is_empty() {
+            continue;
+        }
+
+        match (argv[0], argv.len()) {
+            ("exit", 1) => exit(EXIT_SUCCESS),
+            ("poweroff", 1) => {
+                let errno = power_off().unwrap_err();
+                eprintln!("poweroff fail: {}", errno.as_str());
+            }
+            ("reboot", 1) => {
+                let errno = reboot().unwrap_err();
+                eprintln!("reboot fail: {}", errno.as_str());
+            }
+            (_, _) => {
+                // Create a version of argv compatible with `execve`
+                let argv_null_termd: Vec<NullTermString> =
+                    argv.iter().map(|&str| NullTermString::from(str)).collect();
+                // Execute something and wait for it to finish!
+                execute_process(&argv_null_termd).unwrap();
             }
         }
     }
@@ -110,5 +112,5 @@ fn prompt() {
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
     tlenix_core::eprintln!("{} {}", MASH_PANIC_TITLE, info);
-    sleep_loop_forever()
+    exit(EXIT_FAILURE)
 }
