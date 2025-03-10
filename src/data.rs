@@ -1,5 +1,10 @@
 //! Functionality related to data types, conversion, and processing.
 
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
+
 const TO_NULL_TERM_STR_ERR_MSG: &str = "input is too long for NullTermStr buffer";
 
 /// Directly create a [`NullTermStr`] which can be evaluated at compile time.
@@ -20,7 +25,51 @@ macro_rules! nulltermstr {
     };
 }
 
-/// A null-terminated byte slice of a static length.
+/// A null-terminated [`Vec<u8>`].
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NullTermString(Vec<u8>);
+impl NullTermString {
+    /// Returns a raw pointer to the [`NullTermString`]'s buffer.
+    #[must_use]
+    #[inline]
+    pub fn as_ptr(&self) -> *const u8 {
+        self.0.as_ptr()
+    }
+
+    /// Returns the byte slice of the [`NullTermString`].
+    #[must_use]
+    #[inline]
+    pub fn bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+impl From<String> for NullTermString {
+    fn from(value: String) -> Self {
+        let mut bytes = value.into_bytes();
+        // Ensure null-terminated
+        bytes.push(b'\0');
+        Self(bytes)
+    }
+}
+impl From<&str> for NullTermString {
+    fn from(value: &str) -> Self {
+        Self::from(value.to_string())
+    }
+}
+impl From<&[u8]> for NullTermString {
+    fn from(value: &[u8]) -> Self {
+        let mut bytes = Vec::from(value);
+        bytes.push(b'\0');
+        Self(bytes)
+    }
+}
+impl<const N: usize> From<NullTermStr<N>> for NullTermString {
+    fn from(value: NullTermStr<N>) -> Self {
+        Self::from(value.bytes())
+    }
+}
+
+/// A null-terminated byte array of a static length.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NullTermStr<const N: usize>([u8; N]);
 impl<const N: usize> NullTermStr<N> {
@@ -82,6 +131,18 @@ mod tests {
     const TEST_ALREADY_NULL_TERM: &str = "Hello, world!\0";
     const TEST_EMPTY: &str = "";
     const TEST_BYTES: [u8; 13] = *b"Hello, world!";
+
+    #[test_case]
+    fn ntstring_from() {
+        let expected_bytes = b"Hello, world!\0";
+        let my_str = "Hello, world!";
+        let my_nts = NullTermString::from(my_str);
+        assert_eq!(my_nts.bytes(), expected_bytes);
+
+        let my_string = my_str.to_string();
+        let my_nts = NullTermString::from(my_string);
+        assert_eq!(my_nts.bytes(), expected_bytes);
+    }
 
     #[test_case]
     fn try_from() {

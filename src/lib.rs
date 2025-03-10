@@ -16,6 +16,10 @@
 #![test_runner(test_framework::custom_test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+// Specify that compiler should try to include `alloc`
+#[allow(unused_extern_crates)]
+extern crate alloc;
+
 pub mod consts;
 pub mod data;
 pub mod fs;
@@ -45,12 +49,13 @@ pub extern "C" fn _start() -> ! {
     // Align stack pointer
     //
     // SAFETY: Valid ASM instruction with valid, statically-chosen arguments.
+
     unsafe {
         core::arch::asm!("and rsp, -16", options(nostack));
     }
     test_main();
 
-    sleep_loop().unwrap()
+    process::exit(consts::EXIT_SUCCESS);
 }
 
 /// Endlessly loop, sleeping the thread.

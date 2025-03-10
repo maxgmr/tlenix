@@ -1,5 +1,6 @@
 //! Functionality related to input and output.
 
+use alloc::vec::Vec;
 use core::{
     fmt::{Arguments, Write},
     time::Duration,
@@ -133,6 +134,26 @@ impl Console {
     /// This function propagates any errors from the underlying [`write_byte`] function.
     pub fn write_console_byte(&self, byte: u8) -> Result<usize, Errno> {
         write_byte(self.0, byte)
+    }
+
+    /// Read a line of up to `max` bytes from the console, returning as a [`Vec<u8>`].
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors from the underlying [`Self::read_console_byte`] and
+    /// [`Self::write_console_byte`] functions.
+    pub fn read_line_vec(&self, max: usize) -> Result<Vec<u8>, Errno> {
+        let mut result = Vec::new();
+        while result.len() < max {
+            match self.read_console_byte()? {
+                b'\n' => return Ok(result), // newline; return right away
+                BACKSP_BYTE => {
+                    result.pop(); // backspace; remove last byte
+                }
+                new_byte => result.push(new_byte), // add the new byte
+            }
+        }
+        Ok(result)
     }
 
     /// Read a line of up to `N` bytes from the console.

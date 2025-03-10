@@ -3,6 +3,6 @@ target = "x86_64-unknown-linux-none.json"
 
 [unstable]
 # must recompile to allow target
-build-std = ["core", "compiler_builtins"]
+build-std = ["core", "compiler_builtins", "alloc"]
 # must use `compiler-builtins` impls because can't link to OS C library
 build-std-features = ["compiler-builtins-mem"]
