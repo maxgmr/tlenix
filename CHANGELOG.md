@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Custom global allocator.
 - Environment variables.
 
+## [0.1.0-alpha.7] - UNRELEASED
+
+### Added
+
+- `cd` builtin `mash` command.
+
+### Changed
+
+### Removed
+
 ## [0.1.0-alpha.6] - 2025-03-09
 
 ### Added
