@@ -1,10 +1,14 @@
 //! Functionality related to process management.
 
+use alloc::vec::Vec;
 use core::ptr;
 
-use crate::{Errno, SyscallNum, data::NullTermStr, syscall, syscall_result};
+use crate::{Errno, SyscallNum, data::NullTermString, syscall, syscall_result};
 
-/// Create a child process running the executable at the given [`NullTermStr`].
+const WUNTRACED: usize = 0x2;
+
+/// Create a child process running the executable at the given [`NullTermStr`]. The parent process
+/// which calls this function waits until the child process is exited or killed.
 ///
 /// # Errors
 ///
@@ -15,34 +19,59 @@ use crate::{Errno, SyscallNum, data::NullTermStr, syscall, syscall_result};
 /// # Panics
 ///
 /// This function panics if the child process attempts to call `execve` and it fails.
-pub fn execute_process<const N: usize>(path: &NullTermStr<N>) -> Result<(), Errno> {
-    let pid = fork()?;
-
-    if pid == 0 {
-        // Child process, start the given program!
-
-        // TODO: handle passing actual args
-        let argv: [*const u8; 2] = [path.as_ptr(), ptr::null()];
-        let envp: [*const u8; 1] = [ptr::null()];
-
-        let argv_ptr = argv.as_ptr();
-        let envp_ptr = envp.as_ptr();
-
-        // SAFETY: On success, `execve` does not return, so the pointers only need to be valid at
-        // the moment of the syscall.
-        unsafe {
-            syscall_result!(
-                SyscallNum::Execve,
-                path.as_ptr() as usize,
-                argv_ptr as usize,
-                envp_ptr as usize
-            )
-            .unwrap();
-        }
-        unreachable!("execve should have panicked on fail");
+pub fn execute_process(argv: &[NullTermString]) -> Result<(), Errno> {
+    // Return ENOENT if no path is given
+    if argv.is_empty() {
+        return Err(Errno::Enoent);
     }
 
-    Ok(())
+    match fork()? {
+        0 => {
+            // Child process; start the given program!
+
+            // Get pointers to all the args
+            let mut argv_pointers: Vec<*const u8> =
+                argv.iter().map(NullTermString::as_ptr).collect();
+            // Null-terminate argv
+            argv_pointers.push(ptr::null());
+            // Get pointer to start of pointer arr
+            let argv_ptr = argv_pointers.as_ptr();
+
+            // TODO: handle envp
+            let envp: [*const u8; 1] = [ptr::null()];
+            let envp_ptr = envp.as_ptr();
+
+            // SAFETY: On success, `execve` does not return, so the pointers only need to be valid at
+            // the moment of the syscall.
+            unsafe {
+                syscall_result!(
+                    SyscallNum::Execve,
+                    argv_pointers[0] as usize,
+                    argv_ptr as usize,
+                    envp_ptr as usize
+                )
+                .unwrap();
+            }
+            unreachable!("execve should have panicked on fail");
+        }
+        child_pid => {
+            // Parent process; wait for child to finish!
+
+            let mut status: usize = 0;
+            unsafe {
+                syscall_result!(
+                    SyscallNum::Wait4,
+                    child_pid,
+                    &raw mut status as usize,
+                    WUNTRACED,
+                    0
+                )?;
+            }
+
+            // Done waiting; continue
+            Ok(())
+        }
+    }
 }
 
 /// Cause normal process termination. Wrapper around the
