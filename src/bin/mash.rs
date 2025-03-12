@@ -79,6 +79,19 @@ pub extern "C" fn _start() -> ! {
                 let errno = reboot().unwrap_err();
                 eprintln!("reboot fail: {}", errno.as_str());
             }
+            ("cd", _) => {
+                // TODO clean this up
+                let path_str = if argv.len() > 1 { argv[1] } else { "/" };
+                let nts = NullTermString::from(path_str);
+                if let Err(errno) = unsafe {
+                    tlenix_core::syscall_result!(
+                        tlenix_core::SyscallNum::Chdir,
+                        nts.as_ptr() as usize
+                    )
+                } {
+                    eprintln!("{:?}: {}", errno, errno.as_str());
+                }
+            }
             (_, _) => {
                 // Create a version of argv compatible with `execve`
                 let argv_null_termd: Vec<NullTermString> =
