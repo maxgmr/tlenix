@@ -14,6 +14,8 @@
 
 use core::panic::PanicInfo;
 
+use tlenix_core::align_stack_pointer;
+
 /// Entry point.
 ///
 /// # Panics
@@ -22,12 +24,7 @@ use core::panic::PanicInfo;
 /// a Linux-based init program.
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
-    // Align stack pointer
-    //
-    // SAFETY: Valid ASM instruction with valid, statically-chosen arguments.
-    unsafe {
-        core::arch::asm!("and rsp, -16", options(nostack));
-    }
+    align_stack_pointer!();
 
     // TODO replace with better loop
     loop {}
