@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Custom global allocator.
 - Environment variables.
+- Trait describing how various types can be converted into syscall args.
+- Trait describing how various types can be converted from syscall outputs.
+
+## [0.1.0-alpha.7] - IN PROGRESS
+
+### Changed
+
+- General implementation overhaul/reorganization.
 
 ## [0.1.0-alpha.6] - 2025-03-09
 
