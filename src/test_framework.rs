@@ -32,11 +32,12 @@ pub fn custom_test_runner(tests: &[&dyn Testable]) {
 /// Display failure and panic message.
 #[cfg(test)]
 pub fn test_panic_handler(info: &core::panic::PanicInfo<'_>) -> ! {
-    use crate::{EXIT_FAILURE, eprintln};
+    use crate::eprintln;
 
     eprintln!("[FAIL!]");
     eprintln!("Error:\n{}", info);
 
     // TODO exit crate process
+    #[allow(clippy::empty_loop)]
     loop {}
 }

@@ -17,7 +17,7 @@ struct Stdout;
 #[derive(Debug)]
 struct Stderr;
 
-// Implement [`Write`] for Stdout and Stderr.
+// Macro to implement [`Write`] for Stdout and Stderr.
 macro_rules! write_str_impl {
     [$(($t:ty, $fd:expr)),*] => {
        $(impl Write for $t {

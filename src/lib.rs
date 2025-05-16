@@ -14,6 +14,7 @@
 #![reexport_test_harness_main = "test_main"]
 
 // Make sure the compiler includes `alloc`
+#[allow(unused_extern_crates)]
 extern crate alloc;
 
 mod allocator;
@@ -56,6 +57,7 @@ pub extern "C" fn _start() -> ! {
     test_main();
 
     // TODO process exit successfully
+    #[allow(clippy::empty_loop)]
     loop {}
 }
 

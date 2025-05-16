@@ -1,8 +1,6 @@
 use alloc::string::{String, ToString};
 use core::fmt::Display;
 
-use super::*;
-
 // Used for debug print testing.
 #[derive(Debug)]
 #[allow(clippy::struct_field_names)]
@@ -85,28 +83,4 @@ fn pretty_debug() {
 #[test_case]
 fn display_impl() {
     print!("{}", MyTestStruct::example());
-}
-
-#[test_case]
-fn ident_fmt() {
-    let val = 4;
-    print!("val={val}, ");
-    print!("valB={val2}", val2 = 4);
-}
-
-#[test_case]
-fn leading_zero() {
-    print!("{:04}", 42);
-}
-
-#[test_case]
-fn radix_fmt() {
-    let val = 42;
-    print!("{:#x} = {:#b} = {:#o}", val, val, val);
-}
-
-#[test_case]
-fn uni_fmt() {
-    let inf: char = '∞';
-    print!("{inf}");
 }

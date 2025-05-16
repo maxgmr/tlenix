@@ -197,7 +197,7 @@ pub unsafe fn __syscall_5(
 
 /// Invoke a Linux syscall with 6 args.
 #[inline]
-pub unsafe fn syscall_6(
+pub unsafe fn __syscall_6(
     call_num: SyscallNum,
     arg0: usize,
     arg1: usize,
