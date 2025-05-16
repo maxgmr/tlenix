@@ -10,8 +10,12 @@
 )]
 #![no_std]
 #![no_main]
+#![feature(custom_test_frameworks)]
+#![cfg_attr(test, test_runner(tlenix_core::custom_test_runner))]
 
 use core::panic::PanicInfo;
+
+const MASH_PANIC_TITLE: &str = "mash";
 
 /// Entry point.
 ///
@@ -33,6 +37,7 @@ pub extern "C" fn _start() -> ! {
 
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
-    // TODO
+    tlenix_core::eprintln!("{} {}", MASH_PANIC_TITLE, info);
+    // TODO exit with failure
     loop {}
 }

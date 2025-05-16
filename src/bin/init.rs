@@ -8,13 +8,17 @@
     clippy::all,
     clippy::pedantic
 )]
-#![feature(concat_bytes)]
 #![no_std]
 #![no_main]
+#![feature(custom_test_frameworks)]
+#![cfg_attr(test, test_runner(tlenix_core::custom_test_runner))]
 
 use core::panic::PanicInfo;
 
-use tlenix_core::align_stack_pointer;
+use tlenix_core::{align_stack_pointer, println};
+
+const WELCOME_MSG: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION"));
+const TLENIX_PANIC_TITLE: &str = "tlenix";
 
 /// Entry point.
 ///
@@ -26,12 +30,19 @@ use tlenix_core::align_stack_pointer;
 pub extern "C" fn _start() -> ! {
     align_stack_pointer!();
 
+    welcome_msg();
+
     // TODO replace with better loop
     loop {}
 }
 
+fn welcome_msg() {
+    println!("{}", WELCOME_MSG);
+}
+
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
-    // TODO
+    tlenix_core::eprintln!("{} {}", TLENIX_PANIC_TITLE, info);
+    // TODO sleep loop forever
     loop {}
 }
