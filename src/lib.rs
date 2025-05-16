@@ -9,7 +9,7 @@
 )]
 #![no_std]
 #![cfg_attr(test, no_main)]
-#![feature(custom_test_frameworks)]
+#![feature(custom_test_frameworks, never_type)]
 #![test_runner(test_framework::custom_test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
@@ -19,18 +19,30 @@ extern crate alloc;
 
 mod allocator;
 mod print;
+pub mod process;
 mod syscall;
 mod test_framework;
+mod thread;
 
 // RE-EXPORTS
 pub use print::{__print_err, __print_str};
-pub use syscall::{Errno, SyscallNum};
+pub use syscall::{Errno, SyscallArg, SyscallNum};
 pub use test_framework::custom_test_runner;
 
-/// C standard success exit code.
-pub const EXIT_SUCCESS: usize = 0;
-/// C standard failure exit code.
-pub const EXIT_FAILURE: usize = 1;
+/// Intel 8253/8254 sends an IRQ0 (timer interrupt) once every ~52.9254 ms.
+///
+/// This is used for sleep loop timing.
+pub const PIT_IRQ_PERIOD: u64 = 54_925_400;
+
+/// The two constants specified by the C standard denoting the success or failure of an process.
+#[repr(usize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ExitStatus {
+    /// C standard success exit code.
+    ExitSuccess = 0_usize,
+    /// C standard failure exit code.
+    ExitFailure = 1_usize,
+}
 
 /// Aligns the stack pointer. Intended for use right at the beginning of execution.
 ///
@@ -45,20 +57,36 @@ macro_rules! align_stack_pointer {
     };
 }
 
+/// Endlessly loops, sleeping the thread.
+///
+/// # Errors
+///
+/// This function returns an error if [`thread::sleep`] returns an error.
+pub fn sleep_loop() -> Result<!, Errno> {
+    let sleep_duration = core::time::Duration::from_nanos(PIT_IRQ_PERIOD);
+    loop {
+        thread::sleep(&sleep_duration)?;
+    }
+}
+
+/// Endlessly loops, sleeping the thread.
+///
+/// If [`thread::sleep`] returns an error for whatever reason, an empty loop is used as a fallback,
+/// wasting CPU cycles :(
+pub fn sleep_loop_forever() -> ! {
+    let _ = sleep_loop();
+    // Fallback loop if sleep_loop breaks :(
+    #[allow(clippy::empty_loop)]
+    loop {}
+}
+
 /// Entry point for library tests.
-///
-/// # Panics
-///
-/// This function panics if the sleep loop returns an error.
 #[cfg(test)]
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
     align_stack_pointer!();
     test_main();
-
-    // TODO process exit successfully
-    #[allow(clippy::empty_loop)]
-    loop {}
+    process::exit(ExitStatus::ExitSuccess);
 }
 
 /// Panic handler for library tests.

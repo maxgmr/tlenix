@@ -15,8 +15,9 @@
 
 use core::panic::PanicInfo;
 
-use tlenix_core::{align_stack_pointer, println};
+use tlenix_core::{align_stack_pointer, sleep_loop_forever};
 
+#[cfg(not(test))]
 const WELCOME_MSG: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION"));
 const TLENIX_PANIC_TITLE: &str = "tlenix";
 
@@ -30,19 +31,25 @@ const TLENIX_PANIC_TITLE: &str = "tlenix";
 pub extern "C" fn _start() -> ! {
     align_stack_pointer!();
 
-    welcome_msg();
+    // Don't do anything if we're running tests
+    #[cfg(test)]
+    tlenix_core::process::exit(tlenix_core::ExitStatus::ExitSuccess);
 
-    // TODO replace with better loop
-    loop {}
+    #[cfg(not(test))]
+    {
+        welcome_msg();
+
+        sleep_loop_forever();
+    }
 }
 
+#[cfg(not(test))]
 fn welcome_msg() {
-    println!("{}", WELCOME_MSG);
+    tlenix_core::println!("{}", WELCOME_MSG);
 }
 
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
     tlenix_core::eprintln!("{} {}", TLENIX_PANIC_TITLE, info);
-    // TODO sleep loop forever
-    loop {}
+    sleep_loop_forever();
 }

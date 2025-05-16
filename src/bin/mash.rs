@@ -15,6 +15,8 @@
 
 use core::panic::PanicInfo;
 
+use tlenix_core::align_stack_pointer;
+
 const MASH_PANIC_TITLE: &str = "mash";
 
 /// Entry point.
@@ -24,15 +26,16 @@ const MASH_PANIC_TITLE: &str = "mash";
 /// This function panics if the system fails to power off properly.
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
-    // Align stack pointer
-    //
-    // SAFETY: Valid ASM instruction with valid, statically-chosen arguments.
-    unsafe {
-        core::arch::asm!("and rsp, -16", options(nostack));
-    }
+    align_stack_pointer!();
 
-    // TODO use a better loop
-    loop {}
+    #[cfg(test)]
+    tlenix_core::process::exit(tlenix_core::ExitStatus::ExitSuccess);
+
+    // TODO
+    #[cfg(not(test))]
+    {
+        tlenix_core::sleep_loop_forever();
+    }
 }
 
 #[panic_handler]
