@@ -15,9 +15,18 @@
 
 use core::panic::PanicInfo;
 
-use tlenix_core::align_stack_pointer;
+use tlenix_core::{ExitStatus, align_stack_pointer, print, process::exit};
 
 const MASH_PANIC_TITLE: &str = "mash";
+
+const PROMPT_START: &str = "\u{001b}[94mmash\u{001b}[0m";
+const PROMPT_FINISH: &str = "\u{001b}[92;1m:}\u{001b}[0m";
+
+// Used as a backup just in case the current working directory can't be determined.
+const CWD_NAME_BACKUP: &str = "?";
+
+// Maximum line size.
+const LINE_MAX: usize = 1 << 12;
 
 /// Entry point.
 ///
@@ -31,16 +40,25 @@ pub extern "C" fn _start() -> ! {
     #[cfg(test)]
     tlenix_core::process::exit(tlenix_core::ExitStatus::ExitSuccess);
 
-    // TODO
-    #[cfg(not(test))]
-    {
-        tlenix_core::sleep_loop_forever();
+    // This stops the compiler from complaining when compiling for tests.
+    #[allow(unreachable_code, clippy::never_loop)]
+    loop {
+        prompt();
+        // TODO
+        exit(ExitStatus::ExitSuccess);
     }
+}
+
+/// Print the MASH shell prompt.
+fn prompt() {
+    // TODO get CWD name
+    let cwd_name = CWD_NAME_BACKUP;
+
+    print!("{PROMPT_START} {cwd_name} {PROMPT_FINISH} ");
 }
 
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
     tlenix_core::eprintln!("{} {}", MASH_PANIC_TITLE, info);
-    // TODO exit with failure
-    loop {}
+    exit(ExitStatus::ExitFailure)
 }

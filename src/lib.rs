@@ -18,6 +18,7 @@
 extern crate alloc;
 
 mod allocator;
+mod nix_str;
 mod print;
 pub mod process;
 mod syscall;

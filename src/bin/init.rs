@@ -15,9 +15,8 @@
 
 use core::panic::PanicInfo;
 
-use tlenix_core::{align_stack_pointer, sleep_loop_forever};
+use tlenix_core::{align_stack_pointer, println, sleep_loop_forever};
 
-#[cfg(not(test))]
 const WELCOME_MSG: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION"));
 const TLENIX_PANIC_TITLE: &str = "tlenix";
 
@@ -35,17 +34,15 @@ pub extern "C" fn _start() -> ! {
     #[cfg(test)]
     tlenix_core::process::exit(tlenix_core::ExitStatus::ExitSuccess);
 
-    #[cfg(not(test))]
-    {
-        welcome_msg();
-
-        sleep_loop_forever();
-    }
+    // This stops the compiler from complaining when compiling for tests.
+    #[allow(unreachable_code)]
+    welcome_msg();
+    // TODO
+    sleep_loop_forever();
 }
 
-#[cfg(not(test))]
 fn welcome_msg() {
-    tlenix_core::println!("{}", WELCOME_MSG);
+    println!("{}", WELCOME_MSG);
 }
 
 #[panic_handler]

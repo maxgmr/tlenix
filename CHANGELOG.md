@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Environment variables.
 - Trait describing how various types can be converted into syscall args.
 - Trait describing how various types can be converted from syscall outputs.
+- `mash` prompt should react to exit code of last-executed process.
 
 ## [0.1.0-alpha.7] - IN PROGRESS
 
