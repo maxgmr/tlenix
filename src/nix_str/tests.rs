@@ -20,3 +20,10 @@ fn nstring_from_byte_vec() {
     let my_nstring: NixString = bytes.into();
     assert_eq!(my_nstring.bytes(), expected_bytes);
 }
+
+#[test_case]
+fn null_nstring() {
+    let expected_bytes = *b"\0";
+    let my_nstring = NixString::null();
+    assert_eq!(my_nstring.bytes(), expected_bytes);
+}

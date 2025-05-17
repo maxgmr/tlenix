@@ -13,12 +13,20 @@
 #![feature(custom_test_frameworks)]
 #![cfg_attr(test, test_runner(tlenix_core::custom_test_runner))]
 
+extern crate alloc;
+
+use alloc::vec::Vec;
 use core::panic::PanicInfo;
 
-use tlenix_core::{align_stack_pointer, println, sleep_loop_forever};
+use tlenix_core::{align_stack_pointer, println, process::execute_process, sleep_loop_forever};
 
 const WELCOME_MSG: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION"));
 const TLENIX_PANIC_TITLE: &str = "tlenix";
+
+#[cfg(debug_assertions)]
+const SHELL_PATH: &str = "target/x86_64-unknown-linux-none/debug/mash";
+#[cfg(not(debug_assertions))]
+const SHELL_PATH: &str = "/bin/mash";
 
 /// Entry point.
 ///
@@ -37,8 +45,14 @@ pub extern "C" fn _start() -> ! {
     // This stops the compiler from complaining when compiling for tests.
     #[allow(unreachable_code)]
     welcome_msg();
-    // TODO
-    sleep_loop_forever();
+
+    // Launch shell with no args
+    loop {
+        execute_process(Vec::from([SHELL_PATH]), Vec::<&'static str>::new()).unwrap();
+        tlenix_core::process::exit(tlenix_core::ExitStatus::ExitSuccess);
+        println!("Restarting shell...");
+        println!("(Enter the \"poweroff\" command to shut down)");
+    }
 }
 
 fn welcome_msg() {

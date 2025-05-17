@@ -79,7 +79,10 @@ pub unsafe fn __syscall_0(call_num: SyscallNum) -> usize {
 /// Invoke a Linux syscall with 1 arg.
 #[inline]
 #[doc(hidden)]
-pub unsafe fn __syscall_1<SA: Into<SyscallArg>>(call_num: SyscallNum, arg0: SA) -> usize {
+pub unsafe fn __syscall_1<SA>(call_num: SyscallNum, arg0: SA) -> usize
+where
+    SA: Into<SyscallArg>,
+{
     let mut ret: usize;
     let arg0: usize = arg0.into().into();
 
@@ -100,7 +103,11 @@ pub unsafe fn __syscall_1<SA: Into<SyscallArg>>(call_num: SyscallNum, arg0: SA) 
 /// Invoke a Linux syscall with 2 args.
 #[inline]
 #[doc(hidden)]
-pub unsafe fn __syscall_2<SA: Into<SyscallArg>>(call_num: SyscallNum, arg0: SA, arg1: SA) -> usize {
+pub unsafe fn __syscall_2<SA, SB>(call_num: SyscallNum, arg0: SA, arg1: SB) -> usize
+where
+    SA: Into<SyscallArg>,
+    SB: Into<SyscallArg>,
+{
     let mut ret: usize;
     let arg0: usize = arg0.into().into();
     let arg1: usize = arg1.into().into();
@@ -123,12 +130,12 @@ pub unsafe fn __syscall_2<SA: Into<SyscallArg>>(call_num: SyscallNum, arg0: SA, 
 /// Invoke a Linux syscall with 3 args.
 #[inline]
 #[doc(hidden)]
-pub unsafe fn __syscall_3<SA: Into<SyscallArg>>(
-    call_num: SyscallNum,
-    arg0: SA,
-    arg1: SA,
-    arg2: SA,
-) -> usize {
+pub unsafe fn __syscall_3<SA, SB, SC>(call_num: SyscallNum, arg0: SA, arg1: SB, arg2: SC) -> usize
+where
+    SA: Into<SyscallArg>,
+    SB: Into<SyscallArg>,
+    SC: Into<SyscallArg>,
+{
     let mut ret: usize;
     let arg0: usize = arg0.into().into();
     let arg1: usize = arg1.into().into();
@@ -152,13 +159,19 @@ pub unsafe fn __syscall_3<SA: Into<SyscallArg>>(
 
 /// Invoke a Linux syscall with 4 args.
 #[inline]
-pub unsafe fn __syscall_4<SA: Into<SyscallArg>>(
+pub unsafe fn __syscall_4<SA, SB, SC, SD>(
     call_num: SyscallNum,
     arg0: SA,
-    arg1: SA,
-    arg2: SA,
-    arg3: SA,
-) -> usize {
+    arg1: SB,
+    arg2: SC,
+    arg3: SD,
+) -> usize
+where
+    SA: Into<SyscallArg>,
+    SB: Into<SyscallArg>,
+    SC: Into<SyscallArg>,
+    SD: Into<SyscallArg>,
+{
     let mut ret: usize;
     let arg0: usize = arg0.into().into();
     let arg1: usize = arg1.into().into();
@@ -184,14 +197,21 @@ pub unsafe fn __syscall_4<SA: Into<SyscallArg>>(
 
 /// Invoke a Linux syscall with 5 args.
 #[inline]
-pub unsafe fn __syscall_5<SA: Into<SyscallArg>>(
+pub unsafe fn __syscall_5<SA, SB, SC, SD, SE>(
     call_num: SyscallNum,
     arg0: SA,
-    arg1: SA,
-    arg2: SA,
-    arg3: SA,
-    arg4: SA,
-) -> usize {
+    arg1: SB,
+    arg2: SC,
+    arg3: SD,
+    arg4: SE,
+) -> usize
+where
+    SA: Into<SyscallArg>,
+    SB: Into<SyscallArg>,
+    SC: Into<SyscallArg>,
+    SD: Into<SyscallArg>,
+    SE: Into<SyscallArg>,
+{
     let mut ret: usize;
     let arg0: usize = arg0.into().into();
     let arg1: usize = arg1.into().into();
