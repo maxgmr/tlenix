@@ -11,7 +11,7 @@ impl<T: Fn()> Testable for T {
     fn run(&self) {
         print!("{}...\t", core::any::type_name::<T>());
         self();
-        println!("[ok]");
+        println!("[\u{001b}[32mok\u{001b}[0m]");
     }
 }
 
@@ -24,7 +24,7 @@ pub fn custom_test_runner(tests: &[&dyn Testable]) {
     }
     println!("\n=======");
     println!(
-        "[ALL_PASS] All {} test(s) passed successfully! :D",
+        "[\u{001b}[32mALL_PASS\u{001b}[0m] All {} test(s) passed successfully! :D",
         tests.len()
     );
 }
@@ -34,7 +34,7 @@ pub fn custom_test_runner(tests: &[&dyn Testable]) {
 pub fn test_panic_handler(info: &core::panic::PanicInfo<'_>) -> ! {
     use crate::{ExitStatus::ExitFailure, eprintln, process::exit};
 
-    eprintln!("[FAIL!]");
+    eprintln!("[\u{001b}[31mFAIL!\u{001b}[0m]");
     eprintln!("Error:\n{}", info);
 
     exit(ExitFailure);

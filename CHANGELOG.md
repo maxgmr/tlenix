@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0-alpha.7] - IN PROGRESS
 
+### Added
+
+- Coloured test output.
+
 ### Changed
 
 - General implementation overhaul/reorganization.
