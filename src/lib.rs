@@ -18,6 +18,8 @@
 extern crate alloc;
 
 mod allocator;
+mod console;
+mod fs;
 mod nix_str;
 mod print;
 pub mod process;
@@ -26,6 +28,7 @@ mod test_framework;
 mod thread;
 
 // RE-EXPORTS
+pub use fs::FileDescriptor;
 pub use print::{__print_err, __print_str};
 pub use syscall::{Errno, SyscallArg, SyscallNum};
 pub use test_framework::custom_test_runner;
