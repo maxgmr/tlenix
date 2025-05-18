@@ -3,6 +3,7 @@
 bitflags::bitflags! {
     /// All the different flags which can be set for the [open](https://www.man7.org/linux/man-pages/man2/open.2.html)
     /// Linux syscall.
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct OpenFlags: usize {
         /// File open flag: Open file read-only.
         const O_RDONLY = 0x0;

@@ -1,7 +1,7 @@
 //! Handles the [`Console`] struct, which gives read and write access to the
 //! [system console](https://en.wikipedia.org/wiki/Linux_console).
 
-use crate::{Errno, FileDescriptor};
+use crate::{Errno, fs::FileDescriptor};
 
 // Path to the Linux system console device.
 #[cfg(not(debug_assertions))]
