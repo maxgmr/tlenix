@@ -1,4 +1,4 @@
-use crate::{ExitStatus, nix_str::NixString};
+use crate::{ExitStatus, fs::FileDescriptor, nix_str::NixString};
 
 /// A syscall argument. A newtype wrapper around the [`core::usize`] type.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -13,6 +13,11 @@ impl From<NixString> for SyscallArg {
         Self(value.as_ptr() as usize)
     }
 }
+impl From<FileDescriptor> for SyscallArg {
+    fn from(value: FileDescriptor) -> Self {
+        Self(value.into())
+    }
+}
 // Macro to implement From<T> for SyscallArg where the only thing needed is `Self(T as usize)`.
 macro_rules! impl_from_syscallarg_for_as_usize {
     [$($t:ty),+] => {
@@ -23,4 +28,4 @@ macro_rules! impl_from_syscallarg_for_as_usize {
        })+
     };
 }
-impl_from_syscallarg_for_as_usize![usize, ExitStatus, *const u8, *const *const u8];
+impl_from_syscallarg_for_as_usize![usize, ExitStatus, *const u8, *const *const u8, *mut u8];
