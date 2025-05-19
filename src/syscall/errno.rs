@@ -145,6 +145,7 @@ pub enum Errno {
 impl Errno {
     /// Get the message str associated with this error.
     #[allow(clippy::too_many_lines)]
+    #[must_use]
     pub const fn as_str(&self) -> &'static str {
         #[allow(clippy::enum_glob_use)]
         use Errno::*;

@@ -1,18 +1,15 @@
 //! Module for filesystem operations.
 
-mod mode_t;
+mod file;
 mod open_flags;
 mod open_options;
+mod permissions;
 
 // RE-EXPORTS
-pub use mode_t::ModeT;
+pub use file::{File, FileDescriptor};
 pub use open_flags::OpenFlags;
 pub use open_options::OpenOptions;
-
-/// Process-unique identifier for a file or other input/output resource.
-/// [Wikipedia](https://en.wikipedia.org/wiki/File_descriptor)
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct FileDescriptor(usize);
+pub use permissions::FilePermissions;
 
 #[cfg(test)]
 mod tests;

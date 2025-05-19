@@ -1,10 +1,12 @@
-//! The [`ModeT`] bitflags.
+//! The [`FilePermissions`] bitflags.
+
+use core::default::Default;
 
 bitflags::bitflags! {
     /// The attributes of a given file. See
     /// [here](https://www.man7.org/linux/man-pages/man3/mode_t.3type.html) for more details.
     #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct ModeT: usize {
+    pub struct FilePermissions: usize {
         /// set-user-ID: Set process effective user ID on `execve(2)`.
         const S_ISUID = 0o04_000;
         /// set-group-ID: Set process effective group ID on `execve(2)`.
@@ -29,5 +31,14 @@ bitflags::bitflags! {
         const S_IWOTH = 0o00_002;
         /// Others can execute/search.
         const S_IXOTH = 0o00_001;
+    }
+}
+
+impl Default for FilePermissions {
+    fn default() -> Self {
+        // Default = 0644
+        let mut result = Self::empty();
+        result.insert(Self::S_IRUSR | Self::S_IWUSR | Self::S_IRGRP | Self::S_IROTH);
+        result
     }
 }

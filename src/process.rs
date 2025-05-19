@@ -23,7 +23,6 @@ const WUNTRACED: usize = 2;
 /// # Panics
 ///
 /// This function panics if the child process attempts to call `execve` and it fails.
-#[allow(clippy::similar_names)]
 pub fn execute_process<T: Into<NixString> + Clone, U: Into<NixString> + Clone>(
     argv: Vec<T>,
     envp: Vec<U>,
@@ -93,9 +92,9 @@ pub fn execute_process<T: Into<NixString> + Clone, U: Into<NixString> + Clone>(
 /// Cause normal process termination. Wrapper around the
 /// [exit](https://www.man7.org/linux/man-pages/man3/exit.3.html) Linux syscall.
 ///
-/// Returns the least significant byte of the given `status` to the parent process.
+/// Returns the least significant byte of the given `exit_status` to the parent process.
 pub fn exit(exit_status: ExitStatus) -> ! {
-    // SAFETY: The only user-defined argument, `status`, is already the right type.
+    // SAFETY: The only user-defined argument, `exit_status`, is already the right type.
     unsafe {
         syscall!(SyscallNum::Exit, exit_status);
     }
