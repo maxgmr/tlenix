@@ -128,6 +128,13 @@ impl OpenOptions {
         self
     }
 
+    /// Wrapper around the [`bitflags::Flags::contains`] function for this [`OpenOptions`]'
+    /// [`OpenFlags`].
+    #[must_use]
+    pub fn flags_contains(&self, open_flags: OpenFlags) -> bool {
+        self.open_flags.contains(open_flags)
+    }
+
     open_flag_setter!(
         /// If this flag is set, when [`Self::open`] is called, any write operations will start
         /// from the end of the file.
