@@ -1,4 +1,5 @@
 //! Library crate for the [tlenix](https://github.com/maxgmr/tlenix) `x86_64` operating system.
+#![cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #![warn(
     missing_docs,
     missing_debug_implementations,
@@ -12,6 +13,9 @@
 #![feature(custom_test_frameworks, never_type)]
 #![test_runner(test_framework::custom_test_runner)]
 #![reexport_test_harness_main = "test_main"]
+
+#[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+compile_error!("This crate only functions on x86_64 linux targets.");
 
 // Make sure the compiler includes `alloc`
 #[allow(unused_extern_crates)]
