@@ -6,7 +6,8 @@
     rust_2018_idioms,
     clippy::all,
     clippy::pedantic,
-    clippy::unwrap_used
+    clippy::unwrap_used,
+    clippy::todo
 )]
 #![no_std]
 #![cfg_attr(test, no_main)]
