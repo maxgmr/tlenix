@@ -25,11 +25,14 @@ jobs:
       - name: Add rust-src
         run: rustup component add rust-src
 
+      - name: Check docs
+        run: RUSTDOCFLAGS="-Dwarnings" cargo doc
+
       - name: Check formatting
         run: cargo fmt -- --check
 
       - name: Check clippy
-        run: cargo clippy -- -D warnings
+        run: cargo clippy -- -Dwarnings
 
       - name: Check cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v2
