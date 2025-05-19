@@ -174,8 +174,7 @@ pub fn read<const N: usize>(
 ///
 /// This function returns an [`Errno`] if:
 ///
-/// 1. [`OpenFlags::O_CREAT`] or [`OpenFlags::O_TMPFILE`] flags are set. In this case,
-///    [`Errno::Eperm`] is returned.
+/// 1. [`OpenFlags::O_CREAT`] flag is set. In this case, [`Errno::Eperm`] is returned.
 /// 2. [`OpenFlags::O_RDONLY`] and [`OpenFlags::O_TRUNC`] flags are set. In this case,
 ///    [`Errno::Eperm`] is returned.
 /// 3. The underlying [open](https://www.man7.org/linux/man-pages/man2/open.2.html) syscall returns

@@ -11,13 +11,6 @@ const TO_NULL_TERM_STR_ERR_MSG: &str = "input is too long for NullTermStr buffer
 ///
 /// The first literal is the literal byte string, and the second literal within the brackets is the
 /// length of the [`NullTermStr`] (_not_ the byte string!)
-///
-/// # Examples
-///
-/// ```
-/// // The byte array itself is 13 bytes long, but with the null terminator it'd be 14.
-/// const MY_NULL_TERM_STR: NullTermStr<14> = nulltermstr!(b"Hello, world!");
-/// ```
 #[macro_export]
 macro_rules! nulltermstr {
     ($s:literal) => {
