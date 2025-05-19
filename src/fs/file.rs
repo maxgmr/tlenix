@@ -170,7 +170,7 @@ impl File {
     ///
     /// # Errors
     ///
-    /// This function propagates any [`Errno`]s from the underlying [`fstat`] Linux syscall. It
+    /// This function propagates any [`Errno`]s from the underlying `fstat` Linux syscall. It
     /// also returns [`Errno::Eio`] if it gets malformed data from the syscall itself.
     pub fn stat(&self) -> Result<FileStat, Errno> {
         let mut stats = FileStatRaw::default();

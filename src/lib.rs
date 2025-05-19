@@ -30,7 +30,7 @@ mod print;
 pub mod process;
 mod syscall;
 mod test_framework;
-mod thread;
+pub mod thread;
 
 // RE-EXPORTS
 pub use print::{__print_err, __print_str};
