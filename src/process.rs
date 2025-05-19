@@ -7,8 +7,8 @@ use crate::{Errno, SyscallNum, data::NullTermString, syscall, syscall_result};
 
 const WUNTRACED: usize = 0x2;
 
-/// Create a child process running the executable at the given [`NullTermStr`]. The parent process
-/// which calls this function waits until the child process is exited or killed.
+/// Create a child process running the executable at the given [`NullTermString`]. The parent
+/// process which calls this function waits until the child process is exited or killed.
 ///
 /// # Errors
 ///
