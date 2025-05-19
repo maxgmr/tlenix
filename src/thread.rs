@@ -17,7 +17,8 @@ struct Timespec {
 impl From<&Duration> for Timespec {
     fn from(value: &Duration) -> Self {
         Self {
-            sec: value.as_secs().try_into().unwrap(),
+            #[allow(clippy::cast_possible_wrap)]
+            sec: value.as_secs() as i64,
             nsec: i64::from(value.subsec_nanos()),
         }
     }
@@ -65,6 +66,7 @@ pub fn sleep(duration: &Duration) -> Result<(), Errno> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
