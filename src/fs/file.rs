@@ -223,3 +223,27 @@ impl Drop for File {
         }
     }
 }
+
+// This is needed to get access to the private file_descriptor field.
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod drop_test {
+    use super::*;
+    use crate::assert_err;
+
+    const TEST_PATH: &str = "test_files/test.txt";
+
+    #[test_case]
+    fn close_file_on_drop() {
+        let bad_file_copy: File;
+        {
+            let file = OpenOptions::new().open(TEST_PATH).unwrap();
+            bad_file_copy = File::__new(file.file_descriptor, &OpenOptions::default());
+            // file goes out of scope...
+        }
+
+        // The file descriptor of the file should now be closed!
+        let mut buffer = [0; 64];
+        assert_err!(bad_file_copy.read(&mut buffer), Errno::Ebadf);
+    }
+}
