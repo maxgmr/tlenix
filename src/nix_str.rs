@@ -87,6 +87,7 @@ impl<'a> From<&'a NixString> for &'a [u8] {
 }
 
 /// Create a [`Vec<NixString>`] from a given vector of types which implement [`Into<NixString>`].
+#[must_use]
 pub fn vec_into_nix_strings<T: Into<NixString> + Clone>(arr: Vec<T>) -> Vec<NixString> {
     arr.into_iter()
         .map(|elem| <T as core::convert::Into<NixString>>::into(elem))

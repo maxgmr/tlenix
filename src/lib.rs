@@ -34,8 +34,8 @@ mod test_framework;
 pub mod thread;
 
 // RE-EXPORTS
-pub use nix_bytes::NixBytes;
-pub use nix_str::NixString;
+pub use nix_bytes::{NixBytes, vec_into_nix_bytes};
+pub use nix_str::{NixString, vec_into_nix_strings};
 pub use print::{__print_err, __print_str};
 pub use syscall::{Errno, SyscallArg, SyscallNum};
 pub use test_framework::custom_test_runner;
