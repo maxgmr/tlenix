@@ -3,7 +3,7 @@
 use crate::{
     Errno, SyscallNum,
     fs::{FileDescriptor, FileStat, FileStatRaw, LseekWhence, OpenOptions},
-    syscall_result,
+    syscall, syscall_result,
 };
 
 /// An object providing access to an open file on the filesystem.
@@ -212,5 +212,14 @@ impl File {
         // SAFETY: The `offset` argument matches the C `off_t` type. The `whence` argument is
         // restricted to the allowed values by the `LseekWhence` enum.
         unsafe { syscall_result!(SyscallNum::Lseek, self.file_descriptor, offset, whence) }
+    }
+}
+impl Drop for File {
+    fn drop(&mut self) {
+        // SAFETY: Statically-chosen arguments. Linux protects against double-closes by gracefully
+        // returning EBADF.
+        unsafe {
+            syscall!(SyscallNum::Close, self.file_descriptor);
+        }
     }
 }
