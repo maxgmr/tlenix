@@ -3,7 +3,7 @@
 
 use crate::{
     Errno,
-    fs::{File, OpenOptions},
+    fs::{File, FileType, OpenOptions},
 };
 
 // Path to the Linux system console device.
@@ -18,18 +18,37 @@ const CONSOLE_PATH: &str = "/dev/tty";
 #[derive(Debug)]
 pub struct Console(File);
 impl Console {
-    /// Opens the system console.
+    /// Opens the system console in non-blocking mode with read and write permissions.
     ///
     /// # Errors
     ///
     /// This function propagates any I/O errors associated with opening the system console device
     /// file.
-    pub fn open_console() -> Result<Self, Errno> {
-        Ok(Self(
-            OpenOptions::new()
-                .read_write()
-                .non_blocking(true)
-                .open(CONSOLE_PATH)?,
-        ))
+    ///
+    /// Additionally, this function will return [`Errno::Enotty`] if the character device is
+    /// missing from the filesystem.
+    pub fn open() -> Result<Self, Errno> {
+        let file = OpenOptions::new()
+            .read_write()
+            .non_blocking(true)
+            .open(CONSOLE_PATH)?;
+
+        // Reject if not a character device
+        if FileType::CharacterDevice != file.stat()?.file_type {
+            return Err(Errno::Enotty);
+        }
+
+        Ok(Self(file))
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test_case]
+    fn open_console() {
+        let _ = Console::open().unwrap();
     }
 }
