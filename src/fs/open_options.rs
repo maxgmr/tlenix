@@ -279,6 +279,7 @@ impl Default for OpenOptions {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::assert_err;
 
     const THIS_PATH: &str = "src/fs/open_options.rs";
 
@@ -375,9 +376,9 @@ mod tests {
 
     #[test_case]
     fn open_dne() {
-        match OpenOptions::new().open("/sdkfhsdlkhsg/gsdgsg/sdg/sdhsfl") {
-            Err(Errno::Enoent) => {} // OK!
-            _ => panic!("expected Err(Errno::Enoent)"),
-        }
+        assert_err!(
+            OpenOptions::new().open("/akhflskdjnjcnds/sgsg/zsgsgsg"),
+            Errno::Enoent
+        );
     }
 }

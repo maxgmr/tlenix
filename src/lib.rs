@@ -33,6 +33,9 @@ mod syscall;
 mod test_framework;
 pub mod thread;
 
+#[cfg(test)]
+pub(crate) mod test_utils;
+
 // RE-EXPORTS
 pub use console::Console;
 pub use nix_bytes::{NixBytes, vec_into_nix_bytes};

@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
+use crate::assert_err;
 
 const TEST_STR: &str = "Hello, world!";
 const TEST_NULL_TERM: &str = "Hello, world!\0";
@@ -63,18 +64,18 @@ fn nstring_from_empty() {
 
 #[test_case]
 fn nstring_invalid_utf8_slice() {
-    match NixString::try_from(&INVALID_UTF8[..]) {
-        Err(core::str::Utf8Error { .. }) => {} // OK!
-        val => panic!("expected Err(core::str::Utf8Error), got {val:?}"),
-    }
+    assert_err!(
+        NixString::try_from(&INVALID_UTF8[..]),
+        core::str::Utf8Error { .. }
+    );
 }
 
 #[test_case]
 fn nstring_invalid_utf8_vec() {
-    match NixString::try_from(INVALID_UTF8.to_vec()) {
-        Err(core::str::Utf8Error { .. }) => {} // OK!
-        val => panic!("expected Err(core::str::Utf8Error), got {val:?}"),
-    }
+    assert_err!(
+        NixString::try_from(INVALID_UTF8.to_vec()),
+        core::str::Utf8Error { .. }
+    );
 }
 
 #[test_case]

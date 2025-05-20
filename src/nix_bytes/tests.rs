@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
+use crate::assert_err;
 
 const TEST_STR: &str = "Hello, world!";
 const TEST_NULL_TERM: &str = "Hello, world!\0";
@@ -72,10 +73,7 @@ fn nbytes_non_utf8() {
 #[test_case]
 fn nbytes_non_utf8_str_fails() {
     let nbytes = NixBytes::from(&TEST_NON_UTF8[..]);
-    match str::from_utf8(nbytes.bytes()) {
-        Err(core::str::Utf8Error { .. }) => {} // OK!
-        val => panic!("expected Err(core::str::Utf8Error), got {val:?}"),
-    }
+    assert_err!(str::from_utf8(nbytes.bytes()), core::str::Utf8Error { .. });
 }
 
 #[test_case]

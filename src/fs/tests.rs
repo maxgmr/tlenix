@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use crate::{Errno, fs::FileType};
+use crate::{Errno, assert_err, fs::FileType};
 
 use super::*;
 
@@ -66,24 +66,17 @@ fn read_wo() {
     let mut buffer = [0; 1];
     let file = OpenOptions::new().write_only().open(TEST_PATH).unwrap();
 
-    match file.read(&mut buffer) {
-        Err(Errno::Ebadf) => {} // OK!
-        val => panic!("expected Err(Errno::Ebadf), got {val:?}"),
-    }
-
-    match file.read_byte() {
-        Err(Errno::Ebadf) => {} // OK!
-        val => panic!("expected Err(Errno::Ebadf), got {val:?}"),
-    }
+    assert_err!(file.read(&mut buffer), Errno::Ebadf);
+    assert_err!(file.read(&mut buffer), Errno::Ebadf);
 }
 
 #[test_case]
 fn read_dir() {
     let mut buffer = [0; 1];
-    match OpenOptions::new().open("/").unwrap().read(&mut buffer) {
-        Err(Errno::Eisdir) => {} // OK!
-        val => panic!("expected Err(Errno::Eisdir), got {val:?}"),
-    }
+    assert_err!(
+        OpenOptions::new().open("/").unwrap().read(&mut buffer),
+        Errno::Eisdir
+    );
 }
 
 #[test_case]
@@ -93,15 +86,8 @@ fn write_ro() {
 
     let file = OpenOptions::new().open(TEST_PATH).unwrap();
 
-    match file.write(&buffer) {
-        Err(Errno::Ebadf) => {} // OK!
-        val => panic!("expected Err(Errno::Ebadf), got {val:?}"),
-    }
-
-    match file.write_byte(byte) {
-        Err(Errno::Ebadf) => {} // OK!
-        val => panic!("expected Err(Errno::Ebadf), got {val:?}"),
-    }
+    assert_err!(file.write(&buffer), Errno::Ebadf);
+    assert_err!(file.write_byte(byte), Errno::Ebadf);
 }
 
 #[test_case]
