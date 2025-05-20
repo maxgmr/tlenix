@@ -72,6 +72,33 @@ impl File {
         }
     }
 
+    /// Reads a single byte from the file.
+    ///
+    /// Will return [`None`] if the end of the file has been reached.
+    ///
+    /// Internally relies on the [`read`](https://www.man7.org/linux/man-pages/man2/read.2.html)
+    /// Linux syscall.
+    ///
+    /// # Errors
+    ///
+    /// Will propagate any [`Errno`]s returned from the call to `read`.
+    pub fn read_byte(&self) -> Result<Option<u8>, Errno> {
+        let mut byte: u8 = u8::default();
+
+        // SAFETY: The file descriptor is tied to the file itself. The mutable raw pointer to
+        // `byte` is dropped at the end of the function, so there is no risk of a
+        // use-after-free. All other arguments are statically-chosen and correct.
+        let bytes_read =
+            unsafe { syscall_result!(SyscallNum::Read, self.file_descriptor, &raw mut byte, 1)? };
+
+        // End of file.
+        if bytes_read == 0 {
+            return Ok(None);
+        }
+
+        Ok(Some(byte))
+    }
+
     /// Writes bytes from the provided buffer to the given file, starting at the file's internal
     /// cursor location. Returns the number of bytes written on success.
     ///
@@ -102,6 +129,21 @@ impl File {
         }
 
         Ok(total_bytes_written)
+    }
+
+    /// Writes a single byte to the file. Returns the number of bytes written.
+    ///
+    /// Internally relies on the [`write`](https://www.man7.org/linux/man-pages/man2/write.2.html)
+    /// Linux syscall.
+    ///
+    /// # Errors
+    ///
+    /// Will propagate any [`Errno`]s returned from the call to `write`.
+    pub fn write_byte(&self, byte: u8) -> Result<usize, Errno> {
+        // SAFETY: The pointer to the byte is valid. The buffer size is statically-chosen and
+        // matches the single byte being written. Any issues with user-given arguments are handled
+        // gracefully by the underlying syscall.
+        unsafe { syscall_result!(SyscallNum::Write, self.file_descriptor, &raw const byte, 1) }
     }
 
     /// Gets the current cursor location within the [`File`].
