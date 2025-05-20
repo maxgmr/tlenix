@@ -32,31 +32,29 @@ pub fn execute_process<T: Into<NixBytes> + Clone, U: Into<NixBytes> + Clone>(
         return Err(Errno::Enoent);
     }
 
+    // ARGV
+    // Convert to syscall-compatible strings
+    let argv_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(argv);
+    // Get an array of pointers to those strings
+    let mut argv_pointers: Vec<*const u8> = argv_nix_strings.iter().map(NixBytes::as_ptr).collect();
+    // Null-terminate the array
+    argv_pointers.push(ptr::null());
+    // Get pointer to start of argv array
+    let argv_pointer = argv_pointers.as_ptr();
+
+    // ENVP
+    // Convert to syscall-compatible strings
+    let envp_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(envp);
+    // Get an array of pointers to those strings
+    let mut envp_pointers: Vec<*const u8> = envp_nix_strings.iter().map(NixBytes::as_ptr).collect();
+    // Null-terminate the array
+    envp_pointers.push(ptr::null());
+    // Get pointer to start of envp array
+    let envp_pointer = envp_pointers.as_ptr();
+
     match fork()? {
         0 => {
             // Child process; start the given program
-
-            // ARGV
-            // Convert to syscall-compatible strings
-            let argv_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(argv);
-            // Get an array of pointers to those strings
-            let mut argv_pointers: Vec<*const u8> =
-                argv_nix_strings.iter().map(NixBytes::as_ptr).collect();
-            // Null-terminate the array
-            argv_pointers.push(ptr::null());
-            // Get pointer to start of argv array
-            let argv_pointer = argv_pointers.as_ptr();
-
-            // ENVP
-            // Convert to syscall-compatible strings
-            let envp_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(envp);
-            // Get an array of pointers to those strings
-            let mut envp_pointers: Vec<*const u8> =
-                envp_nix_strings.iter().map(NixBytes::as_ptr).collect();
-            // Null-terminate the array
-            envp_pointers.push(ptr::null());
-            // Get pointer to start of envp array
-            let envp_pointer = envp_pointers.as_ptr();
 
             // SAFETY: On success, `execve` does not return, so the pointers only need to be valid
             // at the moment of the syscall (which they are). Furthermore, the child process
