@@ -90,3 +90,24 @@ fn null_nstring_as_string() {
     let test_string = String::from(my_nstring);
     assert_eq!(&test_string, "\0");
 }
+
+#[test_case]
+fn nstrings_vec() {
+    let mut s_vec: Vec<String> = Vec::from([
+        "hello".to_string(),
+        "my".to_string(),
+        "name".to_string(),
+        "is".to_string(),
+        "Max".to_string(),
+    ]);
+    let nstrings_vec: Vec<NixString> = vec_into_nix_strings(s_vec.clone());
+
+    for s in &mut s_vec {
+        s.push('\0');
+    }
+    s_vec.push("\0".to_string());
+
+    for (s, ns) in s_vec.into_iter().zip(nstrings_vec) {
+        assert_eq!(s, String::from(ns));
+    }
+}
