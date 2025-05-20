@@ -9,6 +9,9 @@ use core::iter::IntoIterator;
 use crate::NULL_BYTE;
 
 /// An owned, null-terminated string of valid UTF-8 bytes intended for use with Linux syscalls.
+///
+/// These bytes are guaranteed to be valid UTF-8. To have a null-terminated vector of arbitrary
+/// bytes, use [`crate::NixBytes`] instead.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NixString(Vec<u8>);
 impl NixString {
