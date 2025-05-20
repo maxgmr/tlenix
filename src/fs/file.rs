@@ -113,14 +113,62 @@ impl File {
     ///
     /// This function propagates any errors encountered during the underlying `lseek` operation.
     pub fn cursor(&self) -> Result<usize, Errno> {
-        // SAFETY: The arguments are correct and statically-determined.
-        unsafe {
-            syscall_result!(
-                SyscallNum::Lseek,
-                self.file_descriptor,
-                0,
-                LseekWhence::SeekCur
-            )
-        }
+        self.cursor_offset(0)
+    }
+
+    /// Offsets the cursor from its current location by the given number. Returns the new cursor
+    /// location.
+    ///
+    /// Uses the [`lseek`](https://www.man7.org/linux/man-pages/man2/lseek.2.html) Linux syscall
+    /// internally.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors encountered during the underlying `lseek` operation.
+    pub fn cursor_offset(&self, offset: i64) -> Result<usize, Errno> {
+        self.lseek_wrapper(offset, LseekWhence::SeekCur)
+    }
+
+    /// Sets the cursor to `offset` bytes. Returns the new cursor location.
+    ///
+    /// Uses the [`lseek`](https://www.man7.org/linux/man-pages/man2/lseek.2.html) Linux syscall
+    /// internally.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors encountered during the underlying `lseek` operation.
+    pub fn set_cursor(&self, offset: i64) -> Result<usize, Errno> {
+        self.lseek_wrapper(offset, LseekWhence::SeekSet)
+    }
+
+    /// Sets the cursor to the end of the file. Returns the new cursor location.
+    ///
+    /// Uses the [`lseek`](https://www.man7.org/linux/man-pages/man2/lseek.2.html) Linux syscall
+    /// internally.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors encountered during the underlying `lseek` operation.
+    pub fn cursor_to_end(&self) -> Result<usize, Errno> {
+        self.cursor_to_end_offset(0)
+    }
+
+    /// Sets the cursor to the end of the file, plus an offset. Returns the new cursor location.
+    ///
+    /// Uses the [`lseek`](https://www.man7.org/linux/man-pages/man2/lseek.2.html) Linux syscall
+    /// internally.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors encountered during the underlying `lseek` operation.
+    pub fn cursor_to_end_offset(&self, offset: i64) -> Result<usize, Errno> {
+        self.lseek_wrapper(offset, LseekWhence::SeekEnd)
+    }
+
+    /// Wrapper around the `lseek` syscall to reduce code duplication.
+    fn lseek_wrapper(&self, offset: i64, whence: LseekWhence) -> Result<usize, Errno> {
+        // SAFETY: The `offset` argument matches the C `off_t` type. The `whence` argument is
+        // restricted to the allowed values by the `LseekWhence` enum.
+        unsafe { syscall_result!(SyscallNum::Lseek, self.file_descriptor, offset, whence) }
     }
 }

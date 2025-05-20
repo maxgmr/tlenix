@@ -32,6 +32,12 @@ macro_rules! impl_from_syscallarg_for_as_usize {
     [$($t:ty),+] => {
         $(impl From<$t> for SyscallArg {
            fn from(value: $t) -> Self {
+               // OK to lose sign here. We're simply reinterpreting bytes, the underlying syscall
+               // doesn't care about the Rust data type.
+               #[allow(clippy::cast_sign_loss)]
+               // OK to allow this; we only truncate on targets with 32-bit pointers. This is an
+               // x86_64-only program.
+               #[allow(clippy::cast_possible_truncation)]
                Self(value as usize)
            }
        })+
@@ -43,5 +49,7 @@ impl_from_syscallarg_for_as_usize![
     *const u8,
     *const *const u8,
     *mut u8,
-    *mut FileStatRaw
+    *mut FileStatRaw,
+    i32,
+    i64
 ];
