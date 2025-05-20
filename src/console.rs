@@ -1,16 +1,25 @@
 //! Handles the [`Console`] struct, which gives read and write access to the
 //! [system console](https://en.wikipedia.org/wiki/Linux_console).
 
+use core::time::Duration;
+
 use crate::{
-    Errno,
+    Errno, PIT_IRQ_PERIOD,
     fs::{File, FileType, OpenOptions},
+    thread,
 };
 
-// Path to the Linux system console device.
 #[cfg(not(debug_assertions))]
+/// Path to the Linux system console device.
 const CONSOLE_PATH: &str = "/dev/console";
 #[cfg(debug_assertions)]
+/// Path to the Linux system console device.
 const CONSOLE_PATH: &str = "/dev/tty";
+
+/// Byte representing a backspace.
+const BACKSPACE_BYTE: u8 = 8;
+/// Byte representing a newline.
+const NEWLINE_BYTE: u8 = b'\n';
 
 /// Struct to read from and write to the
 /// [system console](https://en.wikipedia.org/wiki/Linux_console). Contains a file descriptor for
@@ -39,6 +48,27 @@ impl Console {
         }
 
         Ok(Self(file))
+    }
+
+    /// Reads a single byte from the [system console](https://en.wikipedia.org/wiki/Linux_console),
+    /// looping until a byte is read.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors from the underlying calls to [`File::read_byte`] and
+    /// [`thread::sleep`].
+    pub fn read_byte(&self) -> Result<u8, Errno> {
+        let sleep_duration = Duration::from_nanos(PIT_IRQ_PERIOD);
+        loop {
+            match self.0.read_byte() {
+                // Nothing read; sleep then try again
+                Ok(None) | Err(Errno::Eagain) => thread::sleep(&sleep_duration)?,
+                // Propagate non-retryable errors
+                Err(e) => return Err(e),
+                // Got a byte! Return it!
+                Ok(Some(b)) => return Ok(b),
+            }
+        }
     }
 }
 
