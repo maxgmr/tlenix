@@ -48,5 +48,7 @@ bitflags::bitflags! {
         const O_SYNC = 0x10_1000;
         /// File open flag: Obtain a file descriptor without opening the file.
         const O_PATH = 0x20_0000;
+        /// Temp file flag: Create an unnamed temporary regular file.
+        const O_TMPFILE = 0x41_0000;
     }
 }

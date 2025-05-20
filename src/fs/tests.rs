@@ -9,6 +9,7 @@ const TEST_PATH: &str = "test_files/test.txt";
 const SYMLINK_PATH: &str = "test_files/test_symlink";
 const TEST_PATH_CONTENTS: &str =
     "Hello! I hope you can read me without any issues! - Max (马克斯)\n";
+const TEMP_DIR: &str = "/tmp";
 
 #[test_case]
 fn read_bytes() {
@@ -141,4 +142,36 @@ fn read_byte() {
 
     // Make sure that we get `None` after reading to the end
     assert!(file.read_byte().unwrap().is_none());
+}
+
+#[test_case]
+fn follow_symlink() {
+    let mut buffer = [0; TEST_PATH_CONTENTS.len()];
+    OpenOptions::new()
+        .open(SYMLINK_PATH)
+        .unwrap()
+        .read(&mut buffer)
+        .unwrap();
+    assert_eq!(buffer, TEST_PATH_CONTENTS.as_bytes());
+}
+
+#[test_case]
+fn open_temp() {
+    const EXPECTED: [u8; 17] = *b"Howdeedoodeethere";
+
+    let tempfile = OpenOptions::new()
+        .read_write()
+        .create_temp(true)
+        .open(TEMP_DIR)
+        .unwrap();
+
+    let bytes_written = tempfile.write(&EXPECTED[..]).unwrap();
+    assert_eq!(bytes_written, EXPECTED.len());
+
+    tempfile.set_cursor(0).unwrap();
+
+    let mut buffer = [0; EXPECTED.len() * 2];
+    let bytes_read = tempfile.read(&mut buffer).unwrap();
+    assert_eq!(bytes_read, EXPECTED.len());
+    assert_eq!(&buffer[..EXPECTED.len()], EXPECTED);
 }
