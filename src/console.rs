@@ -25,6 +25,11 @@ impl Console {
     /// This function propagates any I/O errors associated with opening the system console device
     /// file.
     pub fn open_console() -> Result<Self, Errno> {
-        Ok(Self(OpenOptions::new().read_write().open(CONSOLE_PATH)?))
+        Ok(Self(
+            OpenOptions::new()
+                .read_write()
+                .non_blocking(true)
+                .open(CONSOLE_PATH)?,
+        ))
     }
 }

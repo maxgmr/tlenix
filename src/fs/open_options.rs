@@ -179,6 +179,10 @@ impl OpenOptions {
         /// then the operation will fail with [`Errno::Eloop`].
         no_follow => O_NOFOLLOW;
 
+        /// If this flag is set, when [`Self::open`] is called, neither the opening itself nor any
+        /// subsequent I/O operations on the file shall cause the calling process to wait.
+        non_blocking => O_NONBLOCK;
+
         /// If this flag is set, when [`Self::open`] is called, the file itself won't be opened.
         /// Only operations on the file descriptor level will do anything; all others will fail
         /// with [`Errno::Ebadf`].
