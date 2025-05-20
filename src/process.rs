@@ -59,16 +59,21 @@ pub fn execute_process<T: Into<NixBytes> + Clone, U: Into<NixBytes> + Clone>(
             let envp_pointer = envp_pointers.as_ptr();
 
             // SAFETY: On success, `execve` does not return, so the pointers only need to be valid
-            // at the moment of the syscall (which they are).
+            // at the moment of the syscall (which they are). Furthermore, the child process
+            // immediately exits if `execve` fails, avoiding UB there.
             unsafe {
-                syscall_result!(
+                if syscall_result!(
                     SyscallNum::Execve,
                     argv_pointers[0],
                     argv_pointer,
                     envp_pointer
-                )?;
+                )
+                .is_err()
+                {
+                    exit(ExitStatus::ExitFailure);
+                }
             }
-            unreachable!("execve should have panicked on fail");
+            unreachable!("execve doesn't return on success");
         }
         child_pid => {
             // Parent process; wait for child to finish
