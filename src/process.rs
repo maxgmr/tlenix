@@ -5,7 +5,7 @@ use core::ptr;
 
 use crate::{
     Errno, ExitStatus, SyscallNum,
-    nix_str::{NixString, vec_into_nix_strings},
+    nix_bytes::{NixBytes, vec_into_nix_bytes},
     syscall, syscall_result,
 };
 
@@ -23,7 +23,7 @@ const WUNTRACED: usize = 2;
 /// # Panics
 ///
 /// This function panics if the child process attempts to call `execve` and it fails.
-pub fn execute_process<T: Into<NixString> + Clone, U: Into<NixString> + Clone>(
+pub fn execute_process<T: Into<NixBytes> + Clone, U: Into<NixBytes> + Clone>(
     argv: Vec<T>,
     envp: Vec<U>,
 ) -> Result<(), Errno> {
@@ -38,10 +38,10 @@ pub fn execute_process<T: Into<NixString> + Clone, U: Into<NixString> + Clone>(
 
             // ARGV
             // Convert to syscall-compatible strings
-            let argv_nix_strings: Vec<NixString> = vec_into_nix_strings(argv);
+            let argv_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(argv);
             // Get an array of pointers to those strings
             let mut argv_pointers: Vec<*const u8> =
-                argv_nix_strings.iter().map(NixString::as_ptr).collect();
+                argv_nix_strings.iter().map(NixBytes::as_ptr).collect();
             // Null-terminate the array
             argv_pointers.push(ptr::null());
             // Get pointer to start of argv array
@@ -49,10 +49,10 @@ pub fn execute_process<T: Into<NixString> + Clone, U: Into<NixString> + Clone>(
 
             // ENVP
             // Convert to syscall-compatible strings
-            let envp_nix_strings: Vec<NixString> = vec_into_nix_strings(envp);
+            let envp_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(envp);
             // Get an array of pointers to those strings
             let mut envp_pointers: Vec<*const u8> =
-                envp_nix_strings.iter().map(NixString::as_ptr).collect();
+                envp_nix_strings.iter().map(NixBytes::as_ptr).collect();
             // Null-terminate the array
             envp_pointers.push(ptr::null());
             // Get pointer to start of envp array
