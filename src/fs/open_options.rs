@@ -105,10 +105,13 @@ impl OpenOptions {
     ///
     /// Setting the read-only flag will disable [`Self::truncate`] if it was enabled, as read-only
     /// + truncate is undefined behaviour.
+    ///
+    /// Setting the read-only flag will also disable [`Self::create_temp`] if it was enabled, as
+    /// opening a tempfile in read-only mode is forbidden.
     pub fn read_only(&mut self) -> &mut Self {
-        self.open_flags.remove(OpenFlags::O_TRUNC);
         self.open_flags
             .remove(OpenFlags::O_RDWR | OpenFlags::O_WRONLY);
+        self.make_flags_valid(OpenFlags::O_RDONLY, true);
         self
     }
 
@@ -117,6 +120,7 @@ impl OpenOptions {
     pub fn write_only(&mut self) -> &mut Self {
         self.open_flags.remove(OpenFlags::O_RDWR);
         self.open_flags.insert(OpenFlags::O_WRONLY);
+        self.make_flags_valid(OpenFlags::O_WRONLY, true);
         self
     }
 
@@ -125,6 +129,7 @@ impl OpenOptions {
     pub fn read_write(&mut self) -> &mut Self {
         self.open_flags.remove(OpenFlags::O_WRONLY);
         self.open_flags.insert(OpenFlags::O_RDWR);
+        self.make_flags_valid(OpenFlags::O_RDWR, true);
         self
     }
 
@@ -188,6 +193,17 @@ impl OpenOptions {
         /// with [`Errno::Ebadf`].
         path_only => O_PATH;
 
+        /// If this flag is set, when [`Self::open`] is called, then an unnamed temporary regular
+        /// file will be created.
+        ///
+        /// Note that when this flag is set, the path given to [`Self::open`] must be a directory
+        /// with write access, _not_ the file name.
+        ///
+        /// This flag _must_ be specified with either [`Self::write_only`] or [`Self::read_write`].
+        /// Setting this flag with the [`Self::read_only`] option set will change option to
+        /// [`Self::read_write`].
+        create_temp => O_TMPFILE;
+
         /// If this flag is set, when [`Self::open`] is called, write operations on the file will
         /// be done synchronously.
         ///
@@ -240,6 +256,12 @@ impl OpenOptions {
     /// Ensures that any invalid flag combos are remedied.
     fn make_flags_valid(&mut self, last_changed: OpenFlags, value: bool) {
         match (last_changed, value) {
+            (OpenFlags::O_RDONLY, true) => {
+                // O_TRUNC and O_RDONLY is UB
+                self.open_flags.remove(OpenFlags::O_TRUNC);
+                // Can't create a tempfile in read-only mode
+                self.open_flags.remove(OpenFlags::O_TMPFILE);
+            }
             (OpenFlags::O_CREAT, false) => {
                 // O_EXCL without O_CREAT is UB
                 self.open_flags.remove(OpenFlags::O_EXCL);
@@ -254,6 +276,15 @@ impl OpenOptions {
                     .intersects(OpenFlags::O_WRONLY | OpenFlags::O_RDWR)
                 {
                     // O_TRUNC and O_RDONLY is UB
+                    self.open_flags.insert(OpenFlags::O_RDWR);
+                }
+            }
+            (OpenFlags::O_TMPFILE, true) => {
+                if !self
+                    .open_flags
+                    .intersects(OpenFlags::O_WRONLY | OpenFlags::O_RDWR)
+                {
+                    // Can't create a tempfile in read-only mode
                     self.open_flags.insert(OpenFlags::O_RDWR);
                 }
             }
@@ -380,5 +411,26 @@ mod tests {
             OpenOptions::new().open("/akhflskdjnjcnds/sgsg/zsgsgsg"),
             Errno::Enoent
         );
+    }
+
+    #[test_case]
+    fn no_tmp_and_ro() {
+        let mut oo = OpenOptions::new();
+        assert_eq!(oo.open_flags, OpenFlags::O_RDONLY);
+
+        oo.create_temp(true);
+        assert_eq!(oo.open_flags, OpenFlags::O_RDWR | OpenFlags::O_TMPFILE);
+
+        oo.read_only();
+        assert_eq!(oo.open_flags, OpenFlags::O_RDONLY);
+
+        oo.write_only();
+        assert_eq!(oo.open_flags, OpenFlags::O_WRONLY);
+
+        oo.create_temp(true);
+        assert_eq!(oo.open_flags, OpenFlags::O_WRONLY | OpenFlags::O_TMPFILE);
+
+        oo.read_only();
+        assert_eq!(oo.open_flags, OpenFlags::O_RDONLY);
     }
 }
