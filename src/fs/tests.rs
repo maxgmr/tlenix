@@ -6,6 +6,7 @@ use super::*;
 
 const THIS_PATH: &str = "src/fs/file.rs";
 const TEST_PATH: &str = "test_files/test.txt";
+const SYMLINK_PATH: &str = "test_files/test_symlink";
 const TEST_PATH_CONTENTS: &str =
     "Hello! I hope you can read me without any issues! - Max (马克斯)\n";
 
@@ -95,7 +96,21 @@ fn stats() {
     let stats = OpenOptions::new().open(TEST_PATH).unwrap().stat().unwrap();
     // crate::println!("{:#?}", stats);
     assert_eq!(stats.file_type, FileType::RegularFile);
-    assert_eq!(stats.file_stat_raw.st_size, 68);
+    assert_eq!(
+        stats.file_stat_raw.st_size,
+        TEST_PATH_CONTENTS.len().try_into().unwrap()
+    );
+}
+
+#[test_case]
+fn dir_stats() {
+    let stats = OpenOptions::new()
+        .path_only(true)
+        .open("/")
+        .unwrap()
+        .stat()
+        .unwrap();
+    assert_eq!(stats.file_type, FileType::Directory);
 }
 
 #[test_case]
@@ -116,12 +131,10 @@ fn read_advance_cursor() {
 
 #[test_case]
 fn read_byte() {
-    const EXP_LEN: usize = TEST_PATH_CONTENTS.len();
-
     let file = OpenOptions::new().open(TEST_PATH).unwrap();
 
     // Read the file's bytes one at a time
-    for i in 0..EXP_LEN {
+    for i in 0..TEST_PATH_CONTENTS.len() {
         let byte = file.read_byte().unwrap().unwrap();
         assert_eq!(byte, TEST_PATH_CONTENTS.as_bytes()[i]);
     }
