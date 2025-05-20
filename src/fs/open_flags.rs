@@ -52,3 +52,8 @@ bitflags::bitflags! {
         const O_TMPFILE = 0x41_0000;
     }
 }
+impl Default for OpenFlags {
+    fn default() -> Self {
+        Self::empty() | Self::O_CLOEXEC
+    }
+}

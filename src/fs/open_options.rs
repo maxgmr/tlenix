@@ -60,7 +60,8 @@ pub struct OpenOptions {
     file_permissions: FilePermissions,
 }
 impl OpenOptions {
-    /// Creates a new [`OpenOptions`] in read-only mode, with all other options/flags disabled.
+    /// Creates a new [`OpenOptions`] in read-only and close-on-exec mode, with all other
+    /// options/flags disabled.
     ///
     /// File permissions only apply to newly-created files.
     ///
@@ -71,7 +72,7 @@ impl OpenOptions {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            open_flags: OpenFlags::empty(),
+            open_flags: OpenFlags::default(),
             file_permissions: FilePermissions::default(),
         }
     }
@@ -146,6 +147,11 @@ impl OpenOptions {
         ///
         /// This flag does nothing if write access is disabled.
         append => O_APPEND;
+
+        /// If this flag is set, then [`Self::open`] is called, the resulting file won't be
+        /// inherited by the child process when a new process is opened, e.g. in
+        /// [`crate::process::execute_process`].
+        close_on_exec => O_CLOEXEC;
 
         /// If this flag is set, when [`Self::open`] is called, the existing file contents will be
         /// truncated to length 0.
@@ -317,12 +323,13 @@ mod tests {
     #[test_case]
     fn oo_new() {
         let oo = OpenOptions::new();
-        assert_eq!(oo.open_flags, OpenFlags::O_RDONLY);
+        assert_eq!(oo.open_flags, OpenFlags::default());
     }
 
     #[test_case]
     fn oo_ro() {
         let mut oo = OpenOptions::new();
+        oo.close_on_exec(false);
         oo.write_only().read_only();
         assert_eq!(oo.open_flags, OpenFlags::O_RDONLY);
     }
@@ -330,6 +337,7 @@ mod tests {
     #[test_case]
     fn oo_wo() {
         let mut oo = OpenOptions::new();
+        oo.close_on_exec(false);
         oo.write_only();
         assert_eq!(oo.open_flags, OpenFlags::O_WRONLY);
     }
@@ -337,6 +345,7 @@ mod tests {
     #[test_case]
     fn oo_wr() {
         let mut oo = OpenOptions::new();
+        oo.close_on_exec(false);
         oo.write_only().read_only().read_write();
         assert_eq!(oo.open_flags, OpenFlags::O_RDWR);
     }
@@ -344,6 +353,7 @@ mod tests {
     #[test_case]
     fn no_excl_without_creat() {
         let mut oo = OpenOptions::new();
+        oo.close_on_exec(false);
 
         oo.create_new(true);
         assert_eq!(
@@ -376,7 +386,8 @@ mod tests {
     #[test_case]
     fn no_trunc_and_ro() {
         let mut oo = OpenOptions::new();
-        assert_eq!(oo.open_flags, OpenFlags::O_RDONLY);
+        assert_eq!(oo.open_flags, OpenFlags::default());
+        oo.close_on_exec(false);
 
         oo.truncate(true);
         assert_eq!(oo.open_flags, OpenFlags::O_RDWR | OpenFlags::O_TRUNC);
@@ -416,7 +427,8 @@ mod tests {
     #[test_case]
     fn no_tmp_and_ro() {
         let mut oo = OpenOptions::new();
-        assert_eq!(oo.open_flags, OpenFlags::O_RDONLY);
+        assert_eq!(oo.open_flags, OpenFlags::default());
+        oo.close_on_exec(false);
 
         oo.create_temp(true);
         assert_eq!(oo.open_flags, OpenFlags::O_RDWR | OpenFlags::O_TMPFILE);
