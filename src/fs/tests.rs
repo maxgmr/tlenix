@@ -156,7 +156,7 @@ fn follow_symlink() {
 }
 
 #[test_case]
-fn open_temp() {
+fn tempfile() {
     const EXPECTED: [u8; 17] = *b"Howdeedoodeethere";
 
     let tempfile = OpenOptions::new()
@@ -174,4 +174,60 @@ fn open_temp() {
     let bytes_read = tempfile.read(&mut buffer).unwrap();
     assert_eq!(bytes_read, EXPECTED.len());
     assert_eq!(&buffer[..EXPECTED.len()], EXPECTED);
+}
+
+#[test_case]
+fn file_cursor_offset() {
+    let file = OpenOptions::new().open(TEST_PATH).unwrap();
+    assert_eq!(file.cursor().unwrap(), 0);
+
+    assert_eq!(file.cursor_offset(4).unwrap(), 4);
+    assert_eq!(file.cursor().unwrap(), 4);
+
+    assert_eq!(file.cursor_offset(-2).unwrap(), 2);
+    assert_eq!(file.cursor().unwrap(), 2);
+
+    assert_eq!(file.cursor_offset(10000).unwrap(), 10002);
+    assert_eq!(file.cursor().unwrap(), 10002);
+}
+
+#[test_case]
+fn file_set_cursor() {
+    let file = OpenOptions::new().open(TEST_PATH).unwrap();
+    assert_eq!(file.cursor().unwrap(), 0);
+
+    assert_eq!(file.set_cursor(200).unwrap(), 200);
+    assert_eq!(file.cursor().unwrap(), 200);
+
+    assert_eq!(file.set_cursor(200).unwrap(), 200);
+    assert_eq!(file.cursor().unwrap(), 200);
+
+    assert_err!(file.set_cursor(-1), Errno::Einval);
+}
+
+#[test_case]
+fn file_cursor_to_end() {
+    let file = OpenOptions::new().open(TEST_PATH).unwrap();
+    assert_eq!(file.cursor().unwrap(), 0);
+
+    assert_eq!(file.cursor_to_end().unwrap(), TEST_PATH_CONTENTS.len());
+    assert_eq!(file.cursor().unwrap(), TEST_PATH_CONTENTS.len());
+}
+
+#[test_case]
+fn file_cursor_end_offset() {
+    let file = OpenOptions::new().open(TEST_PATH).unwrap();
+    assert_eq!(file.cursor().unwrap(), 0);
+
+    assert_eq!(
+        file.cursor_to_end_offset(-20).unwrap(),
+        TEST_PATH_CONTENTS.len() - 20
+    );
+    assert_eq!(file.cursor().unwrap(), TEST_PATH_CONTENTS.len() - 20);
+
+    assert_eq!(
+        file.cursor_to_end_offset(50).unwrap(),
+        TEST_PATH_CONTENTS.len() + 50
+    );
+    assert_eq!(file.cursor().unwrap(), TEST_PATH_CONTENTS.len() + 50);
 }
