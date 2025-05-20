@@ -1,5 +1,5 @@
 use crate::{
-    ExitStatus,
+    ExitStatus, NixBytes,
     fs::{FileDescriptor, FileStatRaw},
     nix_str::NixString,
 };
@@ -14,6 +14,11 @@ impl From<SyscallArg> for usize {
 }
 impl From<NixString> for SyscallArg {
     fn from(value: NixString) -> Self {
+        Self(value.as_ptr() as usize)
+    }
+}
+impl From<NixBytes> for SyscallArg {
+    fn from(value: NixBytes) -> Self {
         Self(value.as_ptr() as usize)
     }
 }
