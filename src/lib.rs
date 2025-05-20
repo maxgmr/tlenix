@@ -25,6 +25,7 @@ extern crate alloc;
 mod allocator;
 mod console;
 pub mod fs;
+mod nix_bytes;
 mod nix_str;
 mod print;
 pub mod process;
@@ -33,6 +34,8 @@ mod test_framework;
 pub mod thread;
 
 // RE-EXPORTS
+pub use nix_bytes::NixBytes;
+pub use nix_str::NixString;
 pub use print::{__print_err, __print_str};
 pub use syscall::{Errno, SyscallArg, SyscallNum};
 pub use test_framework::custom_test_runner;
@@ -41,6 +44,9 @@ pub use test_framework::custom_test_runner;
 ///
 /// This is used for sleep loop timing.
 pub const PIT_IRQ_PERIOD: u64 = 54_925_400;
+
+/// The null byte, commonly used for terminating strings and defining null pointers.
+pub(crate) const NULL_BYTE: u8 = b'\0';
 
 /// The two constants specified by the C standard denoting the success or failure of an process.
 #[repr(usize)]
