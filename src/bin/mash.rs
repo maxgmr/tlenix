@@ -13,9 +13,14 @@
 #![feature(custom_test_frameworks)]
 #![cfg_attr(test, test_runner(tlenix_core::custom_test_runner))]
 
+extern crate alloc;
+
+use alloc::{string::String, vec::Vec};
 use core::panic::PanicInfo;
 
-use tlenix_core::{ExitStatus, align_stack_pointer, print, process::exit};
+use tlenix_core::{
+    Console, Errno, ExitStatus, align_stack_pointer, eprintln, print, process::exit,
+};
 
 const MASH_PANIC_TITLE: &str = "mash";
 
@@ -41,16 +46,36 @@ pub extern "C" fn _start() -> ! {
     tlenix_core::process::exit(tlenix_core::ExitStatus::ExitSuccess);
 
     // This stops the compiler from complaining when compiling for tests.
-    #[allow(unreachable_code, clippy::never_loop)]
+    #[allow(unreachable_code)]
+    let console = Console::open().unwrap();
     loop {
-        prompt();
-        // TODO
-        exit(ExitStatus::ExitSuccess);
+        print_prompt();
+        let line = console.read_line(LINE_MAX).unwrap();
+        let line_string = String::from_utf8_lossy(&line);
+        let argv: Vec<&str> = line_string.split_whitespace().collect();
+
+        // Do nothing if nothing was typed
+        if argv.is_empty() {
+            continue;
+        }
+
+        match (argv[0], argv.len()) {
+            ("exit", 1) => exit(ExitStatus::ExitSuccess),
+            ("poweroff", 1) => {
+                let errno: Errno = todo!();
+                eprintln!("poweroff fail: {}", errno.as_str());
+            }
+            ("reboot", 1) => {
+                let errno: Errno = todo!();
+                eprintln!("reboot fail: {}", errno.as_str());
+            }
+            (_, _) => {}
+        }
     }
 }
 
 /// Print the MASH shell prompt.
-fn prompt() {
+fn print_prompt() {
     // TODO get CWD name
     let cwd_name = CWD_NAME_BACKUP;
 

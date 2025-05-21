@@ -49,7 +49,6 @@ pub extern "C" fn _start() -> ! {
     // Launch shell with no args
     loop {
         execute_process(Vec::from([SHELL_PATH]), Vec::<&'static str>::new()).unwrap();
-        tlenix_core::process::exit(tlenix_core::ExitStatus::ExitSuccess);
         println!("Restarting shell...");
         println!("(Enter the \"poweroff\" command to shut down)");
     }
