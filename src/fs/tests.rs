@@ -231,3 +231,33 @@ fn file_cursor_end_offset() {
     );
     assert_eq!(file.cursor().unwrap(), TEST_PATH_CONTENTS.len() + 50);
 }
+
+// This test fails if your project directory doesn't end with "tlenix" :/
+#[test_case]
+fn cwd() {
+    const EXPECTED: &str = "tlenix";
+    let working_dir = get_cwd().unwrap();
+    assert_eq!(&working_dir[working_dir.len() - EXPECTED.len()..], EXPECTED);
+}
+
+#[test_case]
+fn cd_root() {
+    let old_path = get_cwd().unwrap();
+    let new_path = "/";
+
+    change_dir(new_path).unwrap();
+    let cwd = get_cwd().unwrap();
+
+    // Clean up after yourself!
+    change_dir(old_path.as_str()).unwrap();
+
+    assert_eq!(&cwd, new_path);
+}
+
+#[test_case]
+fn cd_dir_dne() {
+    assert_err!(
+        change_dir("/kefhlskhfsfesg/ezgs/egeg/esgesges/gegesgesg"),
+        Errno::Enoent
+    );
+}
