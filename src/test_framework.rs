@@ -4,27 +4,27 @@ use crate::{print, println};
 
 /// [`Testable`] types can be run as tests and should panic if their test fails.
 pub trait Testable {
-    /// Run the test and panic on failure.
+    /// Runs the test, panicking on failure.
     fn run(&self);
 }
 impl<T: Fn()> Testable for T {
     fn run(&self) {
         print!("{}...\t", core::any::type_name::<T>());
         self();
-        println!("[ok]");
+        println!("[\u{001b}[32mok\u{001b}[0m]");
     }
 }
 
 /// The custom test framework's test runner.
 pub fn custom_test_runner(tests: &[&dyn Testable]) {
-    println!("Running {} test(s)...", tests.len());
+    println!("Running {} tests...", tests.len());
     println!("=======");
     for test in tests {
         test.run();
     }
     println!("\n=======");
     println!(
-        "[ALL_PASS] All {} test(s) passed successfully! :D",
+        "[\u{001b}[32mALL_PASS\u{001b}[0m] All {} test(s) passed successfully! :D",
         tests.len()
     );
 }
@@ -32,10 +32,10 @@ pub fn custom_test_runner(tests: &[&dyn Testable]) {
 /// Display failure and panic message.
 #[cfg(test)]
 pub fn test_panic_handler(info: &core::panic::PanicInfo<'_>) -> ! {
-    use crate::{consts::EXIT_FAILURE, eprintln};
+    use crate::{ExitStatus::ExitFailure, eprintln, process::exit};
 
-    eprintln!("[FAIL!]");
+    eprintln!("[\u{001b}[31mFAIL!\u{001b}[0m]");
     eprintln!("Error:\n{}", info);
 
-    crate::process::exit(EXIT_FAILURE);
+    exit(ExitFailure);
 }

@@ -1,8 +1,6 @@
 //! `mash` = **Ma**x's **Sh**ell. Tlenix's shell program! Provides a command-line user interface
 //! for Tlenix.
 
-#![no_std]
-#![no_main]
 #![warn(
     missing_docs,
     missing_debug_implementations,
@@ -10,6 +8,8 @@
     clippy::all,
     clippy::pedantic
 )]
+#![no_std]
+#![no_main]
 #![feature(custom_test_frameworks)]
 #![cfg_attr(test, test_runner(tlenix_core::custom_test_runner))]
 
@@ -19,14 +19,7 @@ use alloc::{string::String, vec::Vec};
 use core::panic::PanicInfo;
 
 use tlenix_core::{
-    consts::{EXIT_FAILURE, EXIT_SUCCESS},
-    data::NullTermString,
-    eprintln,
-    fs::get_current_working_directory,
-    io::Console,
-    print, println,
-    process::{execute_process, exit},
-    system::{power_off, reboot},
+    Console, ExitStatus, align_stack_pointer, eprintln, fs, print, println, process, system,
 };
 
 const MASH_PANIC_TITLE: &str = "mash";
@@ -34,7 +27,13 @@ const MASH_PANIC_TITLE: &str = "mash";
 const PROMPT_START: &str = "\u{001b}[94mmash\u{001b}[0m";
 const PROMPT_FINISH: &str = "\u{001b}[92;1m:}\u{001b}[0m";
 
-const LINE_MAX: usize = 1024;
+// Used as a backup just in case the current working directory can't be determined.
+const CWD_NAME_BACKUP: &str = "?";
+
+// Maximum line size.
+const LINE_MAX: usize = 1 << 12;
+
+const HOME_DIR: &str = "/";
 
 /// Entry point.
 ///
@@ -43,26 +42,19 @@ const LINE_MAX: usize = 1024;
 /// This function panics if the system fails to power off properly.
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
-    // Align stack pointer
-    //
-    // SAFETY: Valid ASM instruction with valid, statically-chosen arguments.
-    unsafe {
-        core::arch::asm!("and rsp, -16", options(nostack));
-    }
+    align_stack_pointer!();
 
     #[cfg(test)]
-    tlenix_core::process::exit(tlenix_core::consts::EXIT_SUCCESS);
+    process::exit(tlenix_core::ExitStatus::ExitSuccess);
 
+    // This stops the compiler from complaining when compiling for tests.
     #[allow(unreachable_code)]
-    let console = Console::open_console().unwrap();
-
-    println!();
-
+    let console = Console::open().unwrap();
     loop {
-        prompt();
-        let line = console.read_line_vec(LINE_MAX).unwrap();
-        let line_str = String::from_utf8_lossy(&line);
-        let argv: Vec<&str> = line_str.split_whitespace().collect();
+        print_prompt();
+        let line = console.read_line(LINE_MAX).unwrap();
+        let line_string = String::from_utf8_lossy(&line);
+        let argv: Vec<&str> = line_string.split_whitespace().collect();
 
         // Do nothing if nothing was typed
         if argv.is_empty() {
@@ -70,39 +62,43 @@ pub extern "C" fn _start() -> ! {
         }
 
         match (argv[0], argv.len()) {
-            ("exit", 1) => exit(EXIT_SUCCESS),
+            ("exit", 1) => process::exit(ExitStatus::ExitSuccess),
             ("poweroff", 1) => {
-                let errno = power_off().unwrap_err();
+                let errno = system::power_off().unwrap_err();
                 eprintln!("poweroff fail: {}", errno.as_str());
             }
             ("reboot", 1) => {
-                let errno = reboot().unwrap_err();
+                let errno = system::reboot().unwrap_err();
                 eprintln!("reboot fail: {}", errno.as_str());
             }
+            ("cd", 1) => {
+                if let Err(e) = fs::change_dir(HOME_DIR) {
+                    eprintln!("{e}");
+                }
+            }
+            ("cd", 2) => {
+                if let Err(e) = fs::change_dir(argv[1]) {
+                    eprintln!("{e}");
+                }
+            }
+            ("pwd", 1) => match fs::get_cwd() {
+                Ok(cwd) => println!("{cwd}"),
+                Err(e) => eprintln!("{e}"),
+            },
             (_, _) => {
-                // Create a version of argv compatible with `execve`
-                let argv_null_termd: Vec<NullTermString> =
-                    argv.iter().map(|&str| NullTermString::from(str)).collect();
-                // Execute something and wait for it to finish!
-                execute_process(&argv_null_termd).unwrap();
+                eprintln!("unknown command");
             }
         }
     }
 }
 
 /// Print the MASH shell prompt.
-fn prompt() {
-    // TODO clean this up
-    let mut cwd_backup: [u8; LINE_MAX] = [0x00_u8; LINE_MAX];
-    cwd_backup[0] = b'?';
-    let cwd_str_backup = "?";
-    let cwd: &[u8; LINE_MAX] = &get_current_working_directory().unwrap_or(cwd_backup);
-    let cwd_str: &str = str::from_utf8(cwd).unwrap_or(cwd_str_backup);
-    let cwd_str_trimmed: &str = cwd_str.trim_end_matches('\0');
-    let basename: &str = cwd_str_trimmed
-        .rsplit_once('/')
-        .map_or(
-            cwd_str_trimmed,
+fn print_prompt() {
+    let cwd_backup = String::from(CWD_NAME_BACKUP);
+    let cwd = fs::get_cwd().unwrap_or(cwd_backup);
+    let basename =
+        &cwd.rsplit_once('/').map_or(
+            cwd.as_str(),
             |(_, last)| if last.is_empty() { "/" } else { last },
         );
 
@@ -112,5 +108,5 @@ fn prompt() {
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
     tlenix_core::eprintln!("{} {}", MASH_PANIC_TITLE, info);
-    exit(EXIT_FAILURE)
+    process::exit(ExitStatus::ExitFailure)
 }

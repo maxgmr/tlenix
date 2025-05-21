@@ -1,8 +1,13 @@
-//! Functionality related to thread control.
+//! Thread control.
 
 use core::time::Duration;
 
 use crate::{Errno, SyscallNum, syscall_result};
+
+/// Intel 8253/8254 sends an IRQ0 (timer interrupt) once every ~52.9254 ms.
+///
+/// This is used for sleep loop timing.
+pub const PIT_IRQ_PERIOD: u64 = 54_925_400;
 
 /// Corresponds to the [timespec](https://www.man7.org/linux/man-pages/man3/timespec.3type.html)
 /// type in C.
@@ -17,13 +22,38 @@ struct Timespec {
 impl From<&Duration> for Timespec {
     fn from(value: &Duration) -> Self {
         Self {
-            sec: value.as_secs().try_into().unwrap(),
+            #[allow(clippy::cast_possible_wrap)]
+            sec: value.as_secs() as i64,
             nsec: i64::from(value.subsec_nanos()),
         }
     }
 }
 
-/// Suspend the execution of the calling thread until at least the given [`Duration`] has elapsed.
+/// Endlessly loops, sleeping the thread.
+///
+/// # Errors
+///
+/// This function returns an error if [`sleep`] returns an error.
+pub fn sleep_loop() -> Result<!, Errno> {
+    let sleep_duration = core::time::Duration::from_nanos(PIT_IRQ_PERIOD);
+    loop {
+        sleep(&sleep_duration)?;
+    }
+}
+
+/// Guaranteed endless loop. Sleeps the thread unless an error is encountered.
+///
+/// This function differs from [`sleep_loop`] through its guarantee- it will never return, no
+/// matter what, but if [`sleep`] returns an error for whatever reason, an empty loop will be used
+/// as a fallback, wasting CPU cycles.
+pub fn sleep_loop_forever() -> ! {
+    let _ = sleep_loop();
+    // Fallback loop if sleep_loop breaks :(
+    #[allow(clippy::empty_loop)]
+    loop {}
+}
+
+/// Suspends the execution of the calling thread until at least the given [`Duration`] has elapsed.
 ///
 /// # Panics
 ///
@@ -65,6 +95,7 @@ pub fn sleep(duration: &Duration) -> Result<(), Errno> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

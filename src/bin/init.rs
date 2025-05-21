@@ -1,8 +1,6 @@
 //! The `init` program for `tlenix`. Expected location is at `/sbin/init` so the Linux kernel can
 //! call it after boot.
 
-#![no_std]
-#![no_main]
 #![warn(
     missing_docs,
     missing_debug_implementations,
@@ -10,50 +8,47 @@
     clippy::all,
     clippy::pedantic
 )]
+#![no_std]
+#![no_main]
 #![feature(custom_test_frameworks)]
-#![feature(concat_bytes)]
 #![cfg_attr(test, test_runner(tlenix_core::custom_test_runner))]
 
+extern crate alloc;
+
+use alloc::vec::Vec;
 use core::panic::PanicInfo;
 
-use tlenix_core::{
-    data::{NullTermStr, NullTermString},
-    nulltermstr, println,
-    process::execute_process,
-    sleep_loop_forever,
-};
+use tlenix_core::{align_stack_pointer, println, process, thread};
 
 const WELCOME_MSG: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION"));
 const TLENIX_PANIC_TITLE: &str = "tlenix";
 
 #[cfg(debug_assertions)]
-const SHELL_PATH: NullTermStr<44> = nulltermstr!(b"target/x86_64-unknown-linux-none/debug/mash");
+const SHELL_PATH: &str = "target/x86_64-unknown-linux-none/debug/mash";
 #[cfg(not(debug_assertions))]
-const SHELL_PATH: NullTermStr<10> = nulltermstr!(b"/bin/mash");
+const SHELL_PATH: &str = "/bin/mash";
 
 /// Entry point.
 ///
 /// # Panics
 ///
-/// This function panics if the system fails to power off properly.
+/// This function panics if the system fails to power off properly. This is intended behaviour for
+/// a Linux-based init program.
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
-    // Align stack pointer
-    //
-    // SAFETY: Valid ASM instruction with valid, statically-chosen arguments.
-    unsafe {
-        core::arch::asm!("and rsp, -16", options(nostack));
-    }
+    align_stack_pointer!();
 
+    // Don't do anything if we're running tests
     #[cfg(test)]
-    tlenix_core::process::exit(tlenix_core::consts::EXIT_SUCCESS);
+    tlenix_core::process::exit(tlenix_core::ExitStatus::ExitSuccess);
 
+    // This stops the compiler from complaining when compiling for tests.
     #[allow(unreachable_code)]
     welcome_msg();
 
     // Launch shell with no args
     loop {
-        execute_process(&[NullTermString::from(SHELL_PATH)]).unwrap();
+        process::execute_process(Vec::from([SHELL_PATH]), Vec::<&'static str>::new()).unwrap();
         println!("Restarting shell...");
         println!("(Enter the \"poweroff\" command to shut down)");
     }
@@ -66,5 +61,5 @@ fn welcome_msg() {
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
     tlenix_core::eprintln!("{} {}", TLENIX_PANIC_TITLE, info);
-    sleep_loop_forever()
+    thread::sleep_loop_forever();
 }

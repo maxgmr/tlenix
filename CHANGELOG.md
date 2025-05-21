@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Custom global allocator.
 - Environment variables.
+- `mash` prompt should react to exit code of last-executed process.
+- `mash` ability to execute programs.
+
+## [0.1.0-alpha.7] - IN PROGRESS
+
+### Added
+
+- Coloured test output.
+- `NixString` and `NixBytes`. Null-terminated byte vectors compatible with Linux syscalls.
+- `File` type. Provides filesystem operations on files. Hides the file descriptor and closes the file when dropped.
+- `OpenOptions` type. Allows easy customization of `File` open flags. Guarantees safe open flag combinations when opening a file.
+- Ability to create files with defined permissions.
+- `SyscallArg` type, allowing for more flexible arguments for `syscall!` and `syscall_result!`
+- Pretty colours in tests!
+
+### Changed
+
+- General rewrite of codebase.
+- Interface for filesystem operations- now, any file-based operations must be called as `File` methods.
+
+### Removed
+
+- `mash`'s ability to execute programs. This will be re-implemented later.
+- `NullTermString` and `NullTermStr`.
+- `read_from_file()`.
+- `open_no_create()`.
+- `change_program_break()`.
 
 ## [0.1.0-alpha.6] - 2025-03-09
 

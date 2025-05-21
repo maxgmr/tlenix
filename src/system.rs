@@ -5,7 +5,8 @@ use crate::{Errno, SyscallNum, syscall_result};
 const LINUX_REBOOT_MAGIC1: usize = 0xfee1_dead;
 const LINUX_REBOOT_MAGIC2C: usize = 0x2011_2000;
 
-/// The different operations which can be performed by the [reboot](https://man7.org/linux/man-pages/man2/reboot.2.html) Linux syscall.
+/// The different operations which can be performed by the
+/// [reboot](https://man7.org/linux/man-pages/man2/reboot.2.html) Linux syscall.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(usize)]
 #[allow(dead_code)]
@@ -24,8 +25,8 @@ enum RebootCmd {
 ///
 /// # Errors
 ///
-/// This function propagates the error from the underlying [reboot](https://man7.org/linux/man-pages/man2/reboot.2.html)
-/// Linux syscall if the system fails to reboot.
+/// This function returns [`Errno::Eperm`] if the caller has insufficient privileges to reboot the
+/// system.
 ///
 /// # Panics
 ///
@@ -39,8 +40,8 @@ pub fn reboot() -> Result<!, Errno> {
 ///
 /// # Errors
 ///
-/// This function propagates the error from the underlying [reboot](https://man7.org/linux/man-pages/man2/reboot.2.html)
-/// Linux syscall if the system fails to power off.
+/// This function returns [`Errno::Eperm`] if the caller has insufficient privileges to power off
+/// the system.
 ///
 /// # Panics
 ///
@@ -77,6 +78,22 @@ fn reboot_syscall(operation: RebootCmd) -> Result<!, Errno> {
             operation as usize,
             "".as_ptr() as usize
         )
-        .expect_err("reboot syscall somehow returned success"))
+        .expect_err("reboot syscall somehow returned success :("))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assert_err;
+
+    #[test_case]
+    fn reboot_eperm() {
+        assert_err!(reboot(), Errno::Eperm);
+    }
+
+    #[test_case]
+    fn power_off_eperm() {
+        assert_err!(power_off(), Errno::Eperm);
     }
 }
