@@ -70,7 +70,9 @@ impl TryFrom<&[u8]> for NixString {
     }
 }
 impl From<NixString> for String {
-    fn from(value: NixString) -> Self {
+    fn from(mut value: NixString) -> Self {
+        // Remove trailing null byte
+        value.0.pop();
         // OK to unwrap here; the NixString type guarantees valid UTF-8
         #[allow(clippy::unwrap_used)]
         String::from_utf8(value.0).unwrap()
@@ -80,7 +82,8 @@ impl<'a> From<&'a NixString> for &'a str {
     fn from(value: &'a NixString) -> Self {
         // OK to unwrap here; the NixString type guarantees valid UTF-8
         #[allow(clippy::unwrap_used)]
-        str::from_utf8(value.bytes()).unwrap()
+        // Don't include the trailing null byte
+        str::from_utf8(&value.0[..value.0.len() - 1]).unwrap()
     }
 }
 impl<'a> From<&'a NixString> for &'a [u8] {

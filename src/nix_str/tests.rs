@@ -82,14 +82,14 @@ fn nstring_invalid_utf8_vec() {
 fn null_nstring_as_str() {
     let my_nstring = NixString::null();
     let my_str: &str = (&my_nstring).into();
-    assert_eq!(my_str, "\0");
+    assert_eq!(my_str, "");
 }
 
 #[test_case]
 fn null_nstring_as_string() {
     let my_nstring = NixString::null();
     let test_string = String::from(my_nstring);
-    assert_eq!(&test_string, "\0");
+    assert_eq!(&test_string, "");
 }
 
 #[test_case]
@@ -103,12 +103,18 @@ fn nstrings_vec() {
     ]);
     let nstrings_vec: Vec<NixString> = vec_into_nix_strings(s_vec.clone());
 
-    for s in &mut s_vec {
-        s.push('\0');
-    }
     s_vec.push("\0".to_string());
 
     for (s, ns) in s_vec.into_iter().zip(nstrings_vec) {
         assert_eq!(s, String::from(ns));
     }
+}
+
+#[test_case]
+fn nstring_trim_extra_null() {
+    const TEST_BYTES: [u8; 3] = [0x4d, NULL_BYTE, NULL_BYTE];
+    let nstring = NixString::try_from(&TEST_BYTES[..]).unwrap();
+    assert_eq!(nstring.bytes(), &TEST_BYTES[..TEST_BYTES.len() - 1]);
+    let result: String = nstring.into();
+    assert_eq!(result, "M".to_string());
 }
