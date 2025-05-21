@@ -45,11 +45,6 @@ pub use print::{__print_err, __print_str};
 pub use syscall::{Errno, SyscallArg, SyscallNum};
 pub use test_framework::custom_test_runner;
 
-/// Intel 8253/8254 sends an IRQ0 (timer interrupt) once every ~52.9254 ms.
-///
-/// This is used for sleep loop timing.
-pub const PIT_IRQ_PERIOD: u64 = 54_925_400;
-
 /// The null byte, commonly used for terminating strings and defining null pointers.
 pub(crate) const NULL_BYTE: u8 = b'\0';
 
@@ -74,29 +69,6 @@ macro_rules! align_stack_pointer {
             core::arch::asm!("and rsp, -16", options(nostack));
         }
     };
-}
-
-/// Endlessly loops, sleeping the thread.
-///
-/// # Errors
-///
-/// This function returns an error if [`thread::sleep`] returns an error.
-pub fn sleep_loop() -> Result<!, Errno> {
-    let sleep_duration = core::time::Duration::from_nanos(PIT_IRQ_PERIOD);
-    loop {
-        thread::sleep(&sleep_duration)?;
-    }
-}
-
-/// Endlessly loops, sleeping the thread.
-///
-/// If [`thread::sleep`] returns an error for whatever reason, an empty loop is used as a fallback,
-/// wasting CPU cycles :(
-pub fn sleep_loop_forever() -> ! {
-    let _ = sleep_loop();
-    // Fallback loop if sleep_loop breaks :(
-    #[allow(clippy::empty_loop)]
-    loop {}
 }
 
 /// Entry point for library tests.

@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use core::time::Duration;
 
 use crate::{
-    Errno, PIT_IRQ_PERIOD,
+    Errno,
     fs::{File, FileType, OpenOptions},
     thread,
 };
@@ -61,7 +61,7 @@ impl Console {
     /// This function propagates any errors from the underlying calls to [`File::read_byte`] and
     /// [`thread::sleep`].
     pub fn read_byte(&self) -> Result<u8, Errno> {
-        let sleep_duration = Duration::from_nanos(PIT_IRQ_PERIOD);
+        let sleep_duration = Duration::from_nanos(thread::PIT_IRQ_PERIOD);
         loop {
             match self.0.read_byte() {
                 // Nothing read; sleep then try again

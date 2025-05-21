@@ -18,7 +18,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 use core::panic::PanicInfo;
 
-use tlenix_core::{align_stack_pointer, println, process::execute_process, sleep_loop_forever};
+use tlenix_core::{align_stack_pointer, println, process, thread};
 
 const WELCOME_MSG: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION"));
 const TLENIX_PANIC_TITLE: &str = "tlenix";
@@ -48,7 +48,7 @@ pub extern "C" fn _start() -> ! {
 
     // Launch shell with no args
     loop {
-        execute_process(Vec::from([SHELL_PATH]), Vec::<&'static str>::new()).unwrap();
+        process::execute_process(Vec::from([SHELL_PATH]), Vec::<&'static str>::new()).unwrap();
         println!("Restarting shell...");
         println!("(Enter the \"poweroff\" command to shut down)");
     }
@@ -61,5 +61,5 @@ fn welcome_msg() {
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
     tlenix_core::eprintln!("{} {}", TLENIX_PANIC_TITLE, info);
-    sleep_loop_forever();
+    thread::sleep_loop_forever();
 }
