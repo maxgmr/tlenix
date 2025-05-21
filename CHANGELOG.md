@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mash` prompt should react to exit code of last-executed process.
 - `mash` ability to execute programs.
 
-## [0.1.0-alpha.7] - IN PROGRESS
+## [0.1.0-alpha.7] - 2025-05-20
 
 ### Added
 
