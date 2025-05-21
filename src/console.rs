@@ -1,6 +1,7 @@
 //! Handles the [`Console`] struct, which gives read and write access to the
 //! [system console](https://en.wikipedia.org/wiki/Linux_console).
 
+use alloc::vec::Vec;
 use core::time::Duration;
 
 use crate::{
@@ -20,6 +21,8 @@ const CONSOLE_PATH: &str = "/dev/tty";
 const BACKSPACE_BYTE: u8 = 8;
 /// Byte representing a newline.
 const NEWLINE_BYTE: u8 = b'\n';
+/// Byte representing a backslash.
+const BACKSLASH_BYTE: u8 = b'\\';
 
 /// Struct to read from and write to the
 /// [system console](https://en.wikipedia.org/wiki/Linux_console). Contains a file descriptor for
@@ -69,6 +72,51 @@ impl Console {
                 Ok(Some(b)) => return Ok(b),
             }
         }
+    }
+
+    /// Writes a single byte to the [system console](https://en.wikipedia.org/wiki/Linux_console),
+    /// returning the number of bytes written.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors from the underlying [`File::write_byte`] function.
+    pub fn write_byte(&self, byte: u8) -> Result<usize, Errno> {
+        self.0.write_byte(byte)
+    }
+
+    /// Reads a line from the console (up to a maximum size).
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any errors from the underlying [`Self::read_byte`] and
+    /// [`Self::write_byte`] functions.
+    pub fn read_line(&self, max: usize) -> Result<Vec<u8>, Errno> {
+        let mut result = Vec::new();
+
+        let mut last_was_backslash = false;
+        while result.len() < max {
+            match self.read_byte()? {
+                NEWLINE_BYTE => {
+                    // newline; return right away
+                    if last_was_backslash {
+                        // Escaped newline
+                        result.push(NEWLINE_BYTE);
+                    } else {
+                        return Ok(result);
+                    }
+                }
+                BACKSLASH_BYTE => {
+                    last_was_backslash = true;
+                    continue;
+                }
+                BACKSPACE_BYTE => {
+                    result.pop();
+                }
+                new_byte => result.push(new_byte),
+            }
+            last_was_backslash = false;
+        }
+        Ok(result)
     }
 }
 
