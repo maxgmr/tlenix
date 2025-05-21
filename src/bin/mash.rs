@@ -18,9 +18,7 @@ extern crate alloc;
 use alloc::{string::String, vec::Vec};
 use core::panic::PanicInfo;
 
-use tlenix_core::{
-    Console, ExitStatus, align_stack_pointer, eprintln, print, process::exit, system,
-};
+use tlenix_core::{Console, ExitStatus, align_stack_pointer, eprintln, fs, print, process, system};
 
 const MASH_PANIC_TITLE: &str = "mash";
 
@@ -43,7 +41,7 @@ pub extern "C" fn _start() -> ! {
     align_stack_pointer!();
 
     #[cfg(test)]
-    tlenix_core::process::exit(tlenix_core::ExitStatus::ExitSuccess);
+    process::exit(tlenix_core::ExitStatus::ExitSuccess);
 
     // This stops the compiler from complaining when compiling for tests.
     #[allow(unreachable_code)]
@@ -60,7 +58,7 @@ pub extern "C" fn _start() -> ! {
         }
 
         match (argv[0], argv.len()) {
-            ("exit", 1) => exit(ExitStatus::ExitSuccess),
+            ("exit", 1) => process::exit(ExitStatus::ExitSuccess),
             ("poweroff", 1) => {
                 let errno = system::power_off().unwrap_err();
                 eprintln!("poweroff fail: {}", errno.as_str());
@@ -76,14 +74,19 @@ pub extern "C" fn _start() -> ! {
 
 /// Print the MASH shell prompt.
 fn print_prompt() {
-    // TODO get CWD name
-    let cwd_name = CWD_NAME_BACKUP;
+    let cwd_backup = String::from(CWD_NAME_BACKUP);
+    let cwd = fs::get_cwd().unwrap_or(cwd_backup);
+    let basename =
+        &cwd.rsplit_once('/').map_or(
+            cwd.as_str(),
+            |(_, last)| if last.is_empty() { "/" } else { last },
+        );
 
-    print!("{PROMPT_START} {cwd_name} {PROMPT_FINISH} ");
+    print!("{PROMPT_START} {basename} {PROMPT_FINISH} ");
 }
 
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
     tlenix_core::eprintln!("{} {}", MASH_PANIC_TITLE, info);
-    exit(ExitStatus::ExitFailure)
+    process::exit(ExitStatus::ExitFailure)
 }
