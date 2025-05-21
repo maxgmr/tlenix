@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+BIN_SRC_PATH="src/bin"
+BIN_PATH="target/x86_64-unknown-linux-none/release"
+
+# Ensure directory path was provided
+if [ $# -eq 0 ]; then
+    echo "Error: No output directory path provided." >&2
+    echo "Usage: $0 <directory_path>" >&2
+    exit 1
+fi
+
+dir_path="$1"
+
+# Ensure the path exists and is a directory
+if [ ! -d "$dir_path" ]; then
+    echo "Error: '$dir_path' is not a directory or does not exist." >&2
+    exit 1
+fi
+
+# Build all binaries
+cargo build --release --all
+
+# Build each binary in BIN_SRC_PATH and copy them to the given directory
+for file in "$BIN_SRC_PATH"/*.rs; do
+    # Skip if no files match the pattern
+    [ -e "$file" ] || continue
+
+    # Extract the base filename (without path)
+    filename=$(basename "$file")
+
+    # Remove the .rs suffix
+    trimmed_name="${filename%.rs}"
+
+    # Copy the binary to the given directory
+    cp "$BIN_PATH/$trimmed_name" "$dir_path"
+done
