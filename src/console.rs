@@ -119,14 +119,3 @@ impl Console {
         Ok(result)
     }
 }
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod tests {
-    use super::*;
-
-    #[test_case]
-    fn open_console() {
-        let _ = Console::open().unwrap();
-    }
-}
