@@ -30,6 +30,7 @@ mod nix_str;
 mod print;
 pub mod process;
 mod syscall;
+pub mod system;
 mod test_framework;
 pub mod thread;
 
