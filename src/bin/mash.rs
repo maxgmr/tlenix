@@ -19,7 +19,7 @@ use alloc::{string::String, vec::Vec};
 use core::panic::PanicInfo;
 
 use tlenix_core::{
-    Console, Errno, ExitStatus, align_stack_pointer, eprintln, print, process::exit,
+    Console, ExitStatus, align_stack_pointer, eprintln, print, process::exit, system,
 };
 
 const MASH_PANIC_TITLE: &str = "mash";
@@ -62,11 +62,11 @@ pub extern "C" fn _start() -> ! {
         match (argv[0], argv.len()) {
             ("exit", 1) => exit(ExitStatus::ExitSuccess),
             ("poweroff", 1) => {
-                let errno: Errno = todo!();
+                let errno = system::power_off().unwrap_err();
                 eprintln!("poweroff fail: {}", errno.as_str());
             }
             ("reboot", 1) => {
-                let errno: Errno = todo!();
+                let errno = system::reboot().unwrap_err();
                 eprintln!("reboot fail: {}", errno.as_str());
             }
             (_, _) => {}
