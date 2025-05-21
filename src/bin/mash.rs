@@ -18,7 +18,9 @@ extern crate alloc;
 use alloc::{string::String, vec::Vec};
 use core::panic::PanicInfo;
 
-use tlenix_core::{Console, ExitStatus, align_stack_pointer, eprintln, fs, print, process, system};
+use tlenix_core::{
+    Console, ExitStatus, align_stack_pointer, eprintln, fs, print, println, process, system,
+};
 
 const MASH_PANIC_TITLE: &str = "mash";
 
@@ -30,6 +32,8 @@ const CWD_NAME_BACKUP: &str = "?";
 
 // Maximum line size.
 const LINE_MAX: usize = 1 << 12;
+
+const HOME_DIR: &str = "/";
 
 /// Entry point.
 ///
@@ -67,7 +71,23 @@ pub extern "C" fn _start() -> ! {
                 let errno = system::reboot().unwrap_err();
                 eprintln!("reboot fail: {}", errno.as_str());
             }
-            (_, _) => {}
+            ("cd", 1) => {
+                if let Err(e) = fs::change_dir(HOME_DIR) {
+                    eprintln!("{e}");
+                }
+            }
+            ("cd", 2) => {
+                if let Err(e) = fs::change_dir(argv[1]) {
+                    eprintln!("{e}");
+                }
+            }
+            ("pwd", 1) => match fs::get_cwd() {
+                Ok(cwd) => println!("{cwd}"),
+                Err(e) => eprintln!("{e}"),
+            },
+            (_, _) => {
+                eprintln!("unknown command");
+            }
         }
     }
 }
