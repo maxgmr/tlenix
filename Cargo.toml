@@ -1,6 +1,6 @@
 [package]
 name = "tlenix"
-version = "0.1.0-alpha.8"
+version = "0.1.0-alpha.7"
 authors = ["Max Gilmour <mgilmour@maxgmr.ca>"]
 edition = "2024"
 description = "Custom OS built upon the Linux kernel"
