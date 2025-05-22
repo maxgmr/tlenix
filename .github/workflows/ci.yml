@@ -19,6 +19,7 @@ jobs:
         run: |
           if grep -q '^## \[.*\] - UNRELEASED$' CHANGELOG.md; then
             echo "Replace 'UNRELEASED' in CHANGELOG.md with a date before merging, please!"
+            exit 1
           fi
 
       - name: Install Rust toolchain
