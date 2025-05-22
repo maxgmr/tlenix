@@ -166,9 +166,9 @@ pub fn mount<NA: Into<NixString>, NB: Into<NixString>>(
     unsafe {
         syscall_result!(
             SyscallNum::Mount,
-            source_ns,
-            target_ns,
-            fs_ns,
+            source_ns.as_ptr(),
+            target_ns.as_ptr(),
+            fs_ns.as_ptr(),
             mount_flags.bits(),
             ptr::null::<usize>()
         )?;
@@ -192,7 +192,7 @@ pub fn umount<NS: Into<NixString>>(target: NS, umount_flags: UmountFlags) -> Res
     // null-termination and valid UTF-8. UmountFlags restricts the possible values which can be
     // used for umount2 flags.
     unsafe {
-        syscall_result!(SyscallNum::Umount2, target_ns, umount_flags.bits())?;
+        syscall_result!(SyscallNum::Umount2, target_ns.as_ptr(), umount_flags.bits())?;
     }
 
     Ok(())
