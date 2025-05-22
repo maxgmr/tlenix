@@ -115,6 +115,11 @@ bitflags::bitflags! {
         const MS_NOSYMFOLLOW = 0x100;
     }
 }
+impl Default for MountFlags {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
 
 bitflags::bitflags! {
     /// All the different flags which can be sent to the [`unmount`] function.
@@ -128,6 +133,11 @@ bitflags::bitflags! {
         const MNT_EXPIRE = 0x4;
         /// Don't dereference the target path if it's a symbolic link.
         const UMOUNT_NOFOLLOW = 0x8;
+    }
+}
+impl Default for UmountFlags {
+    fn default() -> Self {
+        Self::empty()
     }
 }
 
