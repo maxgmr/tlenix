@@ -261,3 +261,10 @@ fn cd_dir_dne() {
         Errno::Enoent
     );
 }
+
+#[test_case]
+fn mk_rm_dir() {
+    const PATH: &str = "/tmp/mk_rm_dir";
+    mkdir(PATH, FilePermissions::default()).unwrap();
+    rmdir(PATH).unwrap();
+}

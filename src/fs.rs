@@ -9,7 +9,7 @@ mod permissions;
 mod types;
 
 // RE-EXPORTS
-pub use dirs::{change_dir, get_cwd};
+pub use dirs::{change_dir, get_cwd, mkdir, rmdir};
 pub use file::File;
 pub use mount::{FilesystemType, MountFlags, UmountFlags, mount, umount};
 pub use open_flags::OpenFlags;

@@ -2,7 +2,9 @@
 
 use alloc::{string::String, vec::Vec};
 
-use crate::{Errno, NULL_BYTE, SyscallNum, nix_str::NixString, syscall_result};
+use crate::{
+    Errno, NULL_BYTE, SyscallNum, fs::FilePermissions, nix_str::NixString, syscall_result,
+};
 
 const INITIAL_CWD_BUF_SIZE: usize = 1 << 8;
 
@@ -63,4 +65,41 @@ pub fn get_cwd() -> Result<String, Errno> {
     buffer.truncate(len);
 
     String::from_utf8(buffer).map_err(|_| Errno::Eilseq)
+}
+
+/// Attempts to create a new directory with the given path.
+///
+/// Additionally, the mode of the directory is specified with the given [`FilePermissions`].
+///
+/// Internally uses the [`mkdir`](https://man7.org/linux/man-pages/man2/mkdir.2.html) Linux
+/// syscall.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s returned by the call to `mkdir`.
+pub fn mkdir<NS: Into<NixString>>(path: NS, mode: FilePermissions) -> Result<(), Errno> {
+    let ns_path: NixString = path.into();
+    // SAFETY: The mode is restricted by the FilePermissions type. The NixString type guarantees
+    // null-termination and UTF-8 validity of the given string.
+    unsafe {
+        syscall_result!(SyscallNum::Mkdir, ns_path.as_ptr(), mode.bits())?;
+    }
+    Ok(())
+}
+
+/// Attempts to delete the directory at the given path. This directory must be empty.
+/// Internally uses the [`rmdir`](https://man7.org/linux/man-pages/man2/rmdir.2.html) Linux
+/// syscall.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s returned by the call to `rmdir`.
+pub fn rmdir<NS: Into<NixString>>(path: NS) -> Result<(), Errno> {
+    let ns_path: NixString = path.into();
+    // SAFETY: The NixString type guarantees null-termination and UTF-8 validity of the given
+    // string.
+    unsafe {
+        syscall_result!(SyscallNum::Rmdir, ns_path.as_ptr())?;
+    }
+    Ok(())
 }
