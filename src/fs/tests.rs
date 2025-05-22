@@ -257,7 +257,7 @@ fn cd_root() {
 #[test_case]
 fn cd_dir_dne() {
     assert_err!(
-        change_dir("/kefhlskhfsfesg/ezgs/egeg/esgesges/gegesgesg"),
+        change_dir("kefhlskhfsfesg/ezgs/egeg/esgesges/gegesgesg"),
         Errno::Enoent
     );
 }
@@ -267,4 +267,37 @@ fn mk_rm_dir() {
     const PATH: &str = "/tmp/mk_rm_dir";
     mkdir(PATH, FilePermissions::default()).unwrap();
     rmdir(PATH).unwrap();
+}
+
+#[test_case]
+fn mkdir_eexist() {
+    assert_err!(mkdir("/", FilePermissions::default()), Errno::Eexist);
+}
+
+#[test_case]
+fn mkdir_enoent() {
+    assert_err!(
+        mkdir("gsdjsgehe/fskjnfzljkgnkje", FilePermissions::default()),
+        Errno::Enoent
+    );
+}
+
+#[test_case]
+fn rmdir_einval() {
+    assert_err!(rmdir("."), Errno::Einval);
+}
+
+#[test_case]
+fn rmdir_enoent() {
+    assert_err!(rmdir("sjgdkjgrelknjr/slghekj"), Errno::Enoent);
+}
+
+#[test_case]
+fn rmdir_enotdir() {
+    assert_err!(rmdir(THIS_PATH), Errno::Enotdir);
+}
+
+#[test_case]
+fn rmdir_enotempty() {
+    assert_err!(rmdir("src"), Errno::Enotempty);
 }
