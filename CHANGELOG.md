@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mash` ability to execute programs.
 - Fun BSOD-style screen on panic.
 
+## [0.1.0-alpha.8.1] - 2025-05-22
+
+### Changed
+
+- Fixed custom target issues causing segfaults in emulators.
+
 ## [0.1.0-alpha.8] - 2025-05-21
 
 ### Added
