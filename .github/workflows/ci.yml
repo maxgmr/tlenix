@@ -22,6 +22,26 @@ jobs:
             exit 1
           fi
 
+      - name: Get current CHANGELOG.md and Cargo.toml versions
+        run: |
+          CHANGELOG_VERSION=$(grep -m 1 -oP '^## \[\K[^\]]+(?=\])' CHANGELOG.md || true)
+          echo "CHANGELOG_VERSION=${CHANGELOG_VERSION}" >> $GITHUB_OUTPUT
+
+          CARGO_VERSION=$(grep -m 1 -oP '^version = "\K[^"]+' Cargo.toml || true)
+          echo "CARGO_VERSION=${CARGO_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Check CHANGELOG.md and Cargo.toml versions match
+        run: |
+         if [ -z "${{ steps.versions.outputs.CHANGELOG_VERSION }}" ] || [ -z "${{ steps.versions.outputs.CARGO_VERSION }}" ]; then
+            echo "Could not extract versions from CHANGELOG.md or Cargo.toml."
+            exit 1
+          elif [ "${{ steps.versions.outputs.CHANGELOG_VERSION }}" != "${{ steps.versions.outputs.CARGO_VERSION }}" ]; then
+            echo "Version mismatch! CHANGELOG.md (${{ steps.versions.outputs.CHANGELOG_VERSION }}) != Cargo.toml (${{ steps.versions.outputs.CARGO_VERSION }})"
+            exit 1
+          else
+            echo "Versions match: ${{ steps.versions.outputs.CHANGELOG_VERSION }}"
+          fi
+
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
