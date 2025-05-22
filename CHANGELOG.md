@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mash` ability to execute programs.
 - Fun BSOD-style screen on panic.
 
+## [0.1.0-alpha.9] - UNRELEASED
+
+### Added
+
+- `initramfs_init`, an `init` program specifically for the `initramfs`.
+
 ## [0.1.0-alpha.8.1] - 2025-05-22
 
 ### Changed
