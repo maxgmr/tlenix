@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Environment variables.
 - `mash` prompt should react to exit code of last-executed process.
 - `mash` ability to execute programs.
+- Fun BSOD-style screen on panic.
+
+## [0.1.0-alpha.8] - 2025-05-21
+
+### Added
+
+- `mount` and `umount` functions.
+- `init` now tries to mount `/proc` and `/sys`.
 
 ## [0.1.0-alpha.7] - 2025-05-20
 
