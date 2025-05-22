@@ -11,7 +11,7 @@ mod types;
 // RE-EXPORTS
 pub use dirs::{change_dir, get_cwd, mkdir, rmdir};
 pub use file::File;
-pub use mount::{FilesystemType, MountFlags, UmountFlags, mount, umount};
+pub use mount::{FilesystemType, MountFlags, UmountFlags, mount, pivot_root, umount};
 pub use open_flags::OpenFlags;
 pub use open_options::OpenOptions;
 pub use permissions::FilePermissions;

@@ -197,3 +197,32 @@ pub fn umount<NS: Into<NixString>>(target: NS, umount_flags: UmountFlags) -> Res
 
     Ok(())
 }
+
+/// Changes the root mount in the root namespace of the calling process.
+///
+/// This function moves the _current_ root mount to the given `put_old` directory and makes the
+/// given `new_root` directory the new root mount.
+///
+/// Internally uses the [`pivot_root`](https://man7.org/linux/man-pages/man2/pivot_root.2.html)
+/// Linux syscall.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s returned by the underlying call to `pivot_root`.
+pub fn pivot_root<NA: Into<NixString>, NB: Into<NixString>>(
+    put_old: NA,
+    new_root: NB,
+) -> Result<(), Errno> {
+    let put_old_ns: NixString = put_old.into();
+    let new_root_ns: NixString = new_root.into();
+
+    unsafe {
+        syscall_result!(
+            SyscallNum::PivotRoot,
+            put_old_ns.as_ptr(),
+            new_root_ns.as_ptr()
+        )?;
+    }
+
+    Ok(())
+}
