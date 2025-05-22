@@ -46,6 +46,31 @@ pub extern "C" fn _start() -> ! {
     #[allow(unreachable_code)]
     welcome_msg();
 
+    #[cfg(not(debug_assertions))]
+    {
+        use tlenix_core::fs;
+
+        // Mount procfs
+        if let Err(e) = fs::mount(
+            "none",
+            "/proc",
+            fs::FilesystemType::Proc,
+            fs::MountFlags::default(),
+        ) {
+            panic!("Failed to mount /proc: {}", e);
+        }
+
+        // Mount sysfs
+        if let Err(e) = fs::mount(
+            "none",
+            "/sys",
+            fs::FilesystemType::Sysfs,
+            fs::MountFlags::default(),
+        ) {
+            panic!("Failed to mount /sys: {}", e);
+        }
+    }
+
     // Launch shell with no args
     loop {
         process::execute_process(Vec::from([SHELL_PATH]), Vec::<&'static str>::new()).unwrap();
@@ -60,6 +85,6 @@ fn welcome_msg() {
 
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
-    tlenix_core::eprintln!("{} {}", TLENIX_PANIC_TITLE, info);
+    tlenix_core::eprintln!("\u{001b}[91m{} {}\u{001b}[0m", TLENIX_PANIC_TITLE, info);
     thread::sleep_loop_forever();
 }

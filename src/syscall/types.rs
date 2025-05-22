@@ -51,5 +51,7 @@ impl_from_syscallarg_for_as_usize![
     *mut u8,
     *mut FileStatRaw,
     i32,
-    i64
+    i64,
+    u64,
+    *const usize
 ];
