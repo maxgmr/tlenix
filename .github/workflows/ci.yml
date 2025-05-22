@@ -23,6 +23,7 @@ jobs:
           fi
 
       - name: Get current CHANGELOG.md and Cargo.toml versions
+        id: versions
         run: |
           CHANGELOG_VERSION=$(grep -m 1 -oP '^## \[\K[^\]]+(?=\])' CHANGELOG.md || true)
           echo "CHANGELOG_VERSION=${CHANGELOG_VERSION}" >> $GITHUB_OUTPUT
