@@ -93,6 +93,74 @@ fn write_ro() {
 }
 
 #[test_case]
+fn append_file() {
+    const PATH: &str = "/tmp/append_file";
+    const ORIG_CONTENTS: &str = "some random data";
+    const OVERWRITE: &str = "XXXX";
+    let mut buffer_1 = [0; ORIG_CONTENTS.len()];
+    let mut buffer_2 = [0; ORIG_CONTENTS.len() + OVERWRITE.len()];
+
+    let file = OpenOptions::new()
+        .read_write()
+        .create(true)
+        .append(true)
+        .open(PATH)
+        .unwrap();
+
+    let write_1_result = file.write(ORIG_CONTENTS.as_bytes());
+    let seek_1_result = file.set_cursor(0);
+    let read_1_result = file.read(&mut buffer_1);
+    let seek_2_result = file.set_cursor(0);
+    let write_2_result = file.write(OVERWRITE.as_bytes());
+    let seek_3_result = file.set_cursor(0);
+    let read_2_result = file.read(&mut buffer_2);
+
+    // We need to clean up after ourselves *before* possibly panicking!
+    drop(file);
+    rm(PATH).unwrap();
+
+    write_1_result.unwrap();
+    seek_1_result.unwrap();
+    read_1_result.unwrap();
+    seek_2_result.unwrap();
+    write_2_result.unwrap();
+    seek_3_result.unwrap();
+    read_2_result.unwrap();
+
+    assert_eq!(buffer_1, ORIG_CONTENTS.as_bytes());
+    assert_eq!(
+        &buffer_2[..],
+        [ORIG_CONTENTS.as_bytes(), OVERWRITE.as_bytes()].concat()
+    );
+}
+
+#[test_case]
+fn o_dir_enotdir() {
+    assert_err!(
+        OpenOptions::new().directory(true).open(THIS_PATH),
+        Errno::Enotdir
+    );
+}
+
+#[test_case]
+fn o_dir() {
+    OpenOptions::new().directory(true).open("/").unwrap();
+}
+
+#[test_case]
+fn o_creat_exist_ok() {
+    OpenOptions::new().create(true).open(THIS_PATH).unwrap();
+}
+
+#[test_case]
+fn o_excl_creat_eexist() {
+    assert_err!(
+        OpenOptions::new().create_new(true).open(THIS_PATH),
+        Errno::Eexist
+    );
+}
+
+#[test_case]
 fn stats() {
     let stats = OpenOptions::new().open(TEST_PATH).unwrap().stat().unwrap();
     // crate::println!("{:#?}", stats);
@@ -112,6 +180,25 @@ fn dir_stats() {
         .stat()
         .unwrap();
     assert_eq!(stats.file_type, FileType::Directory);
+}
+
+#[test_case]
+fn other_ops_should_fail_o_path() {
+    const PATH: &str = "/tmp/other_ops_should_fail_o_path";
+    {
+        OpenOptions::new().create(true).open(PATH).unwrap();
+    }
+    let file = OpenOptions::new().path_only(true).open(PATH).unwrap();
+    let mut buffer = [0; 1];
+    let read_result = file.read(&mut buffer);
+    let write_result = file.write("test".as_bytes());
+    drop(file);
+
+    // Clean up after yourself before possibly panicking!
+    rm(PATH).unwrap();
+
+    assert_err!(read_result, Errno::Ebadf);
+    assert_err!(write_result, Errno::Ebadf);
 }
 
 #[test_case]
