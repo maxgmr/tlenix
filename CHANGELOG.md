@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mash` prompt should react to exit code of last-executed process.
 - `mash` ability to execute programs.
 - Fun BSOD-style screen on panic.
+- More complete parsing of dirent and filestat return values; i.e., complete `DirEnt` and `FileStat` types.
 
 ## [0.1.0-alpha.9] - UNRELEASED
 
