@@ -33,7 +33,11 @@ impl NixBytes {
         &self.0
     }
 }
-
+impl Default for NixBytes {
+    fn default() -> Self {
+        Self::null()
+    }
+}
 impl From<Vec<u8>> for NixBytes {
     fn from(value: Vec<u8>) -> Self {
         // Filter out all null bytes

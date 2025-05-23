@@ -34,6 +34,11 @@ impl NixString {
         &self.0
     }
 }
+impl Default for NixString {
+    fn default() -> Self {
+        Self::null()
+    }
+}
 impl TryFrom<Vec<u8>> for NixString {
     type Error = core::str::Utf8Error;
 
