@@ -210,17 +210,18 @@ pub fn umount<NS: Into<NixString>>(target: NS, umount_flags: UmountFlags) -> Res
 ///
 /// This function propagates any [`Errno`]s returned by the underlying call to `pivot_root`.
 pub fn pivot_root<NA: Into<NixString>, NB: Into<NixString>>(
-    put_old: NA,
-    new_root: NB,
+    new_root: NA,
+    put_old: NB,
 ) -> Result<(), Errno> {
-    let put_old_ns: NixString = put_old.into();
     let new_root_ns: NixString = new_root.into();
+    let put_old_ns: NixString = put_old.into();
 
+    // SAFETY: The NixString types guarantee that both arguments are null-terminated valid UTF-8.
     unsafe {
         syscall_result!(
             SyscallNum::PivotRoot,
-            put_old_ns.as_ptr(),
-            new_root_ns.as_ptr()
+            new_root_ns.as_ptr(),
+            put_old_ns.as_ptr()
         )?;
     }
 
