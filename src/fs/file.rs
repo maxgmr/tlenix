@@ -3,6 +3,7 @@
 use crate::{
     Errno, SyscallNum,
     fs::{FileDescriptor, FileStat, FileStatRaw, LseekWhence, OpenOptions},
+    nix_str::NixString,
     syscall, syscall_result,
 };
 
@@ -222,6 +223,28 @@ impl Drop for File {
             syscall!(SyscallNum::Close, self.file_descriptor);
         }
     }
+}
+
+/// Deletes the file at the given path from the filesystem.
+///
+/// If other processes still have access to the file, it will remain in existence until the last
+/// file descriptor referring to it is closed.
+///
+/// Internally uses the [`unlink`](https://www.man7.org/linux/man-pages/man2/unlink.2.html) Linux
+/// syscall.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s returned by the underlying `unlink` syscall.
+pub fn rm<NS: Into<NixString>>(path: NS) -> Result<(), Errno> {
+    let ns_path: NixString = path.into();
+
+    // SAFETY: The only argument is guaranteed to be null-terminated, valid UTF-8 because of its
+    // NixString type.
+    unsafe {
+        syscall_result!(SyscallNum::Unlink, ns_path.as_ptr())?;
+    }
+    Ok(())
 }
 
 // This is needed to get access to the private file_descriptor field.

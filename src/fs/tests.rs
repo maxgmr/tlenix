@@ -301,3 +301,55 @@ fn rmdir_enotdir() {
 fn rmdir_enotempty() {
     assert_err!(rmdir("src"), Errno::Enotempty);
 }
+
+#[test_case]
+fn mk_rm_file() {
+    const PATH: &str = "/tmp/mk_rm_file";
+    OpenOptions::new().create(true).open(PATH).unwrap();
+    rm(PATH).unwrap();
+}
+
+#[test_case]
+fn rm_wait_for_last_fd_drop() {
+    const PATH: &str = "/tmp/rm_wait_for_last_fd_drop";
+    {
+        let my_file = OpenOptions::new().create(true).open(PATH).unwrap();
+        rm(PATH).unwrap();
+        // Ensure able to read from file still
+        assert!(my_file.read_byte().unwrap().is_none());
+    }
+    assert_err!(OpenOptions::new().open(PATH), Errno::Enoent);
+}
+
+#[test_case]
+fn rm_wait_multiple_fds() {
+    const PATH: &str = "/tmp/rm_wait_multiple_fds";
+    {
+        let fd_1 = OpenOptions::new().create(true).open(PATH).unwrap();
+        {
+            let fd_2 = OpenOptions::new().open(PATH).unwrap();
+
+            rm(PATH).unwrap();
+
+            assert!(fd_1.read_byte().unwrap().is_none());
+            assert!(fd_2.read_byte().unwrap().is_none());
+        }
+        assert!(fd_1.read_byte().unwrap().is_none());
+    }
+    assert_err!(OpenOptions::new().open(PATH), Errno::Enoent);
+}
+
+#[test_case]
+fn rm_eisdir() {
+    assert_err!(rm("/"), Errno::Eisdir);
+}
+
+#[test_case]
+fn rm_enoent_empty() {
+    assert_err!(rm(""), Errno::Enoent);
+}
+
+#[test_case]
+fn rm_enoent_dne() {
+    assert_err!(rm("dskjgdskjgnslkjghesg"), Errno::Enoent);
+}
