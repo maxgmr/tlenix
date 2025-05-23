@@ -2,19 +2,80 @@
 
 Custom x86_64 OS built upon the Linux kernel. Boots from a USB.
 
-## Components
+## Programs
 
 `init`: Responsible for booting up the system. Starts up `mash`.
 
 `mash`: **Ma**x's **Sh**ell. An extremely primitive command-line-interface shell.
 
-## Setup - USB UEFI Boot
+## Watch out!
 
-### 0. Watch out!
+Messing with stuff like the bootloader can screw up your system if you don't know what you're doing! If you aren't confident, I recommend using a virtual machine as the host when setting up the USB.
 
-Messing with stuff like the bootloader can screw up your system if you don't know what you're doing! If you aren't confident, I recommend using a virtual Linux machine as the host when setting up the USB.
+Additionally, make sure nothing important is stored on your USB you're using to boot this, because it _will_ be wiped.
 
 This project is in its early stages and is _not thoroughly tested_... Follow these instructions at your own risk.
+
+## Setup - Building a Linux Kernel
+
+[This guide](https://mopalinski.com/posts/booting-linux-without-an-init-system/) provides further helpful information related to booting Linux kernels.
+
+Grab the Linux source code from its official repository:
+
+```shell
+git clone git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+cd linux
+```
+
+View the possible kernel versions to use:
+
+```shell
+git tag
+```
+
+Select the version of the kernel you want to build:
+
+```shell
+git checkout <version>
+# Example: get kernel version 6.12
+git checkout v6.12
+```
+
+It's a good habit to clean up any stale `.o` files lying around before starting:
+
+```shell
+make mrproper
+```
+
+To make things easy, you can just use the default configuration:
+
+```shell
+make defconfig
+```
+
+You can add/remove any features you want using the built-in config menu:
+
+```shell
+make menuconfig
+```
+
+Tag the custom kernel build as `-tlenix`:
+
+```shell
+./scripts/config --file .config --set-str LOCALVERSION "-tlenix"
+```
+
+When you're ready, build the kernel!
+
+```shell
+make -j$(nproc) CC="gcc-13" KCFLAGS="-std=gnu11" 2>&1 | tee log
+```
+
+## Setup - Creating the `initramfs`
+
+# OLD!!!!!!!!!!!!!!!11
+
+## Setup - USB UEFI Boot
 
 ### 1. Partition the USB
 

@@ -202,6 +202,28 @@ fn other_ops_should_fail_o_path() {
 }
 
 #[test_case]
+fn trunc_write() {
+    const PATH: &str = "/tmp/trunc_write";
+    let file = OpenOptions::new()
+        .read_write()
+        .create(true)
+        .open(PATH)
+        .unwrap();
+
+    file.write("test".as_bytes()).unwrap();
+    file.set_cursor(0).unwrap();
+    let mut buffer = [0; 4];
+    file.read(&mut buffer).unwrap();
+    assert_eq!("test".as_bytes(), buffer);
+    drop(file);
+
+    let file = OpenOptions::new().truncate(true).open(PATH).unwrap();
+    buffer = [0; 4];
+    file.read(&mut buffer).unwrap();
+    assert_eq!([0; 4], buffer);
+}
+
+#[test_case]
 fn read_advance_cursor() {
     let mut buffer = [0; 20];
     let file = OpenOptions::new().open(TEST_PATH).unwrap();
