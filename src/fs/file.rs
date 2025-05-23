@@ -1,9 +1,8 @@
 //! This module is responsible for the [`File`] type and all associated file operations.
 
 use crate::{
-    Errno, SyscallNum,
+    Errno, NixString, SyscallNum,
     fs::{FileDescriptor, FileStat, FileStatRaw, LseekWhence, OpenOptions},
-    nix_str::NixString,
     syscall, syscall_result,
 };
 

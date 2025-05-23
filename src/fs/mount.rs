@@ -2,7 +2,7 @@
 
 use core::ptr;
 
-use crate::{Errno, SyscallNum, nix_str::NixString, syscall_result};
+use crate::{Errno, NixString, SyscallNum, syscall_result};
 
 /// A list of possible Linux filesystem types.
 ///

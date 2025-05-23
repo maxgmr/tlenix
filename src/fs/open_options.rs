@@ -3,9 +3,8 @@
 use core::default::Default;
 
 use crate::{
-    Errno, SyscallNum,
+    Errno, NixString, SyscallNum,
     fs::{File, FilePermissions, OpenFlags},
-    nix_str::NixString,
     syscall_result,
 };
 

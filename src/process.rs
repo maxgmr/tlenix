@@ -3,11 +3,7 @@
 use alloc::vec::Vec;
 use core::ptr;
 
-use crate::{
-    Errno, ExitStatus, SyscallNum,
-    nix_bytes::{NixBytes, vec_into_nix_bytes},
-    syscall, syscall_result,
-};
+use crate::{Errno, ExitStatus, NixBytes, SyscallNum, syscall, syscall_result, vec_into_nix_bytes};
 
 const WUNTRACED: usize = 2;
 

@@ -2,9 +2,7 @@
 
 use alloc::{string::String, vec::Vec};
 
-use crate::{
-    Errno, NULL_BYTE, SyscallNum, fs::FilePermissions, nix_str::NixString, syscall_result,
-};
+use crate::{Errno, NULL_BYTE, NixString, SyscallNum, fs::FilePermissions, syscall_result};
 
 const INITIAL_CWD_BUF_SIZE: usize = 1 << 8;
 
