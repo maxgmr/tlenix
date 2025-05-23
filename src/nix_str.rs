@@ -33,6 +33,14 @@ impl NixString {
     pub fn bytes(&self) -> &[u8] {
         &self.0
     }
+
+    /// Returns this [`NixString`] as a string slice.
+    #[must_use]
+    // OK to unwrap here; function won't panic. NixString bytes are guaranteed to be valid UTF-8.
+    #[allow(clippy::missing_panics_doc)]
+    pub fn as_str(&self) -> &str {
+        self.into()
+    }
 }
 impl Default for NixString {
     fn default() -> Self {
