@@ -18,6 +18,10 @@ default-run = "init"
 name = "tlenix_core"
 path = "src/lib.rs"
 
+[profile.release]
+codegen-units = 1
+lto = "fat"
+
 [dependencies]
 bitflags = "2.1"
 lazy_static = { version = "1.5", features = ["spin_no_std"] }
