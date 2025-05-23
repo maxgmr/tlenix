@@ -51,6 +51,14 @@ impl From<Vec<u8>> for NixBytes {
         Self(filtered_bytes)
     }
 }
+impl From<Vec<i8>> for NixBytes {
+    fn from(value: Vec<i8>) -> Self {
+        // OK to allow here; we're simply reinterpreting the raw bytes as chars. The UTF-8 check
+        // later on catches any issues.
+        #[allow(clippy::cast_sign_loss)]
+        Self::from(value.into_iter().map(|i| i as u8).collect::<Vec<u8>>())
+    }
+}
 impl From<String> for NixBytes {
     fn from(value: String) -> Self {
         Self::from(value.into_bytes())
@@ -63,6 +71,11 @@ impl From<&str> for NixBytes {
 }
 impl From<&[u8]> for NixBytes {
     fn from(value: &[u8]) -> Self {
+        Self::from(Vec::from(value))
+    }
+}
+impl From<&[i8]> for NixBytes {
+    fn from(value: &[i8]) -> Self {
         Self::from(Vec::from(value))
     }
 }
