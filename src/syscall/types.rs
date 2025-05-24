@@ -1,6 +1,6 @@
 use crate::{
     ExitStatus,
-    fs::{FileDescriptor, FileStatRaw},
+    fs::{DirEntRaw, FileDescriptor, FileStatRaw},
 };
 
 /// A syscall argument. A newtype wrapper around the [`core::usize`] type.
@@ -39,6 +39,7 @@ impl_from_syscallarg_for_as_usize![
     *const *const u8,
     *mut u8,
     *mut FileStatRaw,
+    *mut DirEntRaw,
     i32,
     i64,
     u64,

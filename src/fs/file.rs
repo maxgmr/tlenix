@@ -1,10 +1,15 @@
 //! This module is responsible for the [`File`] type and all associated file operations.
 
+use alloc::vec::Vec;
+
 use crate::{
     Errno, NixString, SyscallNum,
-    fs::{FileDescriptor, FileStat, FileStatRaw, LseekWhence, OpenOptions},
+    fs::{DirEnt, DirEntRaw, FileDescriptor, FileStat, FileStatRaw, LseekWhence, OpenOptions},
     syscall, syscall_result,
 };
+
+/// The initially-allocated length of the [`Vec<DirEntRaw>`] returned by [`File::dir_ents`].
+const INITIAL_DIR_ENT_BUF_SIZE: usize = 1 << 3;
 
 /// An object providing access to an open file on the filesystem.
 #[derive(Clone, Debug, PartialEq, Hash)]
@@ -144,6 +149,63 @@ impl File {
         // matches the single byte being written. Any issues with user-given arguments are handled
         // gracefully by the underlying syscall.
         unsafe { syscall_result!(SyscallNum::Write, self.file_descriptor, &raw const byte, 1) }
+    }
+
+    /// Gets the entries of this directory.
+    ///
+    /// Naturally, this function is only usable if this [`File`] is a directory. Otherwise,
+    /// [`Errno::Enotdir`] will be returned.
+    ///
+    /// Uses the [`getdents64`](https://www.man7.org/linux/man-pages/man2/getdents.2.html) Linux
+    /// syscall internally.
+    ///
+    /// # Errors
+    ///
+    /// This function returns [`Errno::Enotdir`] if this [`File`] is not a directory.
+    ///
+    /// This function propagates any [`Errno`]s returned by the underlying `getdents64` call.
+    pub fn dir_ents(&self) -> Result<Vec<DirEnt>, Errno> {
+        // FIXME currently not working!
+        let mut raw_dir_ents: Vec<DirEntRaw> = Vec::with_capacity(INITIAL_DIR_ENT_BUF_SIZE);
+
+        // Keep trying to fit the list of RawDirEnts into the return val, reallocating if it's too small.
+        loop {
+            // Ensure the buffer size matches its capacity
+            raw_dir_ents.resize(raw_dir_ents.capacity(), DirEntRaw::default());
+            // SAFETY: The arguments are valid. The buffer capacity is programmatically determined and
+            // guaranteed to match the buffer itself. Finally, the pointer to the buffer isn't used
+            // after the buffer is reallocated.
+            match unsafe {
+                syscall_result!(
+                    SyscallNum::Getdents64,
+                    self.file_descriptor,
+                    raw_dir_ents.as_mut_ptr(),
+                    raw_dir_ents.len()
+                )
+            } {
+                // Got it! Continue.
+                Ok(_) => break,
+                // Too small. Double the size and try again.
+                Err(Errno::Einval) => {
+                    raw_dir_ents.reserve(raw_dir_ents.capacity());
+                }
+                // Other error. Return it.
+                Err(e) => return Err(e),
+            }
+        }
+
+        // Trim extra raw dir ents
+        let len = raw_dir_ents
+            .iter()
+            .position(|der| *der == DirEntRaw::default())
+            .unwrap_or(raw_dir_ents.len());
+        raw_dir_ents.truncate(len);
+
+        // Convert to dir ents
+        raw_dir_ents
+            .into_iter()
+            .map(core::convert::TryInto::try_into)
+            .collect::<Result<Vec<DirEnt>, _>>()
     }
 
     /// Gets the current cursor location within the [`File`].
