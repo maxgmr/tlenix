@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Restricted raw syscalls to crate only.
+- Increased heap size from 16 KiB to 64 KiB.
 
 ## [0.1.0-alpha.8.1] - 2025-05-22
 
