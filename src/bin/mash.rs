@@ -47,8 +47,11 @@ pub extern "C" fn _start() -> ! {
     #[cfg(test)]
     process::exit(tlenix_core::ExitStatus::ExitSuccess);
 
-    // This stops the compiler from complaining when compiling for tests.
+    // HACK: This stops the compiler from complaining when building the test/debug target
     #[allow(unreachable_code)]
+    #[allow(clippy::no_effect)]
+    ();
+
     let console = Console::open().unwrap();
     loop {
         print_prompt();
