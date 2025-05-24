@@ -24,12 +24,12 @@ const WUNTRACED: usize = 2;
 ///
 /// This function propagates any [`Errno`]s returned by the underlying call to [`execve`].
 pub fn execve<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
-    argv: Vec<NA>,
-    envp: Vec<NB>,
+    argv: &[NA],
+    envp: &[NB],
 ) -> Result<!, Errno> {
     // ARGV
     // Convert to syscall-compatible strings
-    let argv_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(argv);
+    let argv_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(argv.to_vec());
     // Get an array of pointers to those strings
     let mut argv_pointers: Vec<*const u8> = argv_nix_strings.iter().map(NixBytes::as_ptr).collect();
     // Null-terminate the array
@@ -39,7 +39,7 @@ pub fn execve<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
 
     // ENVP
     // Convert to syscall-compatible strings
-    let envp_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(envp);
+    let envp_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(envp.to_vec());
     // Get an array of pointers to those strings
     let mut envp_pointers: Vec<*const u8> = envp_nix_strings.iter().map(NixBytes::as_ptr).collect();
     // Null-terminate the array
