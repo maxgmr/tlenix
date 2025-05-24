@@ -1,6 +1,9 @@
 //! This module is responsible for the [`File`] type and all associated file operations.
 
-use alloc::{string::ToString, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 use core::mem::size_of;
 
 use crate::{
@@ -81,6 +84,50 @@ impl File {
                 buffer.len()
             )
         }
+    }
+
+    /// Reads the entire contents of this file into a [`String`].
+    ///
+    /// Convenience function. Uses [`Self::read`] internally.
+    ///
+    /// This function tries to keep the file cursor at the same spot it was before this function was called.
+    ///
+    /// # Errors
+    ///
+    /// This function will return [`Errno::Eilseq`] if the bytes of the file are not valid UTF-8.
+    ///
+    /// This function will propagate any [`Errno`]s from the internal call to [`Self::read`].
+    pub fn read_to_string(&self) -> Result<String, Errno> {
+        let mut buffer = Vec::new();
+        // Chunks are page size for better performance
+        let mut chunk = [0_u8; PAGE_SIZE];
+
+        let orig_cursor = self.cursor()?;
+
+        loop {
+            match self.read(&mut chunk) {
+                // EOF
+                Ok(0) => break,
+                // Got more bytes!
+                Ok(num_bytes_read) => {
+                    buffer.extend_from_slice(&chunk[..num_bytes_read]);
+                }
+                // Error
+                Err(errno) => {
+                    // We have to allow it to be unused, this is simply a last-ditch effort to
+                    // restore the cursor after already failing.
+                    #[allow(clippy::cast_possible_wrap, unused_must_use)]
+                    self.set_cursor(orig_cursor as i64);
+                    return Err(errno);
+                }
+            }
+        }
+
+        // Restore original cursor location
+        #[allow(clippy::cast_possible_wrap)]
+        self.set_cursor(orig_cursor as i64)?;
+
+        String::from_utf8(buffer).map_err(|_| Errno::Eilseq)
     }
 
     /// Reads a single byte from the file.

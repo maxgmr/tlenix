@@ -15,6 +15,8 @@ const SYMLINK_PATH: &str = "test_files/test_symlink";
 const TEST_PATH_CONTENTS: &str =
     "Hello! I hope you can read me without any issues! - Max (马克斯)\n";
 const TEMP_DIR: &str = "/tmp";
+const LARGE_PATH: &str = "test_files/large_file.txt";
+const LARGE_CONTENTS_BYTES: [u8; 10_000] = [b'e'; 10_000];
 
 #[test_case]
 fn read_bytes() {
@@ -593,5 +595,30 @@ fn is_dir_empty_not_dir() {
     assert_err!(
         OpenOptions::new().open(THIS_PATH).unwrap().is_dir_empty(),
         Errno::Enotdir
+    );
+}
+
+#[test_case]
+fn read_to_string() {
+    let file_contents = OpenOptions::new()
+        .open(TEST_PATH)
+        .unwrap()
+        .read_to_string()
+        .unwrap();
+    assert_eq!(file_contents, TEST_PATH_CONTENTS);
+}
+
+#[test_case]
+fn read_to_string_large() {
+    let mut file_contents = OpenOptions::new()
+        .open(LARGE_PATH)
+        .unwrap()
+        .read_to_string()
+        .unwrap();
+    // Pop off the newline at the end
+    assert_eq!(file_contents.pop().unwrap(), '\n');
+    assert_eq!(
+        file_contents,
+        str::from_utf8(&LARGE_CONTENTS_BYTES).unwrap()
     );
 }
