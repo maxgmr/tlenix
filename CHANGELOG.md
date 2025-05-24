@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mash` ability to execute programs.
 - Fun BSOD-style screen on panic.
 - More complete parsing of dirent and filestat return values; i.e., complete `DirEnt` and `FileStat` types.
+- Fix the nasty code duplication in the `execve` and `execute_process` functions.
 
 ## [0.1.0-alpha.9] - UNRELEASED
 
