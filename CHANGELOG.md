@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `initramfs_init`, an `init` program specifically for the `initramfs`.
+- Create and remove directories (`mkdir`, `rmdir`).
+- Delete files (`rm`).
+- Get entries of a directory (`File::dir_ents`).
+- Change the root mount (`pivot_root`).
+- Execute a program (`execve`).
+- Directly set the mode of a file when creating one (`OpenOptions::set_mode`).
+
+### Changed
+
+- Restricted raw syscalls to crate only.
 
 ## [0.1.0-alpha.8.1] - 2025-05-22
 
