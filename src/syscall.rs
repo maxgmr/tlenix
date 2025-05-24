@@ -16,7 +16,6 @@ pub use types::SyscallArg;
 /// # Safety
 ///
 /// Syscalls are inherently unsafe- the caller must ensure safety.
-#[macro_export]
 macro_rules! syscall {
     ($cn:expr) => {
         $crate::syscall::__syscall_0($cn)
@@ -41,6 +40,8 @@ macro_rules! syscall {
     };
 }
 
+pub(crate) use syscall;
+
 /// Invoke a Linux syscall, returning a [`Result`].
 ///
 /// If the syscall is successful, the value is returned within the [`Ok`].
@@ -50,12 +51,13 @@ macro_rules! syscall {
 /// # Safety
 ///
 /// Syscalls are inherently unsafe- the caller must ensure safety.
-#[macro_export]
 macro_rules! syscall_result {
     ($($arg:expr),*) => {
         $crate::Errno::__from_ret($crate::syscall!($($arg),*))
     }
 }
+
+pub(crate) use syscall_result;
 
 /// Invoke a Linux syscall with 0 args.
 ///
