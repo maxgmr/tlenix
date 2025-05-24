@@ -202,6 +202,7 @@ pub struct DirEnt {
 }
 impl DirEnt {
     /// Creates a new [`DirEnt`] from the given raw header and name.
+    #[must_use]
     pub fn from_raw(header: DirEntRawHeader, name: String) -> Self {
         Self {
             d_type: header.d_type.into(),
