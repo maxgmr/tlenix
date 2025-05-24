@@ -480,13 +480,17 @@ fn dir_ents_empty() {
 
     let dir = OpenOptions::new().directory(true).open(DIR).unwrap();
     let dir_ents_result = dir.dir_ents();
+    let is_dir_empty_result = dir.is_dir_empty();
 
     // Clean up after yourself before testing!
+    drop(dir);
     rmdir(DIR).unwrap();
+
+    assert!(is_dir_empty_result.unwrap());
 
     let dir_ents = dir_ents_result.unwrap();
 
-    crate::println!("{:#?}", dir_ents);
+    // crate::println!("{:#?}", dir_ents);
 
     assert_eq!(dir_ents.len(), 2);
 
@@ -528,15 +532,18 @@ fn dir_ents_file_and_dir() {
         .create(true)
         .open(file_path.clone())
         .unwrap();
-    drop(file);
     mkdir(subdir_path.clone(), FilePermissions::default()).unwrap();
 
     let dir_ents_result = dir.dir_ents();
+    let is_dir_empty_result = dir.is_dir_empty();
 
     // Clean up after yourself before testing!
+    drop(file);
     rm(file_path.clone()).unwrap();
     rmdir(subdir_path.clone()).unwrap();
     rmdir(DIR).unwrap();
+
+    assert!(!is_dir_empty_result.unwrap());
 
     // Look for the dir, the file, the super dir, and the subdir within the dir ents
     let dir_ents = dir_ents_result.unwrap();
@@ -552,4 +559,39 @@ fn dir_ents_file_and_dir() {
     assert_eq!(super_dir_dent.d_type, DirEntType::Dir);
     assert_eq!(subdir_dent.d_type, DirEntType::Dir);
     assert_eq!(file_dent.d_type, DirEntType::Reg);
+}
+
+#[test_case]
+fn is_dir_empty_true() {
+    const PATH: &str = "/tmp/is_dir_empty_true";
+    mkdir(PATH, FilePermissions::default()).unwrap();
+    let is_dir_empty_result = OpenOptions::new()
+        .directory(true)
+        .open(PATH)
+        .unwrap()
+        .is_dir_empty();
+
+    // Clean up after yourself before testing!
+    rmdir(PATH).unwrap();
+
+    assert!(is_dir_empty_result.unwrap());
+}
+
+#[test_case]
+fn is_dir_empty_false() {
+    assert!(
+        !OpenOptions::new()
+            .open("/")
+            .unwrap()
+            .is_dir_empty()
+            .unwrap()
+    );
+}
+
+#[test_case]
+fn is_dir_empty_not_dir() {
+    assert_err!(
+        OpenOptions::new().open(THIS_PATH).unwrap().is_dir_empty(),
+        Errno::Enotdir
+    );
 }
