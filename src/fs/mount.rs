@@ -7,7 +7,7 @@ use crate::{Errno, NixString, SyscallNum, syscall_result};
 /// A list of possible Linux filesystem types.
 ///
 /// This list is not exhaustive and may grow in the future.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[non_exhaustive]
 pub enum FilesystemType {
     /// Process info.
@@ -15,6 +15,7 @@ pub enum FilesystemType {
     /// Kernel and device info.
     Sysfs,
     /// Temporary file storage in volatile memory.
+    #[default]
     Tmpfs,
     /// Automated device notes populated by the kernel.
     Devtmpfs,
