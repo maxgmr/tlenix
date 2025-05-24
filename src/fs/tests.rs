@@ -472,79 +472,84 @@ fn rm_enoent_dne() {
 
 #[test_case]
 fn dir_ents_empty() {
-    // FIXME
-    // const DIR: &str = "/tmp/dir_ents_empty";
-    // mkdir(DIR, FilePermissions::default()).unwrap();
-    //
-    // let dir = OpenOptions::new().directory(true).open(DIR).unwrap();
-    // let dir_ents_result = dir.dir_ents();
-    //
-    // // Clean up after yourself before testing!
-    // rmdir(DIR).unwrap();
-    //
-    // let dir_ents = dir_ents_result.unwrap();
-    //
-    // // crate::println!("{:#?}", dir_ents);
-    //
-    // assert_eq!(dir_ents.len(), 1);
-    // assert_eq!(dir_ents[0].dir_ent_type, DirEntType::Dir);
-    // assert_eq!(".", dir_ents[0].name.as_str());
+    const DIR: &str = "/tmp/dir_ents_empty";
+    const SELF: &str = ".";
+    const SUPER: &str = "..";
+
+    mkdir(DIR, FilePermissions::default()).unwrap();
+
+    let dir = OpenOptions::new().directory(true).open(DIR).unwrap();
+    let dir_ents_result = dir.dir_ents();
+
+    // Clean up after yourself before testing!
+    rmdir(DIR).unwrap();
+
+    let dir_ents = dir_ents_result.unwrap();
+
+    crate::println!("{:#?}", dir_ents);
+
+    assert_eq!(dir_ents.len(), 2);
+
+    let super_dir = dir_ents
+        .iter()
+        .find(|dir_ent| dir_ent.name == SUPER)
+        .unwrap();
+    let self_dir = dir_ents
+        .iter()
+        .find(|dir_ent| dir_ent.name == SELF)
+        .unwrap();
+
+    assert_eq!(super_dir.d_type, DirEntType::Dir);
+    assert_eq!(self_dir.d_type, DirEntType::Dir);
 }
 
 #[test_case]
 fn dir_ents_file_and_dir() {
-    // FIXME
-    // const DIR: &str = "/tmp/dir_ents_file_and_dir";
-    // const THIS_DIR: &str = ".";
-    // const FILE_NAME: &str = "my_file";
-    // const SUBDIR_NAME: &str = "my_subdir";
-    //
-    // let mut file_path = DIR.to_string();
-    // file_path.push('/');
-    // file_path.push_str(FILE_NAME);
-    //
-    // let mut subdir_path = DIR.to_string();
-    // subdir_path.push('/');
-    // subdir_path.push_str(SUBDIR_NAME);
-    //
-    // mkdir(DIR, FilePermissions::default() | FilePermissions::S_IXUSR).unwrap();
-    //
-    // let dir = OpenOptions::new().directory(true).open(DIR).unwrap();
-    //
-    // // Create file and subdir within dir
-    // let file = OpenOptions::new()
-    //     .create(true)
-    //     .open(file_path.clone())
-    //     .unwrap();
-    // drop(file);
-    // mkdir(subdir_path.clone(), FilePermissions::default()).unwrap();
-    //
-    // let dir_ents_result = dir.dir_ents();
-    //
-    // // Clean up after yourself before testing!
-    // rm(file_path.clone()).unwrap();
-    // rmdir(subdir_path.clone()).unwrap();
-    // rmdir(DIR).unwrap();
-    //
-    // // Look for the dir, the file, and the subdir within the dir ents
-    // let dir_ents = dir_ents_result.unwrap();
-    //
-    // assert_eq!(dir_ents.len(), 3);
-    //
-    // let this_dir_dent = dir_ents
-    //     .iter()
-    //     .find(|dir_ent| dir_ent.name.as_str() == THIS_DIR)
-    //     .unwrap();
-    // let subdir_dent = dir_ents
-    //     .iter()
-    //     .find(|dir_ent| dir_ent.name.as_str() == SUBDIR_NAME)
-    //     .unwrap();
-    // let file_dent = dir_ents
-    //     .iter()
-    //     .find(|dir_ent| dir_ent.name.as_str() == FILE_NAME)
-    //     .unwrap();
-    //
-    // assert_eq!(this_dir_dent.dir_ent_type, DirEntType::Dir);
-    // assert_eq!(subdir_dent.dir_ent_type, DirEntType::Dir);
-    // assert_eq!(file_dent.dir_ent_type, DirEntType::Reg);
+    const DIR: &str = "/tmp/dir_ents_file_and_dir";
+    const THIS_DIR: &str = ".";
+    const SUPER_DIR: &str = "..";
+    const FILE: &str = "my_file";
+    const SUBDIR: &str = "my_subdir";
+
+    let mut file_path = DIR.to_string();
+    file_path.push('/');
+    file_path.push_str(FILE);
+
+    let mut subdir_path = DIR.to_string();
+    subdir_path.push('/');
+    subdir_path.push_str(SUBDIR);
+
+    mkdir(DIR, FilePermissions::default() | FilePermissions::S_IXUSR).unwrap();
+
+    let dir = OpenOptions::new().directory(true).open(DIR).unwrap();
+
+    // Create file and subdir within dir
+    let file = OpenOptions::new()
+        .create(true)
+        .open(file_path.clone())
+        .unwrap();
+    drop(file);
+    mkdir(subdir_path.clone(), FilePermissions::default()).unwrap();
+
+    let dir_ents_result = dir.dir_ents();
+
+    // Clean up after yourself before testing!
+    rm(file_path.clone()).unwrap();
+    rmdir(subdir_path.clone()).unwrap();
+    rmdir(DIR).unwrap();
+
+    // Look for the dir, the file, the super dir, and the subdir within the dir ents
+    let dir_ents = dir_ents_result.unwrap();
+
+    assert_eq!(dir_ents.len(), 4);
+
+    let this_dir_dent = dir_ents.iter().find(|dent| dent.name == THIS_DIR).unwrap();
+    let super_dir_dent = dir_ents.iter().find(|dent| dent.name == SUPER_DIR).unwrap();
+    let subdir_dent = dir_ents.iter().find(|dent| dent.name == SUBDIR).unwrap();
+    let file_dent = dir_ents.iter().find(|dent| dent.name == FILE).unwrap();
+
+    assert_eq!(this_dir_dent.d_type, DirEntType::Dir);
+    assert_eq!(super_dir_dent.d_type, DirEntType::Dir);
+    assert_eq!(subdir_dent.d_type, DirEntType::Dir);
+    assert_eq!(file_dent.d_type, DirEntType::Reg);
 }

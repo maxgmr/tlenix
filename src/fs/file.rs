@@ -1,15 +1,19 @@
 //! This module is responsible for the [`File`] type and all associated file operations.
 
-use alloc::vec::Vec;
+use alloc::{string::ToString, vec::Vec};
+use core::mem::size_of;
 
 use crate::{
-    Errno, NixString, SyscallNum,
-    fs::{DirEnt, DirEntRaw, FileDescriptor, FileStat, FileStatRaw, LseekWhence, OpenOptions},
+    Errno, NULL_BYTE, NixString, PAGE_SIZE, SyscallNum,
+    fs::{
+        DirEnt, FileDescriptor, FileStat, LseekWhence, OpenOptions, types::DirEntRawHeader,
+        types::FileStatRaw,
+    },
     syscall, syscall_result,
 };
 
-/// The initially-allocated length of the [`Vec<DirEntRaw>`] returned by [`File::dir_ents`].
-const INITIAL_DIR_ENT_BUF_SIZE: usize = 1 << 3;
+/// Buffer for reading directory entries. Uses page size for better performance.
+const DIR_ENT_BUF_SIZE: usize = PAGE_SIZE;
 
 /// An object providing access to an open file on the filesystem.
 #[derive(Clone, Debug, PartialEq, Hash)]
@@ -165,47 +169,62 @@ impl File {
     ///
     /// This function propagates any [`Errno`]s returned by the underlying `getdents64` call.
     pub fn dir_ents(&self) -> Result<Vec<DirEnt>, Errno> {
-        // FIXME currently not working!
-        let mut raw_dir_ents: Vec<DirEntRaw> = Vec::with_capacity(INITIAL_DIR_ENT_BUF_SIZE);
+        /// Offset of the directory entry name from the start of its bytes.
+        const NAME_OFFSET: usize = size_of::<DirEntRawHeader>();
 
-        // Keep trying to fit the list of RawDirEnts into the return val, reallocating if it's too small.
+        let mut results: Vec<DirEnt> = Vec::new();
+        let mut buf = [0_u8; DIR_ENT_BUF_SIZE];
+
+        // Keep reading entries until there's nothing left to read
         loop {
-            // Ensure the buffer size matches its capacity
-            raw_dir_ents.resize(raw_dir_ents.capacity(), DirEntRaw::default());
-            // SAFETY: The arguments are valid. The buffer capacity is programmatically determined and
-            // guaranteed to match the buffer itself. Finally, the pointer to the buffer isn't used
-            // after the buffer is reallocated.
-            match unsafe {
+            let bytes_read = unsafe {
+                // SAFETY: The file descriptor is tied to this struct. The length of the buffer is
+                // programmatically-determined and guaranteed to match the actual buffer length.
                 syscall_result!(
                     SyscallNum::Getdents64,
                     self.file_descriptor,
-                    raw_dir_ents.as_mut_ptr(),
-                    raw_dir_ents.len()
-                )
-            } {
-                // Got it! Continue.
-                Ok(_) => break,
-                // Too small. Double the size and try again.
-                Err(Errno::Einval) => {
-                    raw_dir_ents.reserve(raw_dir_ents.capacity());
-                }
-                // Other error. Return it.
-                Err(e) => return Err(e),
+                    buf.as_mut_ptr(),
+                    buf.len()
+                )?
+            };
+
+            // If `getdents64` has nothing left to give, we're done!
+            if bytes_read == 0 {
+                break;
+            }
+
+            // Keep reading raw dir ent headers (and their name strings) until we reach the end of
+            // the returned bytes
+            let mut offset = 0;
+            while offset < bytes_read {
+                // SAFETY: `getdents64` guarantees data won't be written past the end of `buf`. The
+                // DirEntRawHeader layout matches the bytes returned by `getdents64`.
+                // read_unaligned() handles cases where the bytes could be unaligned.
+                let raw_header: DirEntRawHeader = unsafe {
+                    buf.as_ptr()
+                        .add(offset)
+                        .cast::<DirEntRawHeader>()
+                        .read_unaligned()
+                };
+
+                // Slice for this particular directory entry.
+                let entry_slice = &buf[offset..(offset + raw_header.d_reclen as usize)];
+                let name_bytes = &entry_slice[NAME_OFFSET..];
+                let name_end = name_bytes
+                    .iter()
+                    .position(|&byte| byte == NULL_BYTE)
+                    .unwrap_or(name_bytes.len());
+                let name = str::from_utf8(&name_bytes[..name_end])
+                    .map_err(|_| Errno::Eilseq)?
+                    .to_string();
+
+                offset += raw_header.d_reclen as usize;
+
+                results.push(DirEnt::from_raw(raw_header, name));
             }
         }
 
-        // Trim extra raw dir ents
-        let len = raw_dir_ents
-            .iter()
-            .position(|der| *der == DirEntRaw::default())
-            .unwrap_or(raw_dir_ents.len());
-        raw_dir_ents.truncate(len);
-
-        // Convert to dir ents
-        raw_dir_ents
-            .into_iter()
-            .map(core::convert::TryInto::try_into)
-            .collect::<Result<Vec<DirEnt>, _>>()
+        Ok(results)
     }
 
     /// Gets the current cursor location within the [`File`].

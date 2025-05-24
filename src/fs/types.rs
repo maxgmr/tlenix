@@ -1,6 +1,8 @@
 //! Various types useful for filesystem functionality.
 
-use crate::{Errno, NixString, SyscallArg};
+use alloc::string::String;
+
+use crate::{Errno, SyscallArg};
 
 /// Bit mask for the file type bit field.
 const S_IFMT: u32 = 0o0_170_000;
@@ -171,49 +173,42 @@ pub enum DirEntType {
     /// A UNIX domain socket.
     Sock = 12,
 }
-impl TryFrom<u8> for DirEntType {
-    type Error = Errno;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+impl From<u8> for DirEntType {
+    fn from(value: u8) -> Self {
         match value {
-            0 => Ok(Self::Unknown),
-            1 => Ok(Self::Fifo),
-            2 => Ok(Self::Chr),
-            4 => Ok(Self::Dir),
-            6 => Ok(Self::Blk),
-            8 => Ok(Self::Reg),
-            10 => Ok(Self::Lnk),
-            12 => Ok(Self::Sock),
-            _ => Err(Errno::Einval),
+            1 => Self::Fifo,
+            2 => Self::Chr,
+            4 => Self::Dir,
+            6 => Self::Blk,
+            8 => Self::Reg,
+            10 => Self::Lnk,
+            12 => Self::Sock,
+            _ => Self::Unknown,
         }
     }
 }
 
 /// Information about an entry within a directory.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DirEnt {
-    /// The type of this directory entry.
-    pub dir_ent_type: DirEntType,
-    /// The name of this directory entry.
-    pub name: NixString,
-    /// The size of this directory entry.
-    pub size: usize,
-    /// The raw, C-style values of this directory entry.
-    pub dir_ent_raw: DirEntRaw,
+    /// The type.
+    pub d_type: DirEntType,
+    /// The name.
+    pub name: String,
+    /// The [inode](https://en.wikipedia.org/wiki/Inode).
+    pub inode: u64,
+    /// The raw, C-style header values.
+    pub header: DirEntRawHeader,
 }
-impl TryFrom<DirEntRaw> for DirEnt {
-    type Error = Errno;
-
-    fn try_from(value: DirEntRaw) -> Result<Self, Self::Error> {
-        let dir_ent_type = DirEntType::try_from(value.d_type)?;
-        #[allow(clippy::cast_sign_loss)]
-        let name = NixString::try_from(&value.d_name[..]).map_err(|_| Errno::Eilseq)?;
-        Ok(Self {
-            dir_ent_type,
+impl DirEnt {
+    /// Creates a new [`DirEnt`] from the given raw header and name.
+    pub fn from_raw(header: DirEntRawHeader, name: String) -> Self {
+        Self {
+            d_type: header.d_type.into(),
             name,
-            size: value.d_reclen as usize,
-            dir_ent_raw: value,
-        })
+            inode: header.d_ino,
+            header,
+        }
     }
 }
 
@@ -221,10 +216,11 @@ impl TryFrom<DirEntRaw> for DirEnt {
 ///
 /// Corresponds to the `linux_dirent64` datatype described in the
 /// [`getdents` manpage](https://man7.org/linux/man-pages/man2/getdents64.2.html).
-#[repr(C)]
+// It's CRUCIAL this layout is correct! If it isn't, File::dir_ents will be full of UB.
+#[repr(C, packed)]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[allow(clippy::struct_field_names)]
-pub struct DirEntRaw {
+pub struct DirEntRawHeader {
     /// 64-bit inode number.
     pub d_ino: u64,
     /// Filesystem-specific value with no specific meaning to userspace.
@@ -233,18 +229,5 @@ pub struct DirEntRaw {
     pub d_reclen: u16,
     /// The type of this directory entry.
     pub d_type: u8,
-    /// The name of the directory entry.
-    // Magic number: Filename length limit in ext4 is 255 bytes
-    pub d_name: [i8; 256],
-}
-impl Default for DirEntRaw {
-    fn default() -> Self {
-        Self {
-            d_ino: 0,
-            d_off: 0,
-            d_reclen: 0,
-            d_type: 0,
-            d_name: [0; 256],
-        }
-    }
+    // Followed by the directory entry name...
 }
