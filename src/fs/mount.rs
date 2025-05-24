@@ -10,12 +10,14 @@ use crate::{Errno, NixString, SyscallNum, syscall_result};
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[non_exhaustive]
 pub enum FilesystemType {
+    /// Empty filesystem type for binds.
+    #[default]
+    Bind,
     /// Process info.
     Proc,
     /// Kernel and device info.
     Sysfs,
     /// Temporary file storage in volatile memory.
-    #[default]
     Tmpfs,
     /// Automated device notes populated by the kernel.
     Devtmpfs,
@@ -45,6 +47,7 @@ pub enum FilesystemType {
 impl From<FilesystemType> for NixString {
     fn from(value: FilesystemType) -> Self {
         (match value {
+            FilesystemType::Bind => "",
             FilesystemType::Proc => "proc",
             FilesystemType::Sysfs => "sysfs",
             FilesystemType::Tmpfs => "tmpfs",
