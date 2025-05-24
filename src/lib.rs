@@ -29,7 +29,7 @@ mod nix_bytes;
 mod nix_str;
 mod print;
 pub mod process;
-pub mod syscall;
+mod syscall;
 pub mod system;
 mod test_framework;
 pub mod thread;
