@@ -49,6 +49,9 @@ pub use test_framework::custom_test_runner;
 /// The null byte, commonly used for terminating strings and defining null pointers.
 pub(crate) const NULL_BYTE: u8 = b'\0';
 
+/// The page size of x86 Linux. (4 KiB)
+pub(crate) const PAGE_SIZE: usize = 1 << 12;
+
 /// The two constants specified by the C standard denoting the success or failure of an process.
 #[repr(usize)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
