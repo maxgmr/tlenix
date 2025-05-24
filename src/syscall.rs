@@ -58,8 +58,14 @@ macro_rules! syscall_result {
 }
 
 /// Invoke a Linux syscall with 0 args.
+///
+/// # Safety
+///
+/// Linux system calls are inherently unsafe. The caller must review the documentation of the
+/// particular system call they are using to ensure they are using it safely.
 #[inline]
 #[doc(hidden)]
+#[allow(clippy::must_use_candidate)]
 pub unsafe fn __syscall_0(call_num: SyscallNum) -> usize {
     let mut ret: usize;
 
@@ -77,8 +83,14 @@ pub unsafe fn __syscall_0(call_num: SyscallNum) -> usize {
 }
 
 /// Invoke a Linux syscall with 1 arg.
+///
+/// # Safety
+///
+/// Linux system calls are inherently unsafe. The caller must review the documentation of the
+/// particular system call they are using to ensure they are using it safely.
 #[inline]
 #[doc(hidden)]
+#[allow(clippy::must_use_candidate)]
 pub unsafe fn __syscall_1<SA>(call_num: SyscallNum, arg0: SA) -> usize
 where
     SA: Into<SyscallArg>,
@@ -101,8 +113,14 @@ where
 }
 
 /// Invoke a Linux syscall with 2 args.
+///
+/// # Safety
+///
+/// Linux system calls are inherently unsafe. The caller must review the documentation of the
+/// particular system call they are using to ensure they are using it safely.
 #[inline]
 #[doc(hidden)]
+#[allow(clippy::must_use_candidate)]
 pub unsafe fn __syscall_2<SA, SB>(call_num: SyscallNum, arg0: SA, arg1: SB) -> usize
 where
     SA: Into<SyscallArg>,
@@ -128,8 +146,14 @@ where
 }
 
 /// Invoke a Linux syscall with 3 args.
+///
+/// # Safety
+///
+/// Linux system calls are inherently unsafe. The caller must review the documentation of the
+/// particular system call they are using to ensure they are using it safely.
 #[inline]
 #[doc(hidden)]
+#[allow(clippy::must_use_candidate)]
 pub unsafe fn __syscall_3<SA, SB, SC>(call_num: SyscallNum, arg0: SA, arg1: SB, arg2: SC) -> usize
 where
     SA: Into<SyscallArg>,
@@ -158,7 +182,14 @@ where
 }
 
 /// Invoke a Linux syscall with 4 args.
+///
+/// # Safety
+///
+/// Linux system calls are inherently unsafe. The caller must review the documentation of the
+/// particular system call they are using to ensure they are using it safely.
 #[inline]
+#[doc(hidden)]
+#[allow(clippy::must_use_candidate)]
 pub unsafe fn __syscall_4<SA, SB, SC, SD>(
     call_num: SyscallNum,
     arg0: SA,
@@ -196,7 +227,14 @@ where
 }
 
 /// Invoke a Linux syscall with 5 args.
+///
+/// # Safety
+///
+/// Linux system calls are inherently unsafe. The caller must review the documentation of the
+/// particular system call they are using to ensure they are using it safely.
 #[inline]
+#[doc(hidden)]
+#[allow(clippy::must_use_candidate)]
 pub unsafe fn __syscall_5<SA, SB, SC, SD, SE>(
     call_num: SyscallNum,
     arg0: SA,
@@ -238,7 +276,14 @@ where
 }
 
 /// Invoke a Linux syscall with 6 args.
+///
+/// # Safety
+///
+/// Linux system calls are inherently unsafe. The caller must review the documentation of the
+/// particular system call they are using to ensure they are using it safely.
 #[inline]
+#[doc(hidden)]
+#[allow(clippy::must_use_candidate)]
 pub unsafe fn __syscall_6<SA: Into<SyscallArg>>(
     call_num: SyscallNum,
     arg0: SA,
