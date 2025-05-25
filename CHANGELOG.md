@@ -14,8 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fun BSOD-style screen on panic.
 - More complete parsing of dirent and filestat return values; i.e., complete `DirEnt` and `FileStat` types.
 - Fix the nasty code duplication in the `execve` and `execute_process` functions.
+- Better tty font.
 
-## [0.1.0-alpha.9] - UNRELEASED
+## [0.1.0-alpha.9] - 2025-05-24
 
 ### Added
 
