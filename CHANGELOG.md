@@ -20,11 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Fully-bootable system on real hardware!
+- Fully-bootable USB-based system on real hardware!
 - Linux kernel custom configuration in `config/.config`.
 - GRUB custom configuration in `config/grub.cfg`.
 - Nicer terminal font.
 - Pretty logo on boot.
+- USB installation script.
 
 ## [0.1.0-alpha.9] - 2025-05-24
 
