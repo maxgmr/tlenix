@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fun BSOD-style screen on panic.
 - More complete parsing of dirent and filestat return values; i.e., complete `DirEnt` and `FileStat` types.
 - Fix the nasty code duplication in the `execve` and `execute_process` functions.
+- Nicer interface for ANSI colour escape codes (and coloured printing in general).
 
 ## [0.1.0-beta.1] - UNRELEASED
 
@@ -23,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Linux kernel custom configuration in `config/.config`.
 - GRUB custom configuration in `config/grub.cfg`.
 - Nicer terminal font.
+- Pretty logo on boot.
 
 ## [0.1.0-alpha.9] - 2025-05-24
 

@@ -15,10 +15,16 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
+use alloc::{string::ToString, vec::Vec};
 use core::panic::PanicInfo;
 
-use tlenix_core::{align_stack_pointer, println, process, thread};
+use tlenix_core::{align_stack_pointer, fs, println, process, thread};
+
+const BACKUP_LOGO: &str = r"  _____ _            _
+ |_   _| | ___ _ __ (_)_  __
+   | | | |/ _ \ '_ \| \ \/ /
+   | | | |  __/ | | | |>  <
+   |_| |_|\___|_| |_|_/_/\_\";
 
 const WELCOME_MSG: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION"));
 const TLENIX_PANIC_TITLE: &str = "tlenix";
@@ -27,6 +33,11 @@ const TLENIX_PANIC_TITLE: &str = "tlenix";
 const SHELL_PATH: &str = "target/x86_64-unknown-linux-none/debug/mash";
 #[cfg(not(debug_assertions))]
 const SHELL_PATH: &str = "/bin/mash";
+
+#[cfg(debug_assertions)]
+const LOGO_PATH: &str = "os_files/etc/initlogo";
+#[cfg(not(debug_assertions))]
+const LOGO_PATH: &str = "/etc/initlogo";
 
 /// Entry point.
 ///
@@ -83,7 +94,11 @@ pub extern "C" fn _start() -> ! {
 }
 
 fn welcome_msg() {
-    println!("{}", WELCOME_MSG);
+    let logo = match fs::OpenOptions::new().open(LOGO_PATH) {
+        Ok(file) => file.read_to_string().unwrap_or(BACKUP_LOGO.to_string()),
+        Err(_) => BACKUP_LOGO.to_string(),
+    };
+    println!("\u{001b}[33m{logo}\u{001b}[0m{WELCOME_MSG}");
 }
 
 #[panic_handler]
