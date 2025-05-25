@@ -22,7 +22,7 @@ use core::{panic::PanicInfo, time::Duration};
 use tlenix_core::{
     ExitStatus, align_stack_pointer, eprintln,
     fs::{self, MountFlags},
-    process, thread,
+    print, println, process, thread,
 };
 
 /// The name of the process for the purposes of the panic message.
@@ -42,6 +42,12 @@ const OLDROOT: &str = "/newroot/oldroot";
 
 /// Filesystem permissions for new directories.
 const DIR_MODE_755: usize = 0o755;
+
+/// Number of times to poll for `/dev/sda`.
+const NUM_POLL_LOOPS: usize = 50;
+
+/// Milliseconds to wait after each poll.
+const POLL_WAIT_MS: u64 = 100;
 
 /// Entry point.
 ///
@@ -69,6 +75,23 @@ pub extern "C" fn _start() -> ! {
     fs::mount("none", "/proc", Proc, fs::MountFlags::default()).unwrap();
     fs::mount("none", "/sys", Sysfs, fs::MountFlags::default()).unwrap();
     fs::mount("none", "/dev", Devtmpfs, fs::MountFlags::default()).unwrap();
+
+    // Poll a bit, waiting for `/dev/sda` to show up...
+    print!("Waiting for `/dev/sda`");
+    for _ in 0..NUM_POLL_LOOPS {
+        if fs::OpenOptions::new()
+            .path_only(true)
+            .open(EXT4_DEV)
+            .is_ok()
+        {
+            println!("\n`/dev/sda` found!");
+            break;
+        }
+        print!(".");
+
+        thread::sleep(&Duration::from_millis(POLL_WAIT_MS)).unwrap();
+    }
+    println!();
 
     // Mount persistent root filesystem
     fs::mkdir(NEWROOT, dir_mode).unwrap();
@@ -101,7 +124,7 @@ pub extern "C" fn _start() -> ! {
 
     // Start real init
     if process::execve(&[REAL_INIT], &[""; 0]).is_err() {
-        eprintln!("Failed to start '{REAL_INIT}'; exiting in 5 seconds");
+        eprintln!("Failed to start `{REAL_INIT}`; exiting in 5 seconds");
         thread::sleep(&Duration::from_secs(5)).unwrap();
         process::exit(ExitStatus::ExitFailure);
     }
