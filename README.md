@@ -55,26 +55,10 @@ You technically don't have to do this if it's a fresh kernel download, but it's 
 make mrproper
 ```
 
-### Kernel Configuration
-
-Unless you _really_ know what you're doing, simply setting all the default options is a safe choice:
+### Copy Over the Kernel Configuration
 
 ```bash
-make defconfig
-```
-
-You can add/remove features using the built-in config menu:
-
-```bash
-make menuconfig
-```
-
-### Tag Kernel Build
-
-Tag your kernel build with the `-tlenix` suffix just to keep track of it:
-
-```bash
-./scripts/config --file .config --set-str LOCALVERSION "-tlenix"
+cp <tlenix dir>/config/.config <kernel dir>/.config
 ```
 
 ### Build the Kernel
@@ -217,18 +201,31 @@ sudo grub-install \
 
 ### Configure GRUB
 
+Copy over the GRUB config:
+
+```bash
+sudo cp <tlenix dir>/config/grub.cfg /mnt/tlenix-usb/boot/grub/grub.cfg
+```
+
+Optionally, you can edit the configuration:
+
 ```bash
 sudoedit /mnt/tlenix-usb/boot/grub/grub.cfg
 ```
 
-Inside `/mnt/tlenix-usb/boot/grub/grub.cfg`:
+You can choose your own font. In the place of `TER16x32` in the config above, you can choose from any of the following:
 
-```
-menuentry "tlenix" {
-    linux /bzImage root=/dev/sdX2 init=/sbin/init
-    initrd /root.cpio.gz
-}
-```
+- `MINI_4x6`
+- `6x8`
+- `6x10`
+- `6x11`
+- `7x14`
+- `ACORN_8x8`
+- `PEARL_8x8`
+- `SUN8x16`
+- `10x18`
+- `SUN12x22`
+- `TER16x32`
 
 ## Set Up the Root Filesystem
 
@@ -245,18 +242,6 @@ sudo mkdir -pv /mnt/tlenix-usb/rootfs/{bin,dev,etc,home,lib,proc,sbin,sys,usr,va
 ```bash
 sudo mknod /mnt/tlenix-usb/rootfs/dev/console c 5 1
 sudo mknod /mnt/tlenix-usb/rootfs/dev/null c 1 3
-```
-
-### Add Kernel
-
-```bash
-sudo cp <path to bzImage> /mnt/tlenix-usb/boot/
-```
-
-### Add `initramfs`
-
-```bash
-sudo cp <path to root.cpio.gz> /mnt/tlenix-usb/boot/
 ```
 
 ### Add `init` Program
