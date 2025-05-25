@@ -101,3 +101,23 @@ pub fn rmdir<NS: Into<NixString>>(path: NS) -> Result<(), Errno> {
     }
     Ok(())
 }
+
+/// Changes the root directory of the current process to the given path.
+///
+/// This directory is inherited by all children of this process.
+///
+/// Internally uses the [`chroot`](https://man7.org/linux/man-pages/man2/chroot.2.html) Linux
+/// syscall.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s from the internal call to `chroot`.
+pub fn chroot<NS: Into<NixString>>(path: NS) -> Result<(), Errno> {
+    let path_ns: NixString = path.into();
+
+    // SAFETY: The NixString type guarantees null-terminated UTF-8.
+    unsafe {
+        syscall_result!(SyscallNum::Chroot, path_ns.as_ptr())?;
+    }
+    Ok(())
+}

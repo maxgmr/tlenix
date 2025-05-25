@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Execute a program (`execve`).
 - Directly set the mode of a file when creating one (`OpenOptions::set_mode`).
 - Read a file directly into a `String` (`File::read_to_string`).
+- Change process root directory (`chroot`).
 
 ### Changed
 
