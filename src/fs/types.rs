@@ -89,7 +89,7 @@ impl TryFrom<u32> for FileType {
     }
 }
 
-/// Information about a given [`crate::fs::File`]. Calculated from a [`FileStatRaw`].
+/// Information about a given [`crate::fs::File`].
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FileStat {
     /// The raw file stats.
