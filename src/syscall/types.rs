@@ -1,7 +1,6 @@
 use crate::{
-    ExitStatus, NixBytes,
+    ExitStatus,
     fs::{FileDescriptor, FileStatRaw},
-    nix_str::NixString,
 };
 
 /// A syscall argument. A newtype wrapper around the [`core::usize`] type.
@@ -10,16 +9,6 @@ pub struct SyscallArg(usize);
 impl From<SyscallArg> for usize {
     fn from(value: SyscallArg) -> Self {
         value.0
-    }
-}
-impl From<NixString> for SyscallArg {
-    fn from(value: NixString) -> Self {
-        Self(value.as_ptr() as usize)
-    }
-}
-impl From<NixBytes> for SyscallArg {
-    fn from(value: NixBytes) -> Self {
-        Self(value.as_ptr() as usize)
     }
 }
 impl From<FileDescriptor> for SyscallArg {

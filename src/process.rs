@@ -3,29 +3,85 @@
 use alloc::vec::Vec;
 use core::ptr;
 
-use crate::{
-    Errno, ExitStatus, SyscallNum,
-    nix_bytes::{NixBytes, vec_into_nix_bytes},
-    syscall, syscall_result,
-};
+use crate::{Errno, ExitStatus, NixBytes, SyscallNum, syscall, syscall_result, vec_into_nix_bytes};
 
 const WUNTRACED: usize = 2;
 
-/// Create a child process running the executable at the given filepath. The parent process which
-/// calls this function waits until the child process is exited or killed.
+/// Executes the program referred to by the given file name, causing the current process to be
+/// replaced by the new one.
+///
+/// The name of the program is the first element of `argv`, while the other elements of `argv` are
+/// the arguments sent to the program.
+///
+/// `envp` is a list of environment variables, conventionally of the form `key=value`.
+///
+/// This function does not return on success.
+///
+/// Internally, this function uses the
+/// [`execve`](https://man7.org/linux/man-pages/man2/execve.2.html) Linux syscall.
 ///
 /// # Errors
 ///
-/// This function propagates any [`Errno`] returned by the
-/// [fork](https://www.man7.org/linux/man-pages/man2/fork.2.html) Linux syscall or the
-/// [execve](https://man7.org/linux/man-pages/man2/execve.2.html) Linux syscall.
+/// This function propagates any [`Errno`]s returned by the underlying call to [`execve`].
+pub fn execve<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
+    argv: &[NA],
+    envp: &[NB],
+) -> Result<!, Errno> {
+    // ARGV
+    // Convert to syscall-compatible strings
+    let argv_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(argv.to_vec());
+    // Get an array of pointers to those strings
+    let mut argv_pointers: Vec<*const u8> = argv_nix_strings.iter().map(NixBytes::as_ptr).collect();
+    // Null-terminate the array
+    argv_pointers.push(ptr::null());
+    // Get pointer to start of argv array
+    let argv_pointer = argv_pointers.as_ptr();
+
+    // ENVP
+    // Convert to syscall-compatible strings
+    let envp_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(envp.to_vec());
+    // Get an array of pointers to those strings
+    let mut envp_pointers: Vec<*const u8> = envp_nix_strings.iter().map(NixBytes::as_ptr).collect();
+    // Null-terminate the array
+    envp_pointers.push(ptr::null());
+    // Get pointer to start of envp array
+    let envp_pointer = envp_pointers.as_ptr();
+
+    // SAFETY: On success, `execve` does not return, so the pointers only need to be valid
+    // at the moment of the syscall (which they are). Potential UB on failure is caught gracefully.
+    // The `NixBytes` type guarantees that all strings are null-terminated. Both pointer arrays are
+    // null-terminated in the above code.
+    unsafe {
+        syscall_result!(
+            SyscallNum::Execve,
+            argv_pointers[0],
+            argv_pointer,
+            envp_pointer
+        )?;
+    }
+    unreachable!("execve doesn't return on success");
+}
+
+/// Creates a child process running the executable at the given file name. The parent process which
+/// calls this function waits until the child process is exited or killed.
+///
+/// The name of the program is the first element of `argv`, while the other elements of `argv` are
+/// the arguments sent to the program.
+///
+/// `envp` is a list of environment variables, conventionally of the form `key=value`.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s returned by the underlying calls to
+/// [`fork`](https://www.man7.org/linux/man-pages/man2/fork.2.html) and
+/// [`execve`](https://man7.org/linux/man-pages/man2/execve.2.html).
 ///
 /// # Panics
 ///
 /// This function panics if the child process attempts to call `execve` and it fails.
-pub fn execute_process<T: Into<NixBytes> + Clone, U: Into<NixBytes> + Clone>(
-    argv: Vec<T>,
-    envp: Vec<U>,
+pub fn execute_process<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
+    argv: Vec<NA>,
+    envp: Vec<NB>,
 ) -> Result<(), Errno> {
     // Return ENOENT if no path is given
     if argv.is_empty() {

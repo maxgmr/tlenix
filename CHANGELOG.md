@@ -12,6 +12,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mash` prompt should react to exit code of last-executed process.
 - `mash` ability to execute programs.
 - Fun BSOD-style screen on panic.
+- More complete parsing of dirent and filestat return values; i.e., complete `DirEnt` and `FileStat` types.
+- Fix the nasty code duplication in the `execve` and `execute_process` functions.
+- Better tty font.
+
+## [0.1.0-alpha.9] - 2025-05-24
+
+### Added
+
+- `initramfs_init`, an `init` program specifically for the `initramfs`.
+- Create and remove directories (`mkdir`, `rmdir`).
+- Delete files (`rm`).
+- Get entries of a directory (`File::dir_ents`).
+- Change the root mount (`pivot_root`).
+- Execute a program (`execve`).
+- Directly set the mode of a file when creating one (`OpenOptions::set_mode`).
+- Read a file directly into a `String` (`File::read_to_string`).
+- Change process root directory (`chroot`).
+
+### Changed
+
+- Restricted raw syscalls to crate only.
+- Increased heap size from 16 KiB to 64 KiB.
 
 ## [0.1.0-alpha.8.1] - 2025-05-22
 

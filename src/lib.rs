@@ -43,10 +43,14 @@ pub use nix_bytes::{NixBytes, vec_into_nix_bytes};
 pub use nix_str::{NixString, vec_into_nix_strings};
 pub use print::{__print_err, __print_str};
 pub use syscall::{Errno, SyscallArg, SyscallNum};
+pub(crate) use syscall::{syscall, syscall_result};
 pub use test_framework::custom_test_runner;
 
 /// The null byte, commonly used for terminating strings and defining null pointers.
 pub(crate) const NULL_BYTE: u8 = b'\0';
+
+/// The page size of x86 Linux. (4 KiB)
+pub(crate) const PAGE_SIZE: usize = 1 << 12;
 
 /// The two constants specified by the C standard denoting the success or failure of an process.
 #[repr(usize)]

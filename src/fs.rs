@@ -9,13 +9,15 @@ mod permissions;
 mod types;
 
 // RE-EXPORTS
-pub use dirs::{change_dir, get_cwd};
-pub use file::File;
-pub use mount::{FilesystemType, MountFlags, UmountFlags, mount, umount};
+pub use dirs::{change_dir, chroot, get_cwd, mkdir, rmdir};
+pub use file::{File, rm};
+pub use mount::{FilesystemType, MountFlags, UmountFlags, mount, pivot_root, umount};
 pub use open_flags::OpenFlags;
 pub use open_options::OpenOptions;
 pub use permissions::FilePermissions;
-pub use types::{FileDescriptor, FileStat, FileStatRaw, FileType, LseekWhence};
+pub use types::{DirEnt, FileDescriptor, FileStat, FileType, LseekWhence};
+
+pub(crate) use types::FileStatRaw;
 
 #[cfg(test)]
 mod tests;

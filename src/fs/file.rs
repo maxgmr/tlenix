@@ -1,10 +1,24 @@
 //! This module is responsible for the [`File`] type and all associated file operations.
 
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
+use core::mem::size_of;
+
 use crate::{
-    Errno, SyscallNum,
-    fs::{FileDescriptor, FileStat, FileStatRaw, LseekWhence, OpenOptions},
+    Errno, NULL_BYTE, NixString, PAGE_SIZE, SyscallNum,
+    fs::{
+        DirEnt, FileDescriptor, FileStat, LseekWhence, OpenOptions, types::DirEntRawHeader,
+        types::FileStatRaw,
+    },
     syscall, syscall_result,
 };
+
+use super::types::DirEntType;
+
+/// Buffer for reading directory entries. Uses page size for better performance.
+const DIR_ENT_BUF_SIZE: usize = PAGE_SIZE;
 
 /// An object providing access to an open file on the filesystem.
 #[derive(Clone, Debug, PartialEq, Hash)]
@@ -70,6 +84,50 @@ impl File {
                 buffer.len()
             )
         }
+    }
+
+    /// Reads the entire contents of this file into a [`String`].
+    ///
+    /// Convenience function. Uses [`Self::read`] internally.
+    ///
+    /// This function tries to keep the file cursor at the same spot it was before this function was called.
+    ///
+    /// # Errors
+    ///
+    /// This function will return [`Errno::Eilseq`] if the bytes of the file are not valid UTF-8.
+    ///
+    /// This function will propagate any [`Errno`]s from the internal call to [`Self::read`].
+    pub fn read_to_string(&self) -> Result<String, Errno> {
+        let mut buffer = Vec::new();
+        // Chunks are page size for better performance
+        let mut chunk = [0_u8; PAGE_SIZE];
+
+        let orig_cursor = self.cursor()?;
+
+        loop {
+            match self.read(&mut chunk) {
+                // EOF
+                Ok(0) => break,
+                // Got more bytes!
+                Ok(num_bytes_read) => {
+                    buffer.extend_from_slice(&chunk[..num_bytes_read]);
+                }
+                // Error
+                Err(errno) => {
+                    // We have to allow it to be unused, this is simply a last-ditch effort to
+                    // restore the cursor after already failing.
+                    #[allow(clippy::cast_possible_wrap, unused_must_use)]
+                    self.set_cursor(orig_cursor as i64);
+                    return Err(errno);
+                }
+            }
+        }
+
+        // Restore original cursor location
+        #[allow(clippy::cast_possible_wrap)]
+        self.set_cursor(orig_cursor as i64)?;
+
+        String::from_utf8(buffer).map_err(|_| Errno::Eilseq)
     }
 
     /// Reads a single byte from the file.
@@ -144,6 +202,128 @@ impl File {
         // matches the single byte being written. Any issues with user-given arguments are handled
         // gracefully by the underlying syscall.
         unsafe { syscall_result!(SyscallNum::Write, self.file_descriptor, &raw const byte, 1) }
+    }
+
+    /// Gets the entries of this directory.
+    ///
+    /// Naturally, this function is only usable if this [`File`] is a directory. Otherwise,
+    /// [`Errno::Enotdir`] will be returned.
+    ///
+    /// Once this function completes operation, it will return the file cursor back to the point it
+    /// was when this function was called.
+    ///
+    /// Uses the [`getdents64`](https://www.man7.org/linux/man-pages/man2/getdents.2.html) Linux
+    /// syscall internally.
+    ///
+    /// # Errors
+    ///
+    /// This function returns [`Errno::Enotdir`] if this [`File`] is not a directory.
+    ///
+    /// This function propagates any [`Errno`]s returned by the underlying `getdents64`,
+    /// [`File::cursor`], or [`File::set_cursor`] calls.
+    pub fn dir_ents(&self) -> Result<Vec<DirEnt>, Errno> {
+        /// Offset of the directory entry name from the start of its bytes.
+        const NAME_OFFSET: usize = size_of::<DirEntRawHeader>();
+
+        // Since it's just being passed directly into `self.set_cursor` again, we don't care how
+        // the bytes happen to be interpreted by Rust.
+        #[allow(clippy::cast_possible_wrap)]
+        let orig_cursor = self.cursor()? as i64;
+
+        let mut results: Vec<DirEnt> = Vec::new();
+        let mut buf = [0_u8; DIR_ENT_BUF_SIZE];
+
+        // Keep reading entries until there's nothing left to read
+        loop {
+            // SAFETY: The file descriptor is tied to this struct. The length of the buffer is
+            // programmatically-determined and guaranteed to match the actual buffer length.
+            let bytes_read = match unsafe {
+                syscall_result!(
+                    SyscallNum::Getdents64,
+                    self.file_descriptor,
+                    buf.as_mut_ptr(),
+                    buf.len()
+                )
+            } {
+                Ok(bytes_read) => bytes_read,
+                Err(errno) => {
+                    // Attempt to restore the original cursor before returning the error.
+                    // We're suppressing this warning here because we care more about returning a
+                    // helpful error message. If the cursor set fails _too_, then it's likely
+                    // caused by the original error in the first place, so we don't care as much
+                    // about returning the set_cursor error.
+                    #[allow(unused_must_use)]
+                    self.set_cursor(orig_cursor);
+                    return Err(errno);
+                }
+            };
+
+            // If `getdents64` has nothing left to give, we're done!
+            if bytes_read == 0 {
+                break;
+            }
+
+            // Keep reading raw dir ent headers (and their name strings) until we reach the end of
+            // the returned bytes
+            let mut offset = 0;
+            while offset < bytes_read {
+                // SAFETY: `getdents64` guarantees data won't be written past the end of `buf`. The
+                // DirEntRawHeader layout matches the bytes returned by `getdents64`.
+                // read_unaligned() handles cases where the bytes could be unaligned.
+                let raw_header: DirEntRawHeader = unsafe {
+                    buf.as_ptr()
+                        .add(offset)
+                        .cast::<DirEntRawHeader>()
+                        .read_unaligned()
+                };
+
+                // Slice for this particular directory entry.
+                let entry_slice = &buf[offset..(offset + raw_header.d_reclen as usize)];
+                let name_bytes = &entry_slice[NAME_OFFSET..];
+                let name_end = name_bytes
+                    .iter()
+                    .position(|&byte| byte == NULL_BYTE)
+                    .unwrap_or(name_bytes.len());
+                let name = str::from_utf8(&name_bytes[..name_end])
+                    .map_err(|_| Errno::Eilseq)?
+                    .to_string();
+
+                offset += raw_header.d_reclen as usize;
+
+                results.push(DirEnt::from_raw(raw_header, name));
+            }
+        }
+
+        // Reset the cursor to its original state.
+        self.set_cursor(orig_cursor)?;
+
+        Ok(results)
+    }
+
+    /// Checks whether or not this [`File`] is an empty directory.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an [`Errno::Enotdir`] if this [`File`] is not a directory at all.
+    ///
+    /// This function will propagate any [`Errno`]s returned by the underlying call to
+    /// [`File::dir_ents`].
+    pub fn is_dir_empty(&self) -> Result<bool, Errno> {
+        let dir_ents = self.dir_ents()?;
+
+        if dir_ents.len() > 2 {
+            return Ok(false);
+        }
+
+        // An empty dir can only contain entries for itself and its parent.
+        for dent in dir_ents {
+            match (dent.name.as_str(), dent.d_type) {
+                ("." | "..", DirEntType::Dir) => {}
+                _ => return Ok(false),
+            }
+        }
+
+        Ok(true)
     }
 
     /// Gets the current cursor location within the [`File`].
@@ -222,6 +402,28 @@ impl Drop for File {
             syscall!(SyscallNum::Close, self.file_descriptor);
         }
     }
+}
+
+/// Deletes the file at the given path from the filesystem.
+///
+/// If other processes still have access to the file, it will remain in existence until the last
+/// file descriptor referring to it is closed.
+///
+/// Internally uses the [`unlink`](https://www.man7.org/linux/man-pages/man2/unlink.2.html) Linux
+/// syscall.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s returned by the underlying `unlink` syscall.
+pub fn rm<NS: Into<NixString>>(path: NS) -> Result<(), Errno> {
+    let ns_path: NixString = path.into();
+
+    // SAFETY: The only argument is guaranteed to be null-terminated, valid UTF-8 because of its
+    // NixString type.
+    unsafe {
+        syscall_result!(SyscallNum::Unlink, ns_path.as_ptr())?;
+    }
+    Ok(())
 }
 
 // This is needed to get access to the private file_descriptor field.

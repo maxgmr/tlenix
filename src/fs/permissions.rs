@@ -5,7 +5,7 @@ use core::default::Default;
 bitflags::bitflags! {
     /// The attributes of a given file. See
     /// [here](https://www.man7.org/linux/man-pages/man3/mode_t.3type.html) for more details.
-    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct FilePermissions: usize {
         /// set-user-ID: Set process effective user ID on `execve(2)`.
         const S_ISUID = 0o04_000;
@@ -36,9 +36,14 @@ bitflags::bitflags! {
 
 impl Default for FilePermissions {
     fn default() -> Self {
-        // Default = 0644
+        // Default = 0o644
         let mut result = Self::empty();
         result.insert(Self::S_IRUSR | Self::S_IWUSR | Self::S_IRGRP | Self::S_IROTH);
         result
+    }
+}
+impl From<usize> for FilePermissions {
+    fn from(value: usize) -> Self {
+        Self::from_bits_truncate(value)
     }
 }

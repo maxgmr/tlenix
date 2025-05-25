@@ -2,14 +2,17 @@
 
 use core::ptr;
 
-use crate::{Errno, SyscallNum, nix_str::NixString, syscall_result};
+use crate::{Errno, NixString, SyscallNum, syscall_result};
 
 /// A list of possible Linux filesystem types.
 ///
 /// This list is not exhaustive and may grow in the future.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[non_exhaustive]
 pub enum FilesystemType {
+    /// Empty filesystem type for binds.
+    #[default]
+    Bind,
     /// Process info.
     Proc,
     /// Kernel and device info.
@@ -44,6 +47,7 @@ pub enum FilesystemType {
 impl From<FilesystemType> for NixString {
     fn from(value: FilesystemType) -> Self {
         (match value {
+            FilesystemType::Bind => "",
             FilesystemType::Proc => "proc",
             FilesystemType::Sysfs => "sysfs",
             FilesystemType::Tmpfs => "tmpfs",
@@ -166,9 +170,9 @@ pub fn mount<NA: Into<NixString>, NB: Into<NixString>>(
     unsafe {
         syscall_result!(
             SyscallNum::Mount,
-            source_ns,
-            target_ns,
-            fs_ns,
+            source_ns.as_ptr(),
+            target_ns.as_ptr(),
+            fs_ns.as_ptr(),
             mount_flags.bits(),
             ptr::null::<usize>()
         )?;
@@ -192,7 +196,37 @@ pub fn umount<NS: Into<NixString>>(target: NS, umount_flags: UmountFlags) -> Res
     // null-termination and valid UTF-8. UmountFlags restricts the possible values which can be
     // used for umount2 flags.
     unsafe {
-        syscall_result!(SyscallNum::Umount2, target_ns, umount_flags.bits())?;
+        syscall_result!(SyscallNum::Umount2, target_ns.as_ptr(), umount_flags.bits())?;
+    }
+
+    Ok(())
+}
+
+/// Changes the root mount in the root namespace of the calling process.
+///
+/// This function moves the _current_ root mount to the given `put_old` directory and makes the
+/// given `new_root` directory the new root mount.
+///
+/// Internally uses the [`pivot_root`](https://man7.org/linux/man-pages/man2/pivot_root.2.html)
+/// Linux syscall.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s returned by the underlying call to `pivot_root`.
+pub fn pivot_root<NA: Into<NixString>, NB: Into<NixString>>(
+    new_root: NA,
+    put_old: NB,
+) -> Result<(), Errno> {
+    let new_root_ns: NixString = new_root.into();
+    let put_old_ns: NixString = put_old.into();
+
+    // SAFETY: The NixString types guarantee that both arguments are null-terminated valid UTF-8.
+    unsafe {
+        syscall_result!(
+            SyscallNum::PivotRoot,
+            new_root_ns.as_ptr(),
+            put_old_ns.as_ptr()
+        )?;
     }
 
     Ok(())

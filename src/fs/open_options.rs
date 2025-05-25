@@ -3,9 +3,8 @@
 use core::default::Default;
 
 use crate::{
-    Errno, SyscallNum,
+    Errno, NixString, SyscallNum,
     fs::{File, FilePermissions, OpenFlags},
-    nix_str::NixString,
     syscall_result,
 };
 
@@ -131,6 +130,13 @@ impl OpenOptions {
         self.open_flags.remove(OpenFlags::O_WRONLY);
         self.open_flags.insert(OpenFlags::O_RDWR);
         self.make_flags_valid(OpenFlags::O_RDWR, true);
+        self
+    }
+
+    /// Sets the file mode to the given [`FilePermissions`]. Will overwrite any existing file
+    /// permissions.
+    pub fn set_mode<FP: Into<FilePermissions>>(&mut self, mode: FP) -> &mut Self {
+        self.file_permissions = mode.into();
         self
     }
 
@@ -444,5 +450,44 @@ mod tests {
 
         oo.read_only();
         assert_eq!(oo.open_flags, OpenFlags::O_RDONLY);
+    }
+
+    #[test_case]
+    fn set_mode_fp() {
+        let mut oo = OpenOptions::new();
+        assert_eq!(oo.file_permissions, FilePermissions::default());
+
+        oo.set_mode(FilePermissions::all());
+        assert_eq!(oo.file_permissions, FilePermissions::all());
+
+        oo.set_mode(FilePermissions::empty());
+        assert_eq!(oo.file_permissions, FilePermissions::empty());
+    }
+
+    #[test_case]
+    fn set_mode_usize() {
+        let mut oo = OpenOptions::new();
+        assert_eq!(oo.file_permissions, FilePermissions::default());
+
+        oo.set_mode(0o700);
+        assert_eq!(
+            oo.file_permissions,
+            FilePermissions::S_IRUSR | FilePermissions::S_IWUSR | FilePermissions::S_IXUSR
+        );
+
+        oo.set_mode(0o007);
+        assert_eq!(
+            oo.file_permissions,
+            FilePermissions::S_IROTH | FilePermissions::S_IWOTH | FilePermissions::S_IXOTH
+        );
+    }
+
+    #[test_case]
+    fn set_mode_mask() {
+        let mut oo = OpenOptions::new();
+        assert_eq!(oo.file_permissions, FilePermissions::default());
+
+        oo.set_mode(0xffff_ffff_ffff_ffff);
+        assert_eq!(oo.file_permissions, FilePermissions::all());
     }
 }
