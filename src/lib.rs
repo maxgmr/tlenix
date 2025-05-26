@@ -23,6 +23,7 @@ compile_error!("This crate only functions on x86_64 linux targets.");
 extern crate alloc;
 
 mod allocator;
+mod args;
 mod console;
 pub mod fs;
 pub mod ipc;
@@ -39,6 +40,7 @@ pub mod thread;
 pub(crate) mod test_utils;
 
 // RE-EXPORTS
+pub use args::{Args, EnvVar, parse_argv_envp};
 pub use console::Console;
 pub use nix_bytes::{NixBytes, vec_into_nix_bytes};
 pub use nix_str::{NixString, vec_into_nix_strings};
@@ -52,6 +54,15 @@ pub(crate) const NULL_BYTE: u8 = b'\0';
 
 /// The page size of x86 Linux. (4 KiB)
 pub(crate) const PAGE_SIZE: usize = 1 << 12;
+
+/// The length limit of an individual command-line argument.
+pub const ARG_LEN_LIM: usize = PAGE_SIZE;
+
+/// The length limit of an individual environment variable.
+pub const ENV_LEN_LIM: usize = PAGE_SIZE;
+
+/// The limit on the total size of `argv` and `envp` strings.
+pub const ARG_ENV_LIM: usize = PAGE_SIZE * 32;
 
 /// Aligns the stack pointer. Intended for use right at the beginning of execution.
 ///
