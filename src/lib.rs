@@ -25,6 +25,7 @@ extern crate alloc;
 mod allocator;
 mod console;
 pub mod fs;
+pub mod ipc;
 mod nix_bytes;
 mod nix_str;
 mod print;

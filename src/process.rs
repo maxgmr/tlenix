@@ -3,9 +3,14 @@
 use alloc::vec::Vec;
 use core::ptr;
 
-use crate::{Errno, ExitStatus, NixBytes, SyscallNum, syscall, syscall_result, vec_into_nix_bytes};
+use crate::{
+    Errno, ExitStatus, NixBytes, SyscallNum, ipc::SigInfoRaw, syscall, syscall_result,
+    vec_into_nix_bytes,
+};
 
-const WUNTRACED: usize = 2;
+mod types;
+
+pub use types::{WaitIdType, WaitInfo, WaitOptions};
 
 /// Executes the program referred to by the given file name, causing the current process to be
 /// replaced by the new one.
@@ -54,7 +59,7 @@ pub fn execve<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
     unsafe {
         syscall_result!(
             SyscallNum::Execve,
-            argv_pointers[0],
+            argv_nix_strings[0].as_ptr(),
             argv_pointer,
             envp_pointer
         )?;
@@ -75,10 +80,6 @@ pub fn execve<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
 /// This function propagates any [`Errno`]s returned by the underlying calls to
 /// [`fork`](https://www.man7.org/linux/man-pages/man2/fork.2.html) and
 /// [`execve`](https://man7.org/linux/man-pages/man2/execve.2.html).
-///
-/// # Panics
-///
-/// This function panics if the child process attempts to call `execve` and it fails.
 pub fn execute_process<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
     argv: Vec<NA>,
     envp: Vec<NB>,
@@ -115,32 +116,23 @@ pub fn execute_process<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
             // SAFETY: On success, `execve` does not return, so the pointers only need to be valid
             // at the moment of the syscall (which they are). Furthermore, the child process
             // immediately exits if `execve` fails, avoiding UB there.
-            unsafe {
-                if syscall_result!(
+            if unsafe {
+                syscall_result!(
                     SyscallNum::Execve,
-                    argv_pointers[0],
+                    argv_nix_strings[0].as_ptr(),
                     argv_pointer,
                     envp_pointer
                 )
-                .is_err()
-                {
-                    exit(ExitStatus::ExitFailure);
-                }
+            }
+            .is_err()
+            {
+                exit(ExitStatus::ExitFailure);
             }
             unreachable!("execve doesn't return on success");
         }
         child_pid => {
             // Parent process; wait for child to finish
-            let mut status: usize = 0;
-            unsafe {
-                syscall_result!(
-                    SyscallNum::Wait4,
-                    child_pid,
-                    &raw mut status as usize,
-                    WUNTRACED,
-                    0
-                )?;
-            }
+            let wait_info = wait(child_pid, WaitIdType::Pid, WaitOptions::WEXITED)?;
 
             // Done waiting; continue
             Ok(())
@@ -148,7 +140,34 @@ pub fn execute_process<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
     }
 }
 
-/// Cause normal process termination. Wrapper around the
+/// Waits for the given process (or group of processes) to change state.
+///
+/// Internally uses the [`waitid`](https://man7.org/linux/man-pages/man2/waitid.2.html) Linux
+/// system call.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s returned by the underlying call to `waitid`.
+pub fn wait(id: usize, id_type: WaitIdType, wait_options: WaitOptions) -> Result<WaitInfo, Errno> {
+    let mut sig_info_raw = SigInfoRaw::default();
+
+    // SAFETY: WaitIdType restricts the given values to valid ones. SigInfoRaw matches the layout
+    // of `siginfo_t`. WaitOptions restricts the given values to valid ones. A null pointer is given for the last argument.
+    unsafe {
+        syscall_result!(
+            SyscallNum::Waitid,
+            id_type as u32,
+            id,
+            &raw mut sig_info_raw,
+            wait_options.bits(),
+            core::ptr::null::<u8>()
+        )?;
+    }
+
+    WaitInfo::try_from(sig_info_raw)
+}
+
+/// Causes normal process termination. Wrapper around the
 /// [exit](https://www.man7.org/linux/man-pages/man3/exit.3.html) Linux syscall.
 ///
 /// Returns the least significant byte of the given `exit_status` to the parent process.
