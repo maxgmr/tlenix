@@ -21,7 +21,7 @@ use super::types::DirEntType;
 const DIR_ENT_BUF_SIZE: usize = PAGE_SIZE;
 
 /// An object providing access to an open file on the filesystem.
-#[derive(Clone, Debug, PartialEq, Hash)]
+#[derive(Debug, PartialEq, Hash)]
 pub struct File {
     #[allow(clippy::struct_field_names)]
     file_descriptor: FileDescriptor,
@@ -174,14 +174,15 @@ impl File {
         let mut total_bytes_written = 0;
 
         while total_bytes_written < buffer.len() {
+            let remaining_bytes = &buffer[total_bytes_written..];
             // SAFETY: The arguments are correct. The raw pointer to the buffer is dropped
             // before the buffer goes out of scope. The buffer length is guaranteed to be correct.
             total_bytes_written += unsafe {
                 syscall_result!(
                     SyscallNum::Write,
                     self.file_descriptor,
-                    buffer.as_ptr(),
-                    buffer.len()
+                    remaining_bytes.as_ptr(),
+                    remaining_bytes.len()
                 )?
             };
         }
