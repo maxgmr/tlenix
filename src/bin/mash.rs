@@ -36,6 +36,10 @@ const CWD_NAME_BACKUP: &str = "?";
 // Maximum line size.
 const LINE_MAX: usize = 1 << 12;
 
+// Home directory.
+#[cfg(debug_assertions)]
+const HOME_DIR: &str = "/";
+#[cfg(not(debug_assertions))]
 const HOME_DIR: &str = "/root";
 
 /// Entry point.
@@ -59,7 +63,7 @@ pub extern "C" fn _start() -> ! {
     loop {
         print_prompt();
         let line = console.read_line(LINE_MAX).unwrap();
-        let line_string = String::from_utf8_lossy(&line);
+        let line_string = String::from_utf8(line).unwrap();
         let argv: Vec<&str> = line_string.split_whitespace().collect();
 
         // Do nothing if nothing was typed
@@ -99,10 +103,17 @@ pub extern "C" fn _start() -> ! {
                         eprintln!("Process exited with failure code {code}.");
                     }
                 }
+                Ok(ExitStatus::Terminated(signo)) => {
+                    eprintln!("Process terminated: {signo}");
+                }
                 Err(e) => {
                     eprintln!("{e}");
                 }
-                _ => {}
+                #[allow(unused_variables)]
+                other => {
+                    #[cfg(debug_assertions)]
+                    eprintln!("{other:?}");
+                }
             },
         }
     }
