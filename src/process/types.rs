@@ -7,6 +7,44 @@ use crate::{
     ipc::{SigInfoRaw, Signo},
 };
 
+/// All the possible values which can be returned by a process.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ExitStatus {
+    /// The process exited successfully. Corresponds to '0' in C.
+    ExitSuccess,
+    /// The process encountered some failure and did not exit successfully.
+    ExitFailure(i32),
+    /// The process was terminated by a signal.
+    Terminated(Signo),
+    /// The process was stopped by a signal.
+    Stopped(Signo),
+}
+impl From<ExitStatus> for i32 {
+    fn from(value: ExitStatus) -> Self {
+        #[allow(clippy::enum_glob_use)]
+        use ExitStatus::*;
+
+        match value {
+            ExitSuccess => 0,
+            ExitFailure(val) => val,
+            Terminated(signo) | Stopped(signo) => signo as i32,
+        }
+    }
+}
+impl core::fmt::Display for ExitStatus {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        #[allow(clippy::enum_glob_use)]
+        use ExitStatus::*;
+
+        match self {
+            ExitSuccess => write!(f, "exited successfully"),
+            ExitFailure(code) => write!(f, "exited with code {code}"),
+            Terminated(signo) => write!(f, "killed by signal {signo}"),
+            Stopped(signo) => write!(f, "stopped by signal {signo}"),
+        }
+    }
+}
+
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, TryFromPrimitive)]
 pub enum ChildCode {
@@ -52,6 +90,20 @@ impl WaitInfo {
         match self.child_code {
             Killed | Dumped | Stopped | Continued => self.status.try_into().ok(),
             _ => None,
+        }
+    }
+}
+impl TryFrom<WaitInfo> for ExitStatus {
+    type Error = Errno;
+    fn try_from(value: WaitInfo) -> Result<Self, Self::Error> {
+        #[allow(clippy::enum_glob_use)]
+        use ChildCode::*;
+
+        match (value.child_code, value.status) {
+            (Killed | Dumped, s) => Ok(Self::Terminated(s.try_into().map_err(|_| Errno::Einval)?)),
+            (Stopped, s) => Ok(Self::Stopped(s.try_into().map_err(|_| Errno::Einval)?)),
+            (_, 0) => Ok(Self::ExitSuccess),
+            (_, s) => Ok(Self::ExitFailure(s)),
         }
     }
 }

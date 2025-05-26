@@ -51,7 +51,7 @@ pub extern "C" fn _start() -> ! {
 
     // Don't do anything if we're running tests
     #[cfg(test)]
-    tlenix_core::process::exit(tlenix_core::ExitStatus::ExitSuccess);
+    tlenix_core::process::exit(process::ExitStatus::ExitSuccess);
 
     // HACK: This stops the compiler from complaining when building the test/debug target
     #[allow(unreachable_code)]

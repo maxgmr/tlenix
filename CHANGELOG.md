@@ -21,11 +21,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Fully-bootable USB-based system on real hardware!
+- `mash` can now execute programs.
 - Linux kernel custom configuration in `config/.config`.
 - GRUB custom configuration in `config/grub.cfg`.
 - Nicer terminal font.
 - Pretty logo on boot.
-- USB installation script.
+- USB installation script (`usb-install`).
+
+### Changed
+
+- Overhauled `ExitStatus` to make it more expressive.
+
+### Removed
+
+- `mk-release-bins` script. Superseded by `usb-install`.
 
 ## [0.1.0-alpha.9] - 2025-05-24
 

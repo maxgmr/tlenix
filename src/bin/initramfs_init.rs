@@ -20,9 +20,11 @@
 use core::{panic::PanicInfo, time::Duration};
 
 use tlenix_core::{
-    ExitStatus, align_stack_pointer, eprintln,
+    align_stack_pointer, eprintln,
     fs::{self, MountFlags},
-    print, println, process, thread,
+    print, println, process,
+    process::ExitStatus,
+    thread,
 };
 
 /// The name of the process for the purposes of the panic message.
@@ -126,7 +128,7 @@ pub extern "C" fn _start() -> ! {
     if process::execve(&[REAL_INIT], &[""; 0]).is_err() {
         eprintln!("Failed to start `{REAL_INIT}`; exiting in 5 seconds");
         thread::sleep(&Duration::from_secs(5)).unwrap();
-        process::exit(ExitStatus::ExitFailure);
+        process::exit(ExitStatus::ExitFailure(1));
     }
     unreachable!("execve replaces the process; we should not return");
 }
@@ -134,5 +136,5 @@ pub extern "C" fn _start() -> ! {
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
     eprintln!("{INITRAMFS_INIT_PANIC_TITLE} {info}");
-    process::exit(ExitStatus::ExitFailure)
+    process::exit(ExitStatus::ExitFailure(1))
 }

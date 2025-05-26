@@ -4,13 +4,12 @@ use alloc::vec::Vec;
 use core::ptr;
 
 use crate::{
-    Errno, ExitStatus, NixBytes, SyscallNum, ipc::SigInfoRaw, syscall, syscall_result,
-    vec_into_nix_bytes,
+    Errno, NixBytes, SyscallNum, ipc::SigInfoRaw, syscall, syscall_result, vec_into_nix_bytes,
 };
 
 mod types;
 
-pub use types::{WaitIdType, WaitInfo, WaitOptions};
+pub use types::{ExitStatus, WaitIdType, WaitInfo, WaitOptions};
 
 /// Executes the program referred to by the given file name, causing the current process to be
 /// replaced by the new one.
@@ -116,17 +115,15 @@ pub fn execute_process<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
             // SAFETY: On success, `execve` does not return, so the pointers only need to be valid
             // at the moment of the syscall (which they are). Furthermore, the child process
             // immediately exits if `execve` fails, avoiding UB there.
-            if unsafe {
+            if let Err(errno) = unsafe {
                 syscall_result!(
                     SyscallNum::Execve,
                     argv_nix_strings[0].as_ptr(),
                     argv_pointer,
                     envp_pointer
                 )
-            }
-            .is_err()
-            {
-                exit(ExitStatus::ExitFailure);
+            } {
+                exit(ExitStatus::ExitFailure(errno as i32));
             }
             unreachable!("execve doesn't return on success");
         }

@@ -19,7 +19,7 @@ use alloc::{string::String, vec::Vec};
 use core::panic::PanicInfo;
 
 use tlenix_core::{
-    Console, ExitStatus, align_stack_pointer, eprintln, fs, print, println, process, system,
+    Console, Errno, align_stack_pointer, eprintln, fs, print, println, process, system,
 };
 
 const MASH_PANIC_TITLE: &str = "mash";
@@ -33,7 +33,7 @@ const CWD_NAME_BACKUP: &str = "?";
 // Maximum line size.
 const LINE_MAX: usize = 1 << 12;
 
-const HOME_DIR: &str = "/";
+const HOME_DIR: &str = "/root";
 
 /// Entry point.
 ///
@@ -45,7 +45,7 @@ pub extern "C" fn _start() -> ! {
     align_stack_pointer!();
 
     #[cfg(test)]
-    process::exit(tlenix_core::ExitStatus::ExitSuccess);
+    process::exit(process::ExitStatus::ExitSuccess);
 
     // HACK: This stops the compiler from complaining when building the test/debug target
     #[allow(unreachable_code)]
@@ -65,7 +65,7 @@ pub extern "C" fn _start() -> ! {
         }
 
         match (argv[0], argv.len()) {
-            ("exit", 1) => process::exit(ExitStatus::ExitSuccess),
+            ("exit", 1) => process::exit(process::ExitStatus::ExitSuccess),
             ("poweroff", 1) => {
                 let errno = system::power_off().unwrap_err();
                 eprintln!("poweroff fail: {}", errno.as_str());
@@ -88,9 +88,17 @@ pub extern "C" fn _start() -> ! {
                 Ok(cwd) => println!("{cwd}"),
                 Err(e) => eprintln!("{e}"),
             },
-            (_, _) => {
-                eprintln!("unknown command");
-            }
+            (_, _) => match process::execute_process(argv, [""; 0].to_vec()) {
+                Err(Errno::Enoent) => {
+                    eprintln!("Unknown command.");
+                }
+                Err(e) => {
+                    eprintln!("{e}");
+                }
+                x => {
+                    eprintln!("{x:?}");
+                }
+            },
         }
     }
 }
@@ -111,5 +119,5 @@ fn print_prompt() {
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
     tlenix_core::eprintln!("{} {}", MASH_PANIC_TITLE, info);
-    process::exit(ExitStatus::ExitFailure)
+    process::exit(process::ExitStatus::ExitFailure(1))
 }

@@ -32,10 +32,13 @@ pub fn custom_test_runner(tests: &[&dyn Testable]) {
 /// Display failure and panic message.
 #[cfg(test)]
 pub fn test_panic_handler(info: &core::panic::PanicInfo<'_>) -> ! {
-    use crate::{ExitStatus::ExitFailure, eprintln, process::exit};
+    use crate::{
+        eprintln,
+        process::{ExitStatus::ExitFailure, exit},
+    };
 
     eprintln!("[\u{001b}[31mFAIL!\u{001b}[0m]");
     eprintln!("Error:\n{}", info);
 
-    exit(ExitFailure);
+    exit(ExitFailure(1));
 }

@@ -53,16 +53,6 @@ pub(crate) const NULL_BYTE: u8 = b'\0';
 /// The page size of x86 Linux. (4 KiB)
 pub(crate) const PAGE_SIZE: usize = 1 << 12;
 
-/// The two constants specified by the C standard denoting the success or failure of an process.
-#[repr(usize)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ExitStatus {
-    /// C standard success exit code.
-    ExitSuccess = 0_usize,
-    /// C standard failure exit code.
-    ExitFailure = 1_usize,
-}
-
 /// Aligns the stack pointer. Intended for use right at the beginning of execution.
 ///
 /// SAFETY: Valid ASM instruction with valid, statically-chosen arguments.
@@ -82,7 +72,7 @@ macro_rules! align_stack_pointer {
 pub extern "C" fn _start() -> ! {
     align_stack_pointer!();
     test_main();
-    process::exit(ExitStatus::ExitSuccess);
+    process::exit(process::ExitStatus::ExitSuccess);
 }
 
 /// Panic handler for library tests.
