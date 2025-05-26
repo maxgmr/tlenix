@@ -67,7 +67,8 @@ pub fn execve<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
 }
 
 /// Creates a child process running the executable at the given file name. The parent process which
-/// calls this function waits until the child process is exited or killed.
+/// calls this function waits until the child process is exited or killed. Finally, the
+/// [`ExitStatus`] of the child process is returned.
 ///
 /// The name of the program is the first element of `argv`, while the other elements of `argv` are
 /// the arguments sent to the program.
@@ -82,7 +83,7 @@ pub fn execve<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
 pub fn execute_process<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
     argv: Vec<NA>,
     envp: Vec<NB>,
-) -> Result<(), Errno> {
+) -> Result<ExitStatus, Errno> {
     // Return ENOENT if no path is given
     if argv.is_empty() {
         return Err(Errno::Enoent);
@@ -130,9 +131,7 @@ pub fn execute_process<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
         child_pid => {
             // Parent process; wait for child to finish
             let wait_info = wait(child_pid, WaitIdType::Pid, WaitOptions::WEXITED)?;
-
-            // Done waiting; continue
-            Ok(())
+            wait_info.try_into()
         }
     }
 }

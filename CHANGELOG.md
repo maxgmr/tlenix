@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Overhauled `ExitStatus` to make it more expressive.
+- Proper `execute_process` error reporting.
 
 ### Removed
 

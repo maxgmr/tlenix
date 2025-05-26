@@ -17,9 +17,12 @@ extern crate alloc;
 
 use alloc::{string::String, vec::Vec};
 use core::panic::PanicInfo;
+use num_enum::TryFromPrimitive;
 
 use tlenix_core::{
-    Console, Errno, align_stack_pointer, eprintln, fs, print, println, process, system,
+    Console, Errno, align_stack_pointer, eprintln, fs, print, println,
+    process::{self, ExitStatus},
+    system,
 };
 
 const MASH_PANIC_TITLE: &str = "mash";
@@ -89,15 +92,17 @@ pub extern "C" fn _start() -> ! {
                 Err(e) => eprintln!("{e}"),
             },
             (_, _) => match process::execute_process(argv, [""; 0].to_vec()) {
-                Err(Errno::Enoent) => {
-                    eprintln!("Unknown command.");
+                Ok(ExitStatus::ExitFailure(code)) => {
+                    if let Ok(errno) = Errno::try_from_primitive(code) {
+                        eprintln!("{errno}");
+                    } else {
+                        eprintln!("Process exited with failure code {code}.");
+                    }
                 }
                 Err(e) => {
                     eprintln!("{e}");
                 }
-                x => {
-                    eprintln!("{x:?}");
-                }
+                _ => {}
             },
         }
     }
