@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use core::ptr;
 
 use crate::{
-    Errno, NixBytes, SyscallNum, ipc::SigInfoRaw, syscall, syscall_result, vec_into_nix_bytes,
+    Errno, NixString, SyscallNum, ipc::SigInfoRaw, syscall, syscall_result, vec_into_nix_strings,
 };
 
 mod types;
@@ -27,15 +27,16 @@ pub use types::{ExitStatus, WaitIdType, WaitInfo, WaitOptions};
 /// # Errors
 ///
 /// This function propagates any [`Errno`]s returned by the underlying call to [`execve`].
-pub fn execve<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
+pub fn execve<NA: Into<NixString> + Clone, NB: Into<NixString> + Clone>(
     argv: &[NA],
     envp: &[NB],
 ) -> Result<!, Errno> {
     // ARGV
     // Convert to syscall-compatible strings
-    let argv_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(argv.to_vec());
+    let argv_nix_strings: Vec<NixString> = vec_into_nix_strings(argv.to_vec());
     // Get an array of pointers to those strings
-    let mut argv_pointers: Vec<*const u8> = argv_nix_strings.iter().map(NixBytes::as_ptr).collect();
+    let mut argv_pointers: Vec<*const u8> =
+        argv_nix_strings.iter().map(NixString::as_ptr).collect();
     // Null-terminate the array
     argv_pointers.push(ptr::null());
     // Get pointer to start of argv array
@@ -43,9 +44,10 @@ pub fn execve<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
 
     // ENVP
     // Convert to syscall-compatible strings
-    let envp_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(envp.to_vec());
+    let envp_nix_strings: Vec<NixString> = vec_into_nix_strings(envp.to_vec());
     // Get an array of pointers to those strings
-    let mut envp_pointers: Vec<*const u8> = envp_nix_strings.iter().map(NixBytes::as_ptr).collect();
+    let mut envp_pointers: Vec<*const u8> =
+        envp_nix_strings.iter().map(NixString::as_ptr).collect();
     // Null-terminate the array
     envp_pointers.push(ptr::null());
     // Get pointer to start of envp array
@@ -80,9 +82,9 @@ pub fn execve<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
 /// This function propagates any [`Errno`]s returned by the underlying calls to
 /// [`fork`](https://www.man7.org/linux/man-pages/man2/fork.2.html) and
 /// [`execve`](https://man7.org/linux/man-pages/man2/execve.2.html).
-pub fn execute_process<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
-    argv: Vec<NA>,
-    envp: Vec<NB>,
+pub fn execute_process<NA: Into<NixString> + Clone, NB: Into<NixString> + Clone>(
+    argv: &[NA],
+    envp: &[NB],
 ) -> Result<ExitStatus, Errno> {
     // Return ENOENT if no path is given
     if argv.is_empty() {
@@ -91,9 +93,10 @@ pub fn execute_process<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
 
     // ARGV
     // Convert to syscall-compatible strings
-    let argv_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(argv);
+    let argv_nix_strings: Vec<NixString> = vec_into_nix_strings(argv.to_vec());
     // Get an array of pointers to those strings
-    let mut argv_pointers: Vec<*const u8> = argv_nix_strings.iter().map(NixBytes::as_ptr).collect();
+    let mut argv_pointers: Vec<*const u8> =
+        argv_nix_strings.iter().map(NixString::as_ptr).collect();
     // Null-terminate the array
     argv_pointers.push(ptr::null());
     // Get pointer to start of argv array
@@ -101,9 +104,10 @@ pub fn execute_process<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
 
     // ENVP
     // Convert to syscall-compatible strings
-    let envp_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(envp);
+    let envp_nix_strings: Vec<NixString> = vec_into_nix_strings(envp.to_vec());
     // Get an array of pointers to those strings
-    let mut envp_pointers: Vec<*const u8> = envp_nix_strings.iter().map(NixBytes::as_ptr).collect();
+    let mut envp_pointers: Vec<*const u8> =
+        envp_nix_strings.iter().map(NixString::as_ptr).collect();
     // Null-terminate the array
     envp_pointers.push(ptr::null());
     // Get pointer to start of envp array

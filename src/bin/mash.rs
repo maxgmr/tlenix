@@ -91,7 +91,7 @@ pub extern "C" fn _start() -> ! {
                 Ok(cwd) => println!("{cwd}"),
                 Err(e) => eprintln!("{e}"),
             },
-            (_, _) => match process::execute_process(argv, [""; 0].to_vec()) {
+            (_, _) => match process::execute_process(&argv, &[""; 0]) {
                 Ok(ExitStatus::ExitFailure(code)) => {
                     if let Ok(errno) = Errno::try_from_primitive(code) {
                         eprintln!("{errno}");

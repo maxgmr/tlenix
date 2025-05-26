@@ -15,7 +15,7 @@
 
 extern crate alloc;
 
-use alloc::{string::ToString, vec::Vec};
+use alloc::string::ToString;
 use core::panic::PanicInfo;
 
 use tlenix_core::{align_stack_pointer, fs, println, process, thread};
@@ -87,7 +87,7 @@ pub extern "C" fn _start() -> ! {
 
     // Launch shell with no args
     loop {
-        process::execute_process(Vec::from([SHELL_PATH]), Vec::<&'static str>::new()).unwrap();
+        process::execute_process(&[SHELL_PATH], &[""; 0]).unwrap();
         println!("Restarting shell...");
         println!("(Enter the \"poweroff\" command to shut down)");
     }
