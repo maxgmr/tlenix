@@ -24,6 +24,7 @@ lto = "fat"
 
 [dependencies]
 bitflags = "2.1"
+getargs = { version = "0.5", default-features = false }
 lazy_static = { version = "1.5", features = ["spin_no_std"] }
 num_enum = { version = ">=0.4, <=0.7", default-features = false }
 spin = "0.10.0"
