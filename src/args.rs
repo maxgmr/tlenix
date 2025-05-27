@@ -1,22 +1,30 @@
 //! Module for handling command-line arguments passed to
 //! [`execve`](https://man7.org/linux/man-pages/man2/execve.2.html)-compatible binaries.
 
-use alloc::{string::String, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 use core::slice;
 
 use crate::{ARG_ENV_LIM, ARG_LEN_LIM, ENV_LEN_LIM, Errno, NULL_BYTE};
 
+/// Character separating the value of an [`EnvVar`] from its key.
+const ENV_VAR_SEPARATOR: char = '=';
+
 /// Environment variables parsed from the stack using Linux `execve` conventions.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EnvVar {
-    key: String,
-    value: String,
+    /// The key of the environment variable.
+    pub key: String,
+    /// The value of the environment variable.
+    pub value: String,
 }
 impl TryFrom<String> for EnvVar {
     type Error = Errno;
 
     fn try_from(mut value: String) -> Result<Self, Self::Error> {
-        if let Some(eq_idx) = value.find('=') {
+        if let Some(eq_idx) = value.find(ENV_VAR_SEPARATOR) {
             let v = value.split_off(eq_idx);
             Ok(Self {
                 key: value,
@@ -25,6 +33,35 @@ impl TryFrom<String> for EnvVar {
         } else {
             Err(Errno::Einval)
         }
+    }
+}
+impl TryFrom<&String> for EnvVar {
+    type Error = Errno;
+
+    fn try_from(value: &String) -> Result<Self, Self::Error> {
+        Self::try_from(value.to_string())
+    }
+}
+impl TryFrom<&str> for EnvVar {
+    type Error = Errno;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::try_from(value.to_string())
+    }
+}
+impl From<EnvVar> for String {
+    fn from(value: EnvVar) -> Self {
+        Self::from(&value)
+    }
+}
+impl From<&EnvVar> for String {
+    fn from(value: &EnvVar) -> Self {
+        let total_len = value.key.len() + value.value.len() + 1;
+        let mut string = String::with_capacity(total_len);
+        string.push_str(&value.key);
+        string.push(ENV_VAR_SEPARATOR);
+        string.push_str(&value.value);
+        string
     }
 }
 
