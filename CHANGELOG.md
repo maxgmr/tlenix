@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix the nasty code duplication in the `execve` and `execute_process` functions.
 - Nicer interface for ANSI colour escape codes (and coloured printing in general).
 
+## [0.1.0-beta.2] - UNRELEASED
+
+### Removed
+
+- Build-in `pwd` from `mash` (to be later implemented as a standalone program)
+
 ## [0.1.0-beta.1] - 2025-05-26
 
 ### Added
