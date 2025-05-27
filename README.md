@@ -12,6 +12,8 @@ Written in pure Rust without the standard library or any dependencies on a C sta
 
 `mash`: **Ma**x's **Sh**ell. An extremely primitive command-line-interface shell.
 
+`ls`: List the entries within a directory.
+
 # Setup Guide
 
 Here's how to get Tlenix running on a USB of your own.

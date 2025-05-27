@@ -16,11 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix the nasty code duplication in the `execve` and `execute_process` functions.
 - Nicer interface for ANSI colour escape codes (and coloured printing in general).
 
-## [0.1.0-beta.1] - UNRELEASED
+## [0.1.0-beta.1] - 2025-05-26
 
 ### Added
 
 - Fully-bootable USB-based system on real hardware!
+- `ls`: List entries within a directory.
 - `mash` can now execute programs.
 - Linux kernel custom configuration in `config/.config`.
 - GRUB custom configuration in `config/grub.cfg`.
