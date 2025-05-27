@@ -15,10 +15,16 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
+use alloc::string::ToString;
 use core::panic::PanicInfo;
 
-use tlenix_core::{align_stack_pointer, println, process, thread};
+use tlenix_core::{align_stack_pointer, fs, println, process, thread};
+
+const BACKUP_LOGO: &str = r"  _____ _            _
+ |_   _| | ___ _ __ (_)_  __
+   | | | |/ _ \ '_ \| \ \/ /
+   | | | |  __/ | | | |>  <
+   |_| |_|\___|_| |_|_/_/\_\";
 
 const WELCOME_MSG: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION"));
 const TLENIX_PANIC_TITLE: &str = "tlenix";
@@ -27,6 +33,11 @@ const TLENIX_PANIC_TITLE: &str = "tlenix";
 const SHELL_PATH: &str = "target/x86_64-unknown-linux-none/debug/mash";
 #[cfg(not(debug_assertions))]
 const SHELL_PATH: &str = "/bin/mash";
+
+#[cfg(debug_assertions)]
+const LOGO_PATH: &str = "os_files/etc/initlogo";
+#[cfg(not(debug_assertions))]
+const LOGO_PATH: &str = "/etc/initlogo";
 
 /// Entry point.
 ///
@@ -40,7 +51,7 @@ pub extern "C" fn _start() -> ! {
 
     // Don't do anything if we're running tests
     #[cfg(test)]
-    tlenix_core::process::exit(tlenix_core::ExitStatus::ExitSuccess);
+    tlenix_core::process::exit(process::ExitStatus::ExitSuccess);
 
     // HACK: This stops the compiler from complaining when building the test/debug target
     #[allow(unreachable_code)]
@@ -76,14 +87,18 @@ pub extern "C" fn _start() -> ! {
 
     // Launch shell with no args
     loop {
-        process::execute_process(Vec::from([SHELL_PATH]), Vec::<&'static str>::new()).unwrap();
+        process::execute_process(&[SHELL_PATH], &[""; 0]).unwrap();
         println!("Restarting shell...");
         println!("(Enter the \"poweroff\" command to shut down)");
     }
 }
 
 fn welcome_msg() {
-    println!("{}", WELCOME_MSG);
+    let logo = match fs::OpenOptions::new().open(LOGO_PATH) {
+        Ok(file) => file.read_to_string().unwrap_or(BACKUP_LOGO.to_string()),
+        Err(_) => BACKUP_LOGO.to_string(),
+    };
+    println!("\u{001b}[33m{logo}\u{001b}[0m{WELCOME_MSG}");
 }
 
 #[panic_handler]

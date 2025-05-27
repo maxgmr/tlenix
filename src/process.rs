@@ -3,9 +3,13 @@
 use alloc::vec::Vec;
 use core::ptr;
 
-use crate::{Errno, ExitStatus, NixBytes, SyscallNum, syscall, syscall_result, vec_into_nix_bytes};
+use crate::{
+    Errno, NixString, SyscallNum, ipc::SigInfoRaw, syscall, syscall_result, vec_into_nix_strings,
+};
 
-const WUNTRACED: usize = 2;
+mod types;
+
+pub use types::{ExitStatus, WaitIdType, WaitInfo, WaitOptions};
 
 /// Executes the program referred to by the given file name, causing the current process to be
 /// replaced by the new one.
@@ -23,15 +27,16 @@ const WUNTRACED: usize = 2;
 /// # Errors
 ///
 /// This function propagates any [`Errno`]s returned by the underlying call to [`execve`].
-pub fn execve<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
+pub fn execve<NA: Into<NixString> + Clone, NB: Into<NixString> + Clone>(
     argv: &[NA],
     envp: &[NB],
 ) -> Result<!, Errno> {
     // ARGV
     // Convert to syscall-compatible strings
-    let argv_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(argv.to_vec());
+    let argv_nix_strings: Vec<NixString> = vec_into_nix_strings(argv.to_vec());
     // Get an array of pointers to those strings
-    let mut argv_pointers: Vec<*const u8> = argv_nix_strings.iter().map(NixBytes::as_ptr).collect();
+    let mut argv_pointers: Vec<*const u8> =
+        argv_nix_strings.iter().map(NixString::as_ptr).collect();
     // Null-terminate the array
     argv_pointers.push(ptr::null());
     // Get pointer to start of argv array
@@ -39,9 +44,10 @@ pub fn execve<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
 
     // ENVP
     // Convert to syscall-compatible strings
-    let envp_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(envp.to_vec());
+    let envp_nix_strings: Vec<NixString> = vec_into_nix_strings(envp.to_vec());
     // Get an array of pointers to those strings
-    let mut envp_pointers: Vec<*const u8> = envp_nix_strings.iter().map(NixBytes::as_ptr).collect();
+    let mut envp_pointers: Vec<*const u8> =
+        envp_nix_strings.iter().map(NixString::as_ptr).collect();
     // Null-terminate the array
     envp_pointers.push(ptr::null());
     // Get pointer to start of envp array
@@ -54,7 +60,7 @@ pub fn execve<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
     unsafe {
         syscall_result!(
             SyscallNum::Execve,
-            argv_pointers[0],
+            argv_nix_strings[0].as_ptr(),
             argv_pointer,
             envp_pointer
         )?;
@@ -63,7 +69,8 @@ pub fn execve<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
 }
 
 /// Creates a child process running the executable at the given file name. The parent process which
-/// calls this function waits until the child process is exited or killed.
+/// calls this function waits until the child process is exited or killed. Finally, the
+/// [`ExitStatus`] of the child process is returned.
 ///
 /// The name of the program is the first element of `argv`, while the other elements of `argv` are
 /// the arguments sent to the program.
@@ -75,14 +82,10 @@ pub fn execve<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
 /// This function propagates any [`Errno`]s returned by the underlying calls to
 /// [`fork`](https://www.man7.org/linux/man-pages/man2/fork.2.html) and
 /// [`execve`](https://man7.org/linux/man-pages/man2/execve.2.html).
-///
-/// # Panics
-///
-/// This function panics if the child process attempts to call `execve` and it fails.
-pub fn execute_process<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
-    argv: Vec<NA>,
-    envp: Vec<NB>,
-) -> Result<(), Errno> {
+pub fn execute_process<NA: Into<NixString> + Clone, NB: Into<NixString> + Clone>(
+    argv: &[NA],
+    envp: &[NB],
+) -> Result<ExitStatus, Errno> {
     // Return ENOENT if no path is given
     if argv.is_empty() {
         return Err(Errno::Enoent);
@@ -90,9 +93,10 @@ pub fn execute_process<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
 
     // ARGV
     // Convert to syscall-compatible strings
-    let argv_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(argv);
+    let argv_nix_strings: Vec<NixString> = vec_into_nix_strings(argv.to_vec());
     // Get an array of pointers to those strings
-    let mut argv_pointers: Vec<*const u8> = argv_nix_strings.iter().map(NixBytes::as_ptr).collect();
+    let mut argv_pointers: Vec<*const u8> =
+        argv_nix_strings.iter().map(NixString::as_ptr).collect();
     // Null-terminate the array
     argv_pointers.push(ptr::null());
     // Get pointer to start of argv array
@@ -100,9 +104,10 @@ pub fn execute_process<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
 
     // ENVP
     // Convert to syscall-compatible strings
-    let envp_nix_strings: Vec<NixBytes> = vec_into_nix_bytes(envp);
+    let envp_nix_strings: Vec<NixString> = vec_into_nix_strings(envp.to_vec());
     // Get an array of pointers to those strings
-    let mut envp_pointers: Vec<*const u8> = envp_nix_strings.iter().map(NixBytes::as_ptr).collect();
+    let mut envp_pointers: Vec<*const u8> =
+        envp_nix_strings.iter().map(NixString::as_ptr).collect();
     // Null-terminate the array
     envp_pointers.push(ptr::null());
     // Get pointer to start of envp array
@@ -115,40 +120,54 @@ pub fn execute_process<NA: Into<NixBytes> + Clone, NB: Into<NixBytes> + Clone>(
             // SAFETY: On success, `execve` does not return, so the pointers only need to be valid
             // at the moment of the syscall (which they are). Furthermore, the child process
             // immediately exits if `execve` fails, avoiding UB there.
-            unsafe {
-                if syscall_result!(
+            if let Err(errno) = unsafe {
+                syscall_result!(
                     SyscallNum::Execve,
-                    argv_pointers[0],
+                    argv_nix_strings[0].as_ptr(),
                     argv_pointer,
                     envp_pointer
                 )
-                .is_err()
-                {
-                    exit(ExitStatus::ExitFailure);
-                }
+            } {
+                exit(ExitStatus::ExitFailure(errno as i32));
             }
             unreachable!("execve doesn't return on success");
         }
         child_pid => {
             // Parent process; wait for child to finish
-            let mut status: usize = 0;
-            unsafe {
-                syscall_result!(
-                    SyscallNum::Wait4,
-                    child_pid,
-                    &raw mut status as usize,
-                    WUNTRACED,
-                    0
-                )?;
-            }
-
-            // Done waiting; continue
-            Ok(())
+            let wait_info = wait(child_pid, WaitIdType::Pid, WaitOptions::WEXITED)?;
+            wait_info.try_into()
         }
     }
 }
 
-/// Cause normal process termination. Wrapper around the
+/// Waits for the given process (or group of processes) to change state.
+///
+/// Internally uses the [`waitid`](https://man7.org/linux/man-pages/man2/waitid.2.html) Linux
+/// system call.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s returned by the underlying call to `waitid`.
+pub fn wait(id: usize, id_type: WaitIdType, wait_options: WaitOptions) -> Result<WaitInfo, Errno> {
+    let mut sig_info_raw = SigInfoRaw::default();
+
+    // SAFETY: WaitIdType restricts the given values to valid ones. SigInfoRaw matches the layout
+    // of `siginfo_t`. WaitOptions restricts the given values to valid ones. A null pointer is given for the last argument.
+    unsafe {
+        syscall_result!(
+            SyscallNum::Waitid,
+            id_type as u32,
+            id,
+            &raw mut sig_info_raw,
+            wait_options.bits(),
+            core::ptr::null::<u8>()
+        )?;
+    }
+
+    WaitInfo::try_from(sig_info_raw)
+}
+
+/// Causes normal process termination. Wrapper around the
 /// [exit](https://www.man7.org/linux/man-pages/man3/exit.3.html) Linux syscall.
 ///
 /// Returns the least significant byte of the given `exit_status` to the parent process.

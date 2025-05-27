@@ -14,7 +14,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fun BSOD-style screen on panic.
 - More complete parsing of dirent and filestat return values; i.e., complete `DirEnt` and `FileStat` types.
 - Fix the nasty code duplication in the `execve` and `execute_process` functions.
-- Better tty font.
+- Nicer interface for ANSI colour escape codes (and coloured printing in general).
+
+## [0.1.0-beta.1] - 2025-05-26
+
+### Added
+
+- Fully-bootable USB-based system on real hardware!
+- `ls`: List entries within a directory.
+- `mash` can now execute programs.
+- Linux kernel custom configuration in `config/.config`.
+- GRUB custom configuration in `config/grub.cfg`.
+- Nicer terminal font.
+- Pretty logo on boot.
+- USB installation script (`usb-install`).
+
+### Changed
+
+- Overhauled `ExitStatus` to make it more expressive.
+- Proper `execute_process` error reporting.
+
+### Removed
+
+- `mk-release-bins` script. Superseded by `usb-install`.
 
 ## [0.1.0-alpha.9] - 2025-05-24
 

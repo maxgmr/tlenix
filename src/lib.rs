@@ -23,8 +23,10 @@ compile_error!("This crate only functions on x86_64 linux targets.");
 extern crate alloc;
 
 mod allocator;
+mod args;
 mod console;
 pub mod fs;
+pub mod ipc;
 mod nix_bytes;
 mod nix_str;
 mod print;
@@ -38,6 +40,7 @@ pub mod thread;
 pub(crate) mod test_utils;
 
 // RE-EXPORTS
+pub use args::{EnvVar, parse_argv_envp};
 pub use console::Console;
 pub use nix_bytes::{NixBytes, vec_into_nix_bytes};
 pub use nix_str::{NixString, vec_into_nix_strings};
@@ -52,15 +55,14 @@ pub(crate) const NULL_BYTE: u8 = b'\0';
 /// The page size of x86 Linux. (4 KiB)
 pub(crate) const PAGE_SIZE: usize = 1 << 12;
 
-/// The two constants specified by the C standard denoting the success or failure of an process.
-#[repr(usize)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ExitStatus {
-    /// C standard success exit code.
-    ExitSuccess = 0_usize,
-    /// C standard failure exit code.
-    ExitFailure = 1_usize,
-}
+/// The length limit of an individual command-line argument.
+pub const ARG_LEN_LIM: usize = PAGE_SIZE;
+
+/// The length limit of an individual environment variable.
+pub const ENV_LEN_LIM: usize = PAGE_SIZE;
+
+/// The limit on the total size of `argv` and `envp` strings.
+pub const ARG_ENV_LIM: usize = PAGE_SIZE * 32;
 
 /// Aligns the stack pointer. Intended for use right at the beginning of execution.
 ///
@@ -75,13 +77,25 @@ macro_rules! align_stack_pointer {
     };
 }
 
+/// If the given expression returns [`Ok`], unwrap it. Otherwise, return from the function with the
+/// numerical error as [`process::ExitStatus::ExitFailure`].
+#[macro_export]
+macro_rules! try_exit {
+    ($e:expr) => {
+        match $e {
+            Ok(val) => val,
+            Err(e) => return $crate::process::ExitStatus::ExitFailure(e as i32),
+        }
+    };
+}
+
 /// Entry point for library tests.
 #[cfg(test)]
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
     align_stack_pointer!();
     test_main();
-    process::exit(ExitStatus::ExitSuccess);
+    process::exit(process::ExitStatus::ExitSuccess);
 }
 
 /// Panic handler for library tests.

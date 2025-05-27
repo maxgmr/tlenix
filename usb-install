@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+
+set -e
+
+SRC_BIN_DIR="src/bin"
+
+BINARIES_DIR="target/x86_64-unknown-linux-none/release"
+OS_FILES_DIR="os_files"
+INITRAMFS_DIR="initramfs"
+CONFIG_DIR="config"
+
+USB_DEV="/dev/sda"
+BOOT_PART="${USB_DEV}1"
+ROOTFS_PART="${USB_DEV}2"
+
+MNT_DIR="/mnt/tlenix-usb"
+BOOT_DIR="${MNT_DIR}/boot"
+ROOTFS_DIR="${MNT_DIR}/rootfs"
+
+# Build Tlenix binaries
+cargo build --release --all
+
+# Create mount fs
+sudo mkdir -p "${BOOT_DIR}"
+sudo mkdir -p "${ROOTFS_DIR}"
+
+# Mount USB
+if ! findmnt -rn -S ${BOOT_PART} -T ${BOOT_DIR}; then
+    sudo mount "${BOOT_PART}" "${BOOT_DIR}"
+fi
+if ! findmnt -rn -S ${ROOTFS_PART} -T ${ROOTFS_DIR}; then
+    sudo mount "${ROOTFS_PART}" "${ROOTFS_DIR}"
+fi
+
+# Create initramfs
+mkdir -p "${INITRAMFS_DIR}"/{bin,dev,etc,lib,proc,sys,usr}
+sudo rm -f "${INITRAMFS_DIR}/dev/console"
+sudo rm -f "${INITRAMFS_DIR}/dev/null"
+sudo mknod "${INITRAMFS_DIR}/dev/console" c 5 1
+sudo mknod "${INITRAMFS_DIR}/dev/null" c 1 3
+
+# Create USB root filesystem
+sudo mkdir -p "${ROOTFS_DIR}"/{bin,dev,etc,home,lib,proc,root,sbin,sys,usr,var}
+sudo rm -f "${ROOTFS_DIR}/dev/console"
+sudo rm -f "${ROOTFS_DIR}/dev/null"
+sudo mknod "${ROOTFS_DIR}/dev/console" c 5 1
+sudo mknod "${ROOTFS_DIR}/dev/null" c 1 3
+sudo cp "bzImage" "${BOOT_DIR}"
+cd "${INITRAMFS_DIR}"
+find . | cpio -oH newc | gzip | sudo tee "${BOOT_DIR}/root.cpio.gz" >/dev/null
+cd ..
+
+# Install and configure GRUB
+if [ ! -d "${BOOT_DIR}/grub/x86_64-efi" ]; then
+    sudo grub-install \
+        --target=x86_64-efi \
+        --boot-directory=${BOOT_DIR} \
+        --efi-directory=${BOOT_DIR} \
+        "${USB_DEV}"
+fi
+sudo cp "${CONFIG_DIR}/grub.cfg" "${BOOT_DIR}/grub"
+
+# Copy over OS files
+sudo cp -a --no-preserve=ownership ${OS_FILES_DIR}/. ${ROOTFS_DIR}
+
+# Add Tlenix build artifacts to their proper places
+cp "${BINARIES_DIR}/initramfs_init" "${INITRAMFS_DIR}/init"
+sudo cp "${BINARIES_DIR}/init" "${ROOTFS_DIR}/sbin"
+find "${SRC_BIN_DIR}" -maxdepth 1 -name '*.rs' |
+    grep -v -E './(init|initramfs_init)\.rs$' |
+    sed 's|.*/||; s|\.rs$||' |
+    while read -r name; do
+        sudo cp "${BINARIES_DIR}/${name}" "${ROOTFS_DIR}/bin"
+    done
