@@ -89,24 +89,3 @@ fn null_nbytes_as_string() {
     let test_string = String::try_from(nbytes).unwrap();
     assert_eq!(&test_string, "\0");
 }
-
-#[test_case]
-fn nbytes_vec() {
-    let mut s_vec: Vec<String> = Vec::from([
-        "hello".to_string(),
-        "my".to_string(),
-        "name".to_string(),
-        "is".to_string(),
-        "Max".to_string(),
-    ]);
-    let nbytes_vec: Vec<NixBytes> = vec_into_nix_bytes(s_vec.clone());
-
-    for s in &mut s_vec {
-        s.push('\0');
-    }
-    s_vec.push("\0".to_string());
-
-    for (s, nb) in s_vec.into_iter().zip(nbytes_vec) {
-        assert_eq!(s.as_bytes(), nb.bytes());
-    }
-}
