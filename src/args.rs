@@ -6,15 +6,6 @@ use core::slice;
 
 use crate::{ARG_ENV_LIM, ARG_LEN_LIM, ENV_LEN_LIM, Errno, NULL_BYTE};
 
-/// Command-line arguments parsed from the stack using Linux `execve` conventions.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Args {
-    /// The number of arguments.
-    pub count: usize,
-    /// The arguments themselves.
-    pub args: Vec<String>,
-}
-
 /// Environment variables parsed from the stack using Linux `execve` conventions.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EnvVar {
@@ -58,7 +49,9 @@ impl TryFrom<String> for EnvVar {
 /// - Call this function right at the entry point of your binary.
 /// - Make sure the provided pointer is _actually_ pointing to the top of the stack!
 #[allow(clippy::similar_names)]
-pub unsafe fn parse_argv_envp(stack_ptr: *const usize) -> Result<(Args, Vec<EnvVar>), Errno> {
+pub unsafe fn parse_argv_envp(
+    stack_ptr: *const usize,
+) -> Result<(Vec<String>, Vec<EnvVar>), Errno> {
     // Keep track of the total size of `argv` and `envp`
     let mut total_size: usize = 0;
 
@@ -133,13 +126,7 @@ pub unsafe fn parse_argv_envp(stack_ptr: *const usize) -> Result<(Args, Vec<EnvV
         ptr = unsafe { ptr.add(1) };
     }
 
-    Ok((
-        Args {
-            count: argc,
-            args: argv,
-        },
-        envp,
-    ))
+    Ok((argv, envp))
 }
 
 fn inc_total_size(total_size: usize, increase: usize) -> Result<usize, Errno> {
