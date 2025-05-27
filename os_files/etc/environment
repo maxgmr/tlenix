@@ -1,0 +1,8 @@
+# This is where your environment variables go.
+#
+# Syntax: Simple "KEY=VALUE" pairs on separate lines
+
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+HOME=/root
+SHELL=/bin/mash
+USER=root

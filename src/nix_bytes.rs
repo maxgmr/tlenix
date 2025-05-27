@@ -97,13 +97,5 @@ impl<'a> From<&'a NixBytes> for &'a [u8] {
     }
 }
 
-/// Create a [`Vec<NixBytes>`] from a given vector of types which implement [`Into<NixBytes>`].
-#[must_use]
-pub fn vec_into_nix_bytes<T: Into<NixBytes> + Clone>(arr: Vec<T>) -> Vec<NixBytes> {
-    arr.into_iter()
-        .map(|elem| <T as core::convert::Into<NixBytes>>::into(elem))
-        .collect()
-}
-
 #[cfg(test)]
 mod tests;

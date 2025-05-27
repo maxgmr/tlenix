@@ -8,13 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Planned]
 
 - Custom global allocator.
-- Environment variables.
 - `mash` prompt should react to exit code of last-executed process.
-- `mash` ability to execute programs.
 - Fun BSOD-style screen on panic.
-- More complete parsing of dirent and filestat return values; i.e., complete `DirEnt` and `FileStat` types.
-- Fix the nasty code duplication in the `execve` and `execute_process` functions.
 - Nicer interface for ANSI colour escape codes (and coloured printing in general).
+- Get `mash` to "bundle together" stuff with quotes and generally handle quotes properly.
+
+## [0.1.0-beta.2] - 2025-05-27
+
+### Added
+
+- `hello`: Minimal demo Tlenix program. Useful as a template/example.
+- `printenv`: Print the environment variables.
+
+### Removed
+
+- Built-in `pwd` from `mash` (to be later implemented as a standalone program)
+- `vec_into_nix_bytes` and `vec_into_nix_strings` (obsolete)
 
 ## [0.1.0-beta.1] - 2025-05-26
 

@@ -4,8 +4,13 @@ use alloc::string::String;
 
 use crate::{Errno, SyscallArg};
 
+use super::FilePermissions;
+
 /// Bit mask for the file type bit field.
 const S_IFMT: u32 = 0o0_170_000;
+
+/// Bit mask for the mode bit field.
+const MODE_MASK: u32 = 0o7_777;
 
 /// All possible values which can be sent to the `lseek` syscall to declare its functionality.
 #[repr(usize)]
@@ -96,14 +101,23 @@ pub struct FileStat {
     pub file_stat_raw: FileStatRaw,
     /// The type of the file.
     pub file_type: FileType,
+    /// The mode/permissions of the file.
+    pub file_permissions: FilePermissions,
+}
+impl FileStat {
+    fn file_mode_from_st_mode(st_mode: u32) -> FilePermissions {
+        FilePermissions::from((st_mode & MODE_MASK) as usize)
+    }
 }
 impl TryFrom<FileStatRaw> for FileStat {
     type Error = Errno;
     fn try_from(value: FileStatRaw) -> Result<Self, Self::Error> {
         let file_type = value.st_mode.try_into()?;
+        let file_permissions = FileStat::file_mode_from_st_mode(value.st_mode);
         Ok(Self {
             file_stat_raw: value,
             file_type,
+            file_permissions,
         })
     }
 }

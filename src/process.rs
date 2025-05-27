@@ -3,13 +3,52 @@
 use alloc::vec::Vec;
 use core::ptr;
 
-use crate::{
-    Errno, NixString, SyscallNum, ipc::SigInfoRaw, syscall, syscall_result, vec_into_nix_strings,
-};
+use crate::{Errno, NixString, SyscallNum, ipc::SigInfoRaw, syscall, syscall_result};
 
 mod types;
 
 pub use types::{ExitStatus, WaitIdType, WaitInfo, WaitOptions};
+
+/// Arguments formatted for `execve`.
+struct ExecArgs {
+    /// The arguments themselves, guaranteed to be null-terminated, valid UTF-8 bytes.
+    strs: Vec<NixString>,
+    /// Pointers to each of the arguments. Null-terminated.
+    ptrs: Vec<*const u8>,
+}
+impl ExecArgs {
+    /// Creates a new [`ExecArgs`] from the given slice.
+    fn from_slice<NS: Into<NixString> + Clone>(slice: &[NS]) -> Self {
+        let mut strs = Vec::with_capacity(slice.len());
+        let mut ptrs = Vec::with_capacity(slice.len());
+
+        for elem in slice {
+            let str: NixString = elem.clone().into();
+            ptrs.push(str.as_ptr());
+            strs.push(str);
+        }
+
+        // Make sure it's null-terminated!
+        ptrs.push(ptr::null());
+
+        Self { strs, ptrs }
+    }
+
+    /// Returns a pointer to the start of this [`ExecArgs`]' pointer list.
+    fn as_ptr(&self) -> *const *const u8 {
+        self.ptrs.as_ptr()
+    }
+
+    /// Returns a pointer to the `n`th [`NixString`] of this [`ExecArgs`].
+    fn ptr_to_string(&self, n: usize) -> Option<*const u8> {
+        if n >= self.strs.len() {
+            return None;
+        }
+
+        // SAFETY: We just checked that `n` was in bounds.
+        Some(self.strs[n].as_ptr())
+    }
+}
 
 /// Executes the program referred to by the given file name, causing the current process to be
 /// replaced by the new one.
@@ -26,32 +65,23 @@ pub use types::{ExitStatus, WaitIdType, WaitInfo, WaitOptions};
 ///
 /// # Errors
 ///
+/// This function returns [`Errno::Enoent`] if the `argp` slice is empty.
+///
 /// This function propagates any [`Errno`]s returned by the underlying call to [`execve`].
+// Function won't panic. See below.
+#[allow(clippy::missing_panics_doc)]
 pub fn execve<NA: Into<NixString> + Clone, NB: Into<NixString> + Clone>(
     argv: &[NA],
     envp: &[NB],
 ) -> Result<!, Errno> {
-    // ARGV
-    // Convert to syscall-compatible strings
-    let argv_nix_strings: Vec<NixString> = vec_into_nix_strings(argv.to_vec());
-    // Get an array of pointers to those strings
-    let mut argv_pointers: Vec<*const u8> =
-        argv_nix_strings.iter().map(NixString::as_ptr).collect();
-    // Null-terminate the array
-    argv_pointers.push(ptr::null());
-    // Get pointer to start of argv array
-    let argv_pointer = argv_pointers.as_ptr();
-
-    // ENVP
-    // Convert to syscall-compatible strings
-    let envp_nix_strings: Vec<NixString> = vec_into_nix_strings(envp.to_vec());
-    // Get an array of pointers to those strings
-    let mut envp_pointers: Vec<*const u8> =
-        envp_nix_strings.iter().map(NixString::as_ptr).collect();
-    // Null-terminate the array
-    envp_pointers.push(ptr::null());
-    // Get pointer to start of envp array
-    let envp_pointer = envp_pointers.as_ptr();
+    if argv.is_empty() {
+        return Err(Errno::Enoent);
+    }
+    let argv_exec_args = ExecArgs::from_slice(argv);
+    let envp_exec_args = ExecArgs::from_slice(envp);
+    // OK to unwrap here- we already made sure argv wasn't empty.
+    #[allow(clippy::unwrap_used)]
+    let filename = argv_exec_args.ptr_to_string(0).unwrap();
 
     // SAFETY: On success, `execve` does not return, so the pointers only need to be valid
     // at the moment of the syscall (which they are). Potential UB on failure is caught gracefully.
@@ -60,9 +90,9 @@ pub fn execve<NA: Into<NixString> + Clone, NB: Into<NixString> + Clone>(
     unsafe {
         syscall_result!(
             SyscallNum::Execve,
-            argv_nix_strings[0].as_ptr(),
-            argv_pointer,
-            envp_pointer
+            filename,
+            argv_exec_args.ptrs.as_ptr(),
+            envp_exec_args.ptrs.as_ptr()
         )?;
     }
     unreachable!("execve doesn't return on success");
@@ -79,39 +109,25 @@ pub fn execve<NA: Into<NixString> + Clone, NB: Into<NixString> + Clone>(
 ///
 /// # Errors
 ///
+/// This function returns [`Errno::Enoent`] if `argv` is empty.
+///
 /// This function propagates any [`Errno`]s returned by the underlying calls to
 /// [`fork`](https://www.man7.org/linux/man-pages/man2/fork.2.html) and
 /// [`execve`](https://man7.org/linux/man-pages/man2/execve.2.html).
+// Function won't panic. See below.
+#[allow(clippy::missing_panics_doc)]
 pub fn execute_process<NA: Into<NixString> + Clone, NB: Into<NixString> + Clone>(
     argv: &[NA],
     envp: &[NB],
 ) -> Result<ExitStatus, Errno> {
-    // Return ENOENT if no path is given
     if argv.is_empty() {
         return Err(Errno::Enoent);
     }
-
-    // ARGV
-    // Convert to syscall-compatible strings
-    let argv_nix_strings: Vec<NixString> = vec_into_nix_strings(argv.to_vec());
-    // Get an array of pointers to those strings
-    let mut argv_pointers: Vec<*const u8> =
-        argv_nix_strings.iter().map(NixString::as_ptr).collect();
-    // Null-terminate the array
-    argv_pointers.push(ptr::null());
-    // Get pointer to start of argv array
-    let argv_pointer = argv_pointers.as_ptr();
-
-    // ENVP
-    // Convert to syscall-compatible strings
-    let envp_nix_strings: Vec<NixString> = vec_into_nix_strings(envp.to_vec());
-    // Get an array of pointers to those strings
-    let mut envp_pointers: Vec<*const u8> =
-        envp_nix_strings.iter().map(NixString::as_ptr).collect();
-    // Null-terminate the array
-    envp_pointers.push(ptr::null());
-    // Get pointer to start of envp array
-    let envp_pointer = envp_pointers.as_ptr();
+    let argv_exec_args = ExecArgs::from_slice(argv);
+    let envp_exec_args = ExecArgs::from_slice(envp);
+    // OK to unwrap here- we already made sure argv wasn't empty.
+    #[allow(clippy::unwrap_used)]
+    let filename = argv_exec_args.ptr_to_string(0).unwrap();
 
     match fork()? {
         0 => {
@@ -123,9 +139,9 @@ pub fn execute_process<NA: Into<NixString> + Clone, NB: Into<NixString> + Clone>
             if let Err(errno) = unsafe {
                 syscall_result!(
                     SyscallNum::Execve,
-                    argv_nix_strings[0].as_ptr(),
-                    argv_pointer,
-                    envp_pointer
+                    filename,
+                    argv_exec_args.as_ptr(),
+                    envp_exec_args.as_ptr()
                 )
             } {
                 exit(ExitStatus::ExitFailure(errno as i32));
