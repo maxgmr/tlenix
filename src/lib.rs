@@ -40,7 +40,7 @@ pub mod thread;
 pub(crate) mod test_utils;
 
 // RE-EXPORTS
-pub use args::{Args, EnvVar, parse_argv_envp};
+pub use args::{EnvVar, parse_argv_envp};
 pub use console::Console;
 pub use nix_bytes::{NixBytes, vec_into_nix_bytes};
 pub use nix_str::{NixString, vec_into_nix_strings};
@@ -73,6 +73,18 @@ macro_rules! align_stack_pointer {
     () => {
         unsafe {
             core::arch::asm!("and rsp, -16", options(nostack));
+        }
+    };
+}
+
+/// If the given expression returns [`Ok`], unwrap it. Otherwise, return from the function with the
+/// numerical error as [`process::ExitStatus::ExitFailure`].
+#[macro_export]
+macro_rules! try_exit {
+    ($e:expr) => {
+        match $e {
+            Ok(val) => val,
+            Err(e) => return $crate::process::ExitStatus::ExitFailure(e as i32),
         }
     };
 }
