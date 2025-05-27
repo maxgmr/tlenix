@@ -42,8 +42,8 @@ pub(crate) mod test_utils;
 // RE-EXPORTS
 pub use args::{EnvVar, parse_argv_envp};
 pub use console::Console;
-pub use nix_bytes::{NixBytes, vec_into_nix_bytes};
-pub use nix_str::{NixString, vec_into_nix_strings};
+pub use nix_bytes::NixBytes;
+pub use nix_str::NixString;
 pub use print::{__print_err, __print_str};
 pub use syscall::{Errno, SyscallArg, SyscallNum};
 pub(crate) use syscall::{syscall, syscall_result};
