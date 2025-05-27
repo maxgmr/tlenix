@@ -23,13 +23,16 @@ pub struct EnvVar {
 impl TryFrom<String> for EnvVar {
     type Error = Errno;
 
-    fn try_from(mut value: String) -> Result<Self, Self::Error> {
-        if let Some(eq_idx) = value.find(ENV_VAR_SEPARATOR) {
-            let v = value.split_off(eq_idx);
-            Ok(Self {
-                key: value,
-                value: v,
-            })
+    fn try_from(string: String) -> Result<Self, Self::Error> {
+        if let Some(eq_idx) = string.find(ENV_VAR_SEPARATOR) {
+            // Can't have an empty key!
+            if eq_idx == 0 {
+                return Err(Errno::Einval);
+            }
+            // SAFETY: We know `eq_idx` is within bounds. `find` returned a valid index.
+            let key = string[..eq_idx].to_string();
+            let value = string[eq_idx + 1..].to_string();
+            Ok(Self { key, value })
         } else {
             Err(Errno::Einval)
         }
@@ -172,5 +175,53 @@ fn inc_total_size(total_size: usize, increase: usize) -> Result<usize, Errno> {
         Err(Errno::E2big)
     } else {
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assert_err;
+
+    macro_rules! test_ev_from {
+        ($fn_name:ident($input:expr) => OK($key:expr, $value:expr)) => {
+            #[test_case]
+            fn $fn_name() {
+                let input = $input;
+                let result = EnvVar::try_from(input).unwrap();
+                assert_eq!(
+                    result,
+                    EnvVar {
+                        key: $key.to_string(),
+                        value: $value.to_string()
+                    }
+                );
+            }
+        };
+        ($fn_name:ident($input:expr) => ERR($e:pat)) => {
+            #[test_case]
+            fn $fn_name() {
+                let input = $input;
+                $crate::assert_err!(EnvVar::try_from(input), $e);
+            }
+        };
+    }
+    test_ev_from!(ev_from_string("MY_KEY=my_val".to_string()) => OK("MY_KEY", "my_val"));
+    test_ev_from!(ev_with_space("NAME=Maxwell Gilmour".to_string()) => OK("NAME", "Maxwell Gilmour"));
+    test_ev_from!(ev_no_eq("MY_KEY my_val".to_string()) => ERR(Errno::Einval));
+    test_ev_from!(ev_from_str("MY_KEY=123") => OK("MY_KEY", "123"));
+    test_ev_from!(ev_empty_key("=my_val".to_string()) => ERR(Errno::Einval));
+    test_ev_from!(ev_empty_val("MY_KEY=".to_string()) => OK("MY_KEY", ""));
+    test_ev_from!(ev_multibyte("我的叫=马克斯".to_string()) => OK("我的叫", "马克斯"));
+
+    #[test_case]
+    fn inc_total_size_under() {
+        assert_eq!(inc_total_size(1, 1), Ok(2));
+        assert_eq!(inc_total_size(ARG_ENV_LIM - 2, 2), Ok(ARG_ENV_LIM));
+    }
+
+    #[test_case]
+    fn inc_total_size_over() {
+        assert_err!(inc_total_size(ARG_ENV_LIM, 1), Errno::E2big);
     }
 }
