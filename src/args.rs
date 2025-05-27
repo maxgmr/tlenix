@@ -67,6 +67,11 @@ impl From<&EnvVar> for String {
         string
     }
 }
+impl core::fmt::Display for EnvVar {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}={}", self.key, self.value)
+    }
+}
 
 /// Parses `argv` and `envp` from the stack.
 ///
