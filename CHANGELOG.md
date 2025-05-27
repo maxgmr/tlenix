@@ -15,12 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - More complete parsing of dirent and filestat return values; i.e., complete `DirEnt` and `FileStat` types.
 - Fix the nasty code duplication in the `execve` and `execute_process` functions.
 - Nicer interface for ANSI colour escape codes (and coloured printing in general).
+- Get `mash` to "bundle together" stuff with quotes and generally handle quotes properly.
 
 ## [0.1.0-beta.2] - UNRELEASED
 
+### Added
+
+- `hello`: Minimal demo Tlenix program. Useful as a template/example.
+
 ### Removed
 
-- Build-in `pwd` from `mash` (to be later implemented as a standalone program)
+- Built-in `pwd` from `mash` (to be later implemented as a standalone program)
 
 ## [0.1.0-beta.1] - 2025-05-26
 
