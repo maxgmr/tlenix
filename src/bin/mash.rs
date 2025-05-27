@@ -130,7 +130,6 @@ extern "C" fn _start() -> ! {
                         continue;
                     }
                 };
-
                 argv[0] = &new_argv0;
 
                 match process::execute_process(&argv, &envp) {
@@ -261,15 +260,19 @@ fn program_path_subst(argv0: &str, env_vars: &[EnvVar]) -> Result<String, Errno>
         if stats.file_type != fs::FileType::RegularFile {
             continue;
         }
+
         let fp = stats.file_permissions;
-        if fp.intersects(
+        if !fp.intersects(
             fs::FilePermissions::S_IXUSR
                 | fs::FilePermissions::S_IXGRP
                 | fs::FilePermissions::S_IXOTH,
         ) {
-            // The file exists, is a regular file, and is executable. We've got one. Return it.
-            return Ok(candidate_path);
+            // File is not executable.
+            continue;
         }
+
+        // The file exists, is a regular file, and is executable. We've got one. Return it.
+        return Ok(candidate_path);
     }
     // No candidate paths matched. Unknown command.
     Err(Errno::Enoent)
