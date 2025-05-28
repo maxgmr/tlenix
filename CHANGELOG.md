@@ -15,12 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0-beta.3] - UNRELEASED
 
+### Added
+
+- `clear`: Clears the terminal screen.
+
 ## [0.1.0-beta.2] - 2025-05-27
 
 ### Added
 
 - `hello`: Minimal demo Tlenix program. Useful as a template/example.
-- `printenv`: Print the environment variables.
+- `printenv`: Prints the environment variables.
 
 ### Removed
 
