@@ -28,6 +28,17 @@ pub struct File {
     open_options: OpenOptions,
 }
 impl File {
+    /// Statically defines a [`File`] with the given [`FileDescriptor`]. Used to create the
+    /// standard streams.
+    #[doc(hidden)]
+    #[must_use]
+    pub(crate) const fn define(file_descriptor: FileDescriptor) -> Self {
+        Self {
+            file_descriptor,
+            open_options: OpenOptions::dummy(),
+        }
+    }
+
     /// Creates a [`File`] at the given [`FileDescriptor`] with the given open options. Not
     /// intended to be used directly.
     #[doc(hidden)]

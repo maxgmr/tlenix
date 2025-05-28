@@ -31,6 +31,7 @@ mod nix_bytes;
 mod nix_str;
 mod print;
 pub mod process;
+pub mod streams;
 mod syscall;
 pub mod system;
 mod test_framework;
