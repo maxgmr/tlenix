@@ -1,7 +1,7 @@
 //! Module for the [standard streams](https://en.wikipedia.org/wiki/Standard_streams): standard
 //! input, standard output, and standard error.
 
-use alloc::string::String;
+use alloc::{string::String, vec::Vec};
 use core::marker::PhantomData;
 
 use spin::Mutex;
@@ -66,6 +66,17 @@ impl Stream<Input> {
     /// This function propagates any [`Errno`]s returned from [`File::read`].
     pub fn read(&self, buffer: &mut [u8]) -> Result<usize, Errno> {
         self.file.read(buffer)
+    }
+
+    /// Reads the entire stream, up to EOF, into a [`Vec<u8>`].
+    ///
+    /// Wrapper around the [`File::read_to_bytes`] function.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any [`Errno`]s returned from [`File::read_to_bytes`].
+    pub fn read_to_bytes(&self) -> Result<Vec<u8>, Errno> {
+        self.file.read_to_bytes()
     }
 
     /// Reads the entire stream, up to EOF, into a [`String`].
