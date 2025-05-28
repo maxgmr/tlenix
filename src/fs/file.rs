@@ -86,18 +86,17 @@ impl File {
         }
     }
 
-    /// Reads the entire contents of this file into a [`String`].
+    /// Reads the entire contents of this file into a [`Vec<u8>`].
     ///
     /// Convenience function. Uses [`Self::read`] internally.
     ///
-    /// This function tries to keep the file cursor at the same spot it was before this function was called.
+    /// This function tries to keep the file cursor at the same spot it was before this function
+    /// was called.
     ///
     /// # Errors
     ///
-    /// This function will return [`Errno::Eilseq`] if the bytes of the file are not valid UTF-8.
-    ///
     /// This function will propagate any [`Errno`]s from the internal call to [`Self::read`].
-    pub fn read_to_string(&self) -> Result<String, Errno> {
+    pub fn read_to_bytes(&self) -> Result<Vec<u8>, Errno> {
         let mut buffer = Vec::new();
         // Chunks are page size for better performance
         let mut chunk = [0_u8; PAGE_SIZE];
@@ -127,7 +126,23 @@ impl File {
         #[allow(clippy::cast_possible_wrap)]
         self.set_cursor(orig_cursor as i64)?;
 
-        String::from_utf8(buffer).map_err(|_| Errno::Eilseq)
+        Ok(buffer)
+    }
+
+    /// Reads the entire contents of this file into a [`String`].
+    ///
+    /// Convenience function. Uses [`Self::read`] internally.
+    ///
+    /// This function tries to keep the file cursor at the same spot it was before this function
+    /// was called.
+    ///
+    /// # Errors
+    ///
+    /// This function will return [`Errno::Eilseq`] if the bytes of the file are not valid UTF-8.
+    ///
+    /// This function will propagate any [`Errno`]s from the internal call to [`Self::read`].
+    pub fn read_to_string(&self) -> Result<String, Errno> {
+        String::from_utf8(self.read_to_bytes()?).map_err(|_| Errno::Eilseq)
     }
 
     /// Reads a single byte from the file.

@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `clear`: Clears the terminal screen.
+- `File::read_to_bytes`: Reads the whole file into a byte vector.
 
 ## [0.1.0-beta.2] - 2025-05-27
 
