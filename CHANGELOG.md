@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Nicer interface for ANSI colour escape codes (and coloured printing in general).
 - Get `mash` to "bundle together" stuff with quotes and generally handle quotes properly.
 
+## [0.1.0-beta.3] - UNRELEASED
+
 ## [0.1.0-beta.2] - 2025-05-27
 
 ### Added
