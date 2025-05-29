@@ -24,7 +24,7 @@ impl<T: Fn()> Testable for T {
         } else {
             1
         };
-        print!("{initial_text}{ELLIPSIS}{: <padding$}", padding);
+        print!("{initial_text}{ELLIPSIS}{: <padding$}", "");
         self();
         println!("{OK_TEXT}");
     }
