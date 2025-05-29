@@ -236,16 +236,16 @@ fn trunc_write() {
 fn read_advance_cursor() {
     let mut buffer = [0; 20];
     let file = OpenOptions::new().open(TEST_PATH).unwrap();
-    assert_eq!(file.cursor().unwrap(), 0);
+    assert_eq!(file.cursor().unwrap().unwrap(), 0);
 
     let bytes_read = file.read(&mut buffer).unwrap();
-    assert_eq!(file.cursor().unwrap(), bytes_read);
+    assert_eq!(file.cursor().unwrap().unwrap(), bytes_read);
 
     let bytes_read = file.read(&mut buffer).unwrap();
-    assert_eq!(file.cursor().unwrap(), bytes_read * 2);
+    assert_eq!(file.cursor().unwrap().unwrap(), bytes_read * 2);
 
     let bytes_read = file.read(&mut buffer).unwrap();
-    assert_eq!(file.cursor().unwrap(), bytes_read * 3);
+    assert_eq!(file.cursor().unwrap().unwrap(), bytes_read * 3);
 }
 
 #[test_case]
@@ -297,28 +297,28 @@ fn tempfile() {
 #[test_case]
 fn file_cursor_offset() {
     let file = OpenOptions::new().open(TEST_PATH).unwrap();
-    assert_eq!(file.cursor().unwrap(), 0);
+    assert_eq!(file.cursor().unwrap().unwrap(), 0);
 
-    assert_eq!(file.cursor_offset(4).unwrap(), 4);
-    assert_eq!(file.cursor().unwrap(), 4);
+    assert_eq!(file.cursor_offset(4).unwrap().unwrap(), 4);
+    assert_eq!(file.cursor().unwrap().unwrap(), 4);
 
-    assert_eq!(file.cursor_offset(-2).unwrap(), 2);
-    assert_eq!(file.cursor().unwrap(), 2);
+    assert_eq!(file.cursor_offset(-2).unwrap().unwrap(), 2);
+    assert_eq!(file.cursor().unwrap().unwrap(), 2);
 
-    assert_eq!(file.cursor_offset(10000).unwrap(), 10002);
-    assert_eq!(file.cursor().unwrap(), 10002);
+    assert_eq!(file.cursor_offset(10000).unwrap().unwrap(), 10002);
+    assert_eq!(file.cursor().unwrap().unwrap(), 10002);
 }
 
 #[test_case]
 fn file_set_cursor() {
     let file = OpenOptions::new().open(TEST_PATH).unwrap();
-    assert_eq!(file.cursor().unwrap(), 0);
+    assert_eq!(file.cursor().unwrap().unwrap(), 0);
 
-    assert_eq!(file.set_cursor(200).unwrap(), 200);
-    assert_eq!(file.cursor().unwrap(), 200);
+    assert_eq!(file.set_cursor(200).unwrap().unwrap(), 200);
+    assert_eq!(file.cursor().unwrap().unwrap(), 200);
 
-    assert_eq!(file.set_cursor(200).unwrap(), 200);
-    assert_eq!(file.cursor().unwrap(), 200);
+    assert_eq!(file.set_cursor(200).unwrap().unwrap(), 200);
+    assert_eq!(file.cursor().unwrap().unwrap(), 200);
 
     assert_err!(file.set_cursor(-1), Errno::Einval);
 }
@@ -326,28 +326,43 @@ fn file_set_cursor() {
 #[test_case]
 fn file_cursor_to_end() {
     let file = OpenOptions::new().open(TEST_PATH).unwrap();
-    assert_eq!(file.cursor().unwrap(), 0);
+    assert_eq!(file.cursor().unwrap().unwrap(), 0);
 
-    assert_eq!(file.cursor_to_end().unwrap(), TEST_PATH_CONTENTS.len());
-    assert_eq!(file.cursor().unwrap(), TEST_PATH_CONTENTS.len());
+    assert_eq!(
+        file.cursor_to_end().unwrap().unwrap(),
+        TEST_PATH_CONTENTS.len()
+    );
+    assert_eq!(file.cursor().unwrap().unwrap(), TEST_PATH_CONTENTS.len());
 }
 
 #[test_case]
 fn file_cursor_end_offset() {
     let file = OpenOptions::new().open(TEST_PATH).unwrap();
-    assert_eq!(file.cursor().unwrap(), 0);
+    assert_eq!(file.cursor().unwrap().unwrap(), 0);
 
     assert_eq!(
-        file.cursor_to_end_offset(-20).unwrap(),
+        file.cursor_to_end_offset(-20).unwrap().unwrap(),
         TEST_PATH_CONTENTS.len() - 20
     );
-    assert_eq!(file.cursor().unwrap(), TEST_PATH_CONTENTS.len() - 20);
+    assert_eq!(
+        file.cursor().unwrap().unwrap(),
+        TEST_PATH_CONTENTS.len() - 20
+    );
 
     assert_eq!(
-        file.cursor_to_end_offset(50).unwrap(),
+        file.cursor_to_end_offset(50).unwrap().unwrap(),
         TEST_PATH_CONTENTS.len() + 50
     );
-    assert_eq!(file.cursor().unwrap(), TEST_PATH_CONTENTS.len() + 50);
+    assert_eq!(
+        file.cursor().unwrap().unwrap(),
+        TEST_PATH_CONTENTS.len() + 50
+    );
+}
+
+#[test_case]
+fn cursor_on_stdin() {
+    const STDIN: File = File::define(FileDescriptor::define(0));
+    assert!(STDIN.cursor().unwrap().is_none());
 }
 
 // This test fails if your project directory doesn't end with "tlenix" :/
