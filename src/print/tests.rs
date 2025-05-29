@@ -84,3 +84,26 @@ fn pretty_debug() {
 fn display_impl() {
     print!("{}", MyTestStruct::example());
 }
+
+#[test_case]
+fn format_empty() {
+    assert_eq!(format!(""), "");
+}
+
+#[test_case]
+fn format_literal() {
+    assert_eq!(format!("abc123"), "abc123");
+}
+
+#[test_case]
+fn format_subst() {
+    assert_eq!(format!("{}+{}={}", 1, 1, 1 + 1), "1+1=2");
+}
+
+#[test_case]
+fn format_width() {
+    const EXPECTED: &str = "Hello x    !";
+    assert_eq!(format!("Hello {:5}!", "x"), EXPECTED);
+    assert_eq!(format!("Hello {:1$}!", "x", 5), EXPECTED);
+    assert_eq!(format!("Hello {1:0$}!", 5, "x"), EXPECTED);
+}
