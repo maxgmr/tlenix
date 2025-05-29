@@ -23,7 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Implement the standard input, standard output, and standard error streams.
+- Statically access the standard input, standard output, and standard error streams.
+- Prettier test output alignment.
 
 ## [0.1.0-beta.2] - 2025-05-27
 
