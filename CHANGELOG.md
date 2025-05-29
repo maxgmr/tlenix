@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fun BSOD-style screen on panic.
 - Nicer interface for ANSI colour escape codes (and coloured printing in general).
 - Get `mash` to "bundle together" stuff with quotes and generally handle quotes properly.
+- Build script updates GRUB entry version number automatically
+- Handle non-`/dev/sda{1,2}` configurations in `usb-setup` and `initramfs_init`
 
 ## [0.1.0-beta.3] - UNRELEASED
 
