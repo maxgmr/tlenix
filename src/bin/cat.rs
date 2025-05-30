@@ -244,9 +244,6 @@ unsafe extern "C" fn start(stack_top: *const usize) -> ! {
 
     let exit_code = main(&argv, &envp);
 
-    // TODO debug
-    tlenix_core::println!("{exit_code}");
-
     process::exit(exit_code);
 }
 
