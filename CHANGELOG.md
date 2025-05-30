@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Statically access the standard input, standard output, and standard error streams.
 - Prettier test output alignment.
+- Fixed `./usb-install` file schema.
+- `README` instructions now use `./usb-install` script.
 
 ## [0.1.0-beta.2] - 2025-05-27
 
