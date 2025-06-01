@@ -484,6 +484,39 @@ pub fn rm<NS: Into<NixString>>(path: NS) -> Result<(), Errno> {
     Ok(())
 }
 
+/// Renames a file or directory, optionally moving its location if needed.
+///
+/// If a file is being renamed and another file exists at that location, the existing file is
+/// overwritten.
+///
+/// If a directory is being renamed and another directory exists at that location, it will only be
+/// overwritten if the existing directory is empty.
+///
+/// Internally uses the [`rename`](https://man7.org/linux/man-pages/man2/rename.2.html) Linux
+/// system call.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s returned by the underlying call to `rename`.
+pub fn rename<NA: Into<NixString>, NB: Into<NixString>>(
+    old_path: NA,
+    new_path: NB,
+) -> Result<(), Errno> {
+    let old_path_ns: NixString = old_path.into();
+    let new_path_ns: NixString = new_path.into();
+
+    // SAFETY: The NixString type guarantees null-terminated UTF-8.
+    unsafe {
+        syscall_result!(
+            SyscallNum::Rename,
+            old_path_ns.as_ptr(),
+            new_path_ns.as_ptr()
+        )?;
+    }
+
+    Ok(())
+}
+
 // This is needed to get access to the private file_descriptor field.
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]

@@ -3,7 +3,7 @@
 use alloc::string::ToString;
 
 use crate::{
-    Errno, assert_err,
+    Errno, assert_err, format,
     fs::{FileType, types::DirEntType},
 };
 
@@ -17,6 +17,8 @@ const TEST_PATH_CONTENTS: &str =
 const TEMP_DIR: &str = "/tmp";
 const LARGE_PATH: &str = "test_files/large_file.txt";
 const LARGE_CONTENTS_BYTES: [u8; 10_000] = [b'e'; 10_000];
+
+const RENAME_DIR: &str = "/tmp/tlenix_rename_tests";
 
 #[test_case]
 fn read_bytes() {
@@ -636,4 +638,138 @@ fn read_to_string_large() {
         file_contents,
         str::from_utf8(&LARGE_CONTENTS_BYTES).unwrap()
     );
+}
+
+#[test_case]
+fn rename_basic() {
+    let path = format!("{RENAME_DIR}/rename_basic_test");
+    let expected = format!("{RENAME_DIR}/rename_basic_test_pass");
+    // Create dir if it doesn't already exist
+    let _ = mkdir(RENAME_DIR, FilePermissions::from(0o777));
+    // Make sure file doesn't exist already
+    let _ = rm(&path);
+
+    OpenOptions::new().create(true).open(&path).unwrap();
+    // Ensure file exists
+    OpenOptions::new().open(&path).unwrap();
+    rename(&path, &expected).unwrap();
+    // Ensure old file name doesn't exist
+    assert_err!(OpenOptions::new().open(&path), Errno::Enoent);
+    // Ensure new file name does exist
+    OpenOptions::new().open(&expected).unwrap();
+    // Clean up after yourself
+    rm(&expected).unwrap();
+}
+
+#[test_case]
+fn rename_overwrite() {
+    const F1_CONTENTS: &str = "123";
+    const F2_CONTENTS: &str = "abc";
+
+    let path = format!("{RENAME_DIR}/rename_overwrite_test");
+    let expected = format!("{RENAME_DIR}/rename_overwrite_test_pass");
+    // Create dir if it doesn't already exist
+    let _ = mkdir(RENAME_DIR, FilePermissions::from(0o777));
+    // Make sure file doesn't exist already
+    let _ = rm(&path);
+
+    let f1 = OpenOptions::new()
+        .read_write()
+        .create(true)
+        .open(&path)
+        .unwrap();
+    f1.write(F1_CONTENTS.as_bytes()).unwrap();
+    f1.set_cursor(0).unwrap();
+    let f2 = OpenOptions::new()
+        .read_write()
+        .create(true)
+        .open(&expected)
+        .unwrap();
+    f2.write(F2_CONTENTS.as_bytes()).unwrap();
+    f2.set_cursor(0).unwrap();
+    assert_eq!(&f1.read_to_string().unwrap(), F1_CONTENTS);
+    assert_eq!(&f2.read_to_string().unwrap(), F2_CONTENTS);
+    drop(f1);
+    drop(f2);
+
+    // Overwrite
+    rename(&path, &expected).unwrap();
+
+    // Make sure original file name is gone
+    assert_err!(OpenOptions::new().open(&path), Errno::Enoent);
+    // Make sure overwritten file exists
+    let overwritten = OpenOptions::new().open(&expected).unwrap();
+    assert_eq!(&overwritten.read_to_string().unwrap(), F1_CONTENTS);
+
+    // Clean up after yourself
+    rm(&expected).unwrap();
+}
+
+#[test_case]
+fn move_files_to_subdir() {
+    const F1: &str = "rename_files_to_subdir_file_1";
+    const F2: &str = "rename_files_to_subdir_file_2";
+
+    let subdir = format!("{RENAME_DIR}/rename_files_to_subdir_test");
+    let f1_orig = format!("{RENAME_DIR}/{F1}");
+    let f2_orig = format!("{RENAME_DIR}/{F2}");
+    let f1_expected = format!("{subdir}/{F1}");
+    let f2_expected = format!("{subdir}/{F2}");
+
+    let _ = mkdir(RENAME_DIR, FilePermissions::from(0o777));
+
+    OpenOptions::new().create(true).open(&f1_orig).unwrap();
+    OpenOptions::new().create(true).open(&f2_orig).unwrap();
+    let _ = mkdir(&subdir, FilePermissions::from(0o777));
+
+    // Make sure files are there
+    OpenOptions::new().open(&f1_orig).unwrap();
+    OpenOptions::new().open(&f2_orig).unwrap();
+
+    // Move files
+    rename(&f1_orig, format!("{subdir}/{F1}")).unwrap();
+    rename(&f2_orig, format!("{subdir}/{F2}")).unwrap();
+
+    // Make sure files are gone from old locations
+    assert_err!(OpenOptions::new().open(&f1_orig), Errno::Enoent);
+    assert_err!(OpenOptions::new().open(&f2_orig), Errno::Enoent);
+
+    // Make sure files are at new locations
+    OpenOptions::new().open(&f1_expected).unwrap();
+    OpenOptions::new().open(&f2_expected).unwrap();
+
+    // Clean up after yourself
+    rm(&f1_expected).unwrap();
+    rm(&f2_expected).unwrap();
+    rmdir(&subdir).unwrap();
+}
+
+#[test_case]
+fn cant_rename_file_to_dir() {
+    let f = format!("{RENAME_DIR}/cant_rename_file_to_dir_file");
+    let d = format!("{RENAME_DIR}/cant_rename_file_to_dir_dir");
+
+    let _ = mkdir(&d, FilePermissions::from(0o777));
+    OpenOptions::new().create(true).open(&f).unwrap();
+
+    assert_err!(rename(&f, &d), Errno::Eisdir);
+
+    // Clean up after yourself!
+    rm(f).unwrap();
+    rmdir(d).unwrap();
+}
+
+#[test_case]
+fn cant_rename_dir_to_file() {
+    let f = format!("{RENAME_DIR}/cant_rename_file_to_dir_file");
+    let d = format!("{RENAME_DIR}/cant_rename_file_to_dir_dir");
+
+    let _ = mkdir(&d, FilePermissions::from(0o777));
+    OpenOptions::new().create(true).open(&f).unwrap();
+
+    assert_err!(rename(&d, &f), Errno::Enotdir);
+
+    // Clean up after yourself!
+    rm(f).unwrap();
+    rmdir(d).unwrap();
 }

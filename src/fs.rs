@@ -10,7 +10,7 @@ mod types;
 
 // RE-EXPORTS
 pub use dirs::{change_dir, chroot, get_cwd, mkdir, rmdir};
-pub use file::{File, rm};
+pub use file::{File, rename, rm};
 pub use mount::{FilesystemType, MountFlags, UmountFlags, mount, pivot_root, umount};
 pub use open_flags::OpenFlags;
 pub use open_options::OpenOptions;
