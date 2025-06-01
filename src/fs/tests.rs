@@ -773,3 +773,23 @@ fn cant_rename_dir_to_file() {
     rm(f).unwrap();
     rmdir(d).unwrap();
 }
+
+#[test_case]
+fn rename_no_overwrite_full_dir() {
+    let d1 = format!("{RENAME_DIR}/rename_no_overwrite_full_dir_d1");
+    let d2 = format!("{RENAME_DIR}/rename_no_overwrite_full_dir_d2");
+    let f = format!("{d2}/rename_no_overwrite_full_dir_f");
+
+    let _ = mkdir(&d1, FilePermissions::from(0o777));
+    let _ = mkdir(&d2, FilePermissions::from(0o777));
+    OpenOptions::new().create(true).open(&f).unwrap();
+
+    assert_err!(rename(&d1, &d2), Errno::Enotempty);
+
+    rm(f).unwrap();
+
+    // OK to overwrite now, d2 is empty
+    rename(&d1, &d2).unwrap();
+
+    rmdir(d2).unwrap();
+}
