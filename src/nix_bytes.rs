@@ -64,6 +64,11 @@ impl From<String> for NixBytes {
         Self::from(value.into_bytes())
     }
 }
+impl From<&String> for NixBytes {
+    fn from(value: &String) -> Self {
+        Self::from(value.as_str())
+    }
+}
 impl From<&str> for NixBytes {
     fn from(value: &str) -> Self {
         Self::from(value.to_string())

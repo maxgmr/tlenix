@@ -82,6 +82,11 @@ impl From<String> for NixString {
         Self::try_from(value.into_bytes()).unwrap()
     }
 }
+impl From<&String> for NixString {
+    fn from(value: &String) -> Self {
+        Self::from(value.as_str())
+    }
+}
 impl From<&str> for NixString {
     fn from(value: &str) -> Self {
         Self::from(value.to_string())
