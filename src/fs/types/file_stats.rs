@@ -341,13 +341,13 @@ impl FileAttributes {
         is_encrypted(ENCRYPTED);
         /// cannot be written to, and all reads from it will be verified against a cryptographic
         /// hash that covers the entire file.
-        verity(VERITY);
+        is_verity(VERITY);
         /// supports torn-write protection.
-        write_atomic(WRITE_ATOMIC);
+        is_write_atomic(WRITE_ATOMIC);
         /// is in the DAX (CPU direct access) state.
-        dax(DAX);
+        is_dax(DAX);
         /// is the root of the mount.
-        mount_root(MOUNT_ROOT);
+        is_mount_root(MOUNT_ROOT);
 
     }
 }
