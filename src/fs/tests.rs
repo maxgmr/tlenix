@@ -769,3 +769,75 @@ fn rename_no_overwrite_full_dir() {
 
     rmdir(d2).unwrap();
 }
+
+fn assert_file_stats_normal_file(stats: &FileStats) {
+    assert_eq!(
+        stats.file_stats_mask,
+        FileStatsMask::BASIC_STATS | FileStatsMask::BTIME | FileStatsMask::MNT_ID_UNIQUE
+    );
+    assert_eq!(stats.file_type, Some(FileType::RegularFile));
+    assert_eq!(stats.mode, Some(FilePermissions::from(0o644)));
+    assert!(stats.block_size.is_some());
+    assert!(stats.hard_links.is_some());
+    assert!(stats.uid.is_some());
+    assert!(stats.gid.is_some());
+    assert!(stats.inode.is_some());
+    assert!(stats.blocks.is_some());
+    assert!(stats.access_time.is_some());
+    assert!(stats.creation_time.is_some());
+    assert!(stats.status_change_time.is_some());
+    assert!(stats.modification_time.is_some());
+}
+
+#[test_case]
+fn file_stats_read() {
+    const PATH: &str = "/tmp/file_stats_read_test_file";
+    const CONTENTS: &str = "This is my test file.";
+    let file = OpenOptions::new()
+        .read_write()
+        .create(true)
+        .open(PATH)
+        .unwrap();
+    file.write(CONTENTS.as_bytes()).unwrap();
+    let stats = file.stats();
+
+    // Clean up after yourself!
+    drop(file);
+    rm(PATH).unwrap();
+
+    // crate::println!("{file_stats:#?}");
+
+    assert_file_stats_normal_file(&stats.unwrap());
+}
+
+fn assert_is_file_type(path: &'static str, expected: FileType) {
+    let stats = FileStats::try_from_path(path).unwrap();
+    assert_eq!(stats.file_type, Some(expected));
+}
+
+#[test_case]
+fn path_stats_read() {
+    const PATH: &str = "/tmp/path_stats_read_test_file";
+    OpenOptions::new().create(true).open(PATH).unwrap();
+
+    let stats = FileStats::try_from_path(PATH);
+
+    // Clean up after yourself!
+    rm(PATH).unwrap();
+
+    assert_file_stats_normal_file(&stats.unwrap());
+}
+
+#[test_case]
+fn dir_stats_read() {
+    const PATH: &str = "/tmp/dir_stats_read_test_dir";
+    mkdir(PATH, FilePermissions::from(0o777)).unwrap();
+    assert_is_file_type(PATH, FileType::Directory);
+    rmdir(PATH).unwrap();
+}
+
+#[test_case]
+fn char_dev_stats_read() {
+    const PATH: &str = "/dev/tty";
+    assert_is_file_type(PATH, FileType::CharacterDevice);
+}
