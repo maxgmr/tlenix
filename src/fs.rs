@@ -15,9 +15,10 @@ pub use mount::{FilesystemType, MountFlags, UmountFlags, mount, pivot_root, umou
 pub use open_flags::OpenFlags;
 pub use open_options::OpenOptions;
 pub use permissions::FilePermissions;
-pub use types::{DirEnt, FileDescriptor, FileStat, FileType, LseekWhence};
-
-pub(crate) use types::FileStatRaw;
+pub use types::{
+    DirEnt, FileAttributes, FileDescriptor, FileStats, FileStatsMask, FileType, LseekWhence,
+};
+pub(crate) use types::{FileStatsRaw, statx_get_all};
 
 #[cfg(test)]
 mod tests;

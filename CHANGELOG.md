@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Modernized file stats format (`fstat` -> `statx`).
 - Statically access the standard input, standard output, and standard error streams.
 - Prettier test output alignment.
 - Fixed `./usb-install` file schema.

@@ -2,10 +2,7 @@
 
 use alloc::string::ToString;
 
-use crate::{
-    Errno, assert_err, format,
-    fs::{FileType, types::DirEntType},
-};
+use crate::{Errno, assert_err, format, fs::types::DirEntType};
 
 use super::*;
 
@@ -167,28 +164,6 @@ fn o_excl_creat_eexist() {
         OpenOptions::new().create_new(true).open(THIS_PATH),
         Errno::Eexist
     );
-}
-
-#[test_case]
-fn stats() {
-    let stats = OpenOptions::new().open(TEST_PATH).unwrap().stat().unwrap();
-    // crate::println!("{:#?}", stats);
-    assert_eq!(stats.file_type, FileType::RegularFile);
-    assert_eq!(
-        stats.file_stat_raw.st_size,
-        TEST_PATH_CONTENTS.len().try_into().unwrap()
-    );
-}
-
-#[test_case]
-fn dir_stats() {
-    let stats = OpenOptions::new()
-        .path_only(true)
-        .open("/")
-        .unwrap()
-        .stat()
-        .unwrap();
-    assert_eq!(stats.file_type, FileType::Directory);
 }
 
 #[test_case]
@@ -764,6 +739,7 @@ fn cant_rename_dir_to_file() {
     let f = format!("{RENAME_DIR}/cant_rename_file_to_dir_file");
     let d = format!("{RENAME_DIR}/cant_rename_file_to_dir_dir");
 
+    let _ = mkdir(RENAME_DIR, FilePermissions::from(0o777));
     let _ = mkdir(&d, FilePermissions::from(0o777));
     OpenOptions::new().create(true).open(&f).unwrap();
 

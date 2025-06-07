@@ -1,5 +1,5 @@
 use crate::{
-    fs::{FileDescriptor, FileStatRaw},
+    fs::{FileDescriptor, FileStatsRaw},
     ipc::SigInfoRaw,
     process::ExitStatus,
 };
@@ -67,7 +67,7 @@ impl_from_syscallarg_for_as_usize![
     *const u8,
     *const *const u8,
     *mut u8,
-    *mut FileStatRaw,
+    *mut FileStatsRaw,
     *mut SigInfoRaw,
     *const usize,
     *mut usize

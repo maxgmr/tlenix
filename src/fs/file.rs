@@ -9,8 +9,8 @@ use core::mem::size_of;
 use crate::{
     Errno, NULL_BYTE, NixString, PAGE_SIZE, SyscallNum,
     fs::{
-        DirEnt, FileDescriptor, FileStat, LseekWhence, OpenOptions, types::DirEntRawHeader,
-        types::FileStatRaw,
+        DirEnt, FileDescriptor, FileStats, LseekWhence, OpenOptions, statx_get_all,
+        types::DirEntRawHeader,
     },
     syscall, syscall_result,
 };
@@ -50,24 +50,20 @@ impl File {
         }
     }
 
-    /// Gets information about this [`File`] in the form of a [`FileStat`].
+    /// Gets information about this [`File`] in the form of a [`FileStats`].
     ///
-    /// Wrapper around the [`fstat`](https://man7.org/linux/man-pages/man2/fstat.2.html) Linux
-    /// syscall.
+    /// Internally uses the [`statx`](https://man7.org/linux/man-pages/man2/statx.2.html) Linux
+    /// system call.
     ///
     /// # Errors
     ///
-    /// This function propagates any [`Errno`]s from the underlying `fstat` Linux syscall. It
-    /// also returns [`Errno::Eio`] if it gets malformed data from the syscall itself.
-    pub fn stat(&self) -> Result<FileStat, Errno> {
-        let mut stats = FileStatRaw::default();
-
-        // SAFETY: Arguments are correct. `stats_ptr` is valid at the time of calling and is
-        // dropped right afterwards.
-        unsafe {
-            syscall_result!(SyscallNum::Fstat, self.file_descriptor, &raw mut stats)?;
-        }
-        stats.try_into()
+    /// This function propagates any [`Errno`]s returned from the underlying call to `statx`.
+    pub fn stats(&self) -> Result<FileStats, Errno> {
+        // OK to allow here. The point at which a file descriptor would be truncated/wrapper is far
+        // beyond any reasonable number of open file descriptors.
+        #[allow(clippy::cast_possible_truncation)]
+        #[allow(clippy::cast_possible_wrap)]
+        statx_get_all(usize::from(self.file_descriptor) as i32, NixString::null())
     }
 
     /// Reads bytes from the [`File`] into the given buffer. Returns the number of bytes read from
