@@ -634,6 +634,7 @@ fn rename_basic() {
     OpenOptions::new().open(&expected).unwrap();
     // Clean up after yourself
     rm(&expected).unwrap();
+    rmdir(RENAME_DIR).unwrap();
 }
 
 #[test_case]
@@ -678,6 +679,7 @@ fn rename_overwrite() {
 
     // Clean up after yourself
     rm(&expected).unwrap();
+    rmdir(RENAME_DIR).unwrap();
 }
 
 #[test_case]
@@ -717,6 +719,7 @@ fn move_files_to_subdir() {
     rm(&f1_expected).unwrap();
     rm(&f2_expected).unwrap();
     rmdir(&subdir).unwrap();
+    rmdir(RENAME_DIR).unwrap();
 }
 
 #[test_case]
@@ -724,6 +727,7 @@ fn cant_rename_file_to_dir() {
     let f = format!("{RENAME_DIR}/cant_rename_file_to_dir_file");
     let d = format!("{RENAME_DIR}/cant_rename_file_to_dir_dir");
 
+    let _ = mkdir(RENAME_DIR, FilePermissions::from(0o777));
     let _ = mkdir(&d, FilePermissions::from(0o777));
     OpenOptions::new().create(true).open(&f).unwrap();
 
@@ -732,6 +736,7 @@ fn cant_rename_file_to_dir() {
     // Clean up after yourself!
     rm(f).unwrap();
     rmdir(d).unwrap();
+    rmdir(RENAME_DIR).unwrap();
 }
 
 #[test_case]
@@ -748,6 +753,7 @@ fn cant_rename_dir_to_file() {
     // Clean up after yourself!
     rm(f).unwrap();
     rmdir(d).unwrap();
+    rmdir(RENAME_DIR).unwrap();
 }
 
 #[test_case]
@@ -756,6 +762,7 @@ fn rename_no_overwrite_full_dir() {
     let d2 = format!("{RENAME_DIR}/rename_no_overwrite_full_dir_d2");
     let f = format!("{d2}/rename_no_overwrite_full_dir_f");
 
+    let _ = mkdir(RENAME_DIR, FilePermissions::from(0o777));
     let _ = mkdir(&d1, FilePermissions::from(0o777));
     let _ = mkdir(&d2, FilePermissions::from(0o777));
     OpenOptions::new().create(true).open(&f).unwrap();
@@ -768,6 +775,7 @@ fn rename_no_overwrite_full_dir() {
     rename(&d1, &d2, RenameFlags::empty()).unwrap();
 
     rmdir(d2).unwrap();
+    rmdir(RENAME_DIR).unwrap();
 }
 
 fn assert_file_stats_normal_file(stats: &FileStats) {
