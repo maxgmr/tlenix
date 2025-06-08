@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Build script updates GRUB entry version number automatically
 - Handle non-`/dev/sda{1,2}` configurations in `usb-setup` and `initramfs_init`
 - Abstract away Tlenix program boilerplate (proc macro?)
+- Add `--help` display to all Tlenix programs
+- `man` pages!
 
 ## [0.1.0-beta.3] - UNRELEASED
 
