@@ -2,15 +2,12 @@
 
 use crate::{
     Errno, NixString, SyscallNum,
-    fs::{FilePermissions, FileType},
+    fs::{AT_FDCWD, FilePermissions, FileType},
     syscall_result,
 };
 
 /// Bit mask for the mode bit field.
 const MODE_MASK: u32 = 0o7_777;
-
-/// Constant for the "current working directory" file descriptor.
-const AT_FDCWD: i32 = -100;
 
 /// Constant for the `statx` system call. If this flag is set, then if the given path name is an
 /// empty string or `NULL`, then operate on the file referred to by the given file descriptor.

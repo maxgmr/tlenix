@@ -5,6 +5,7 @@ mod file_descriptor;
 mod file_stats;
 mod file_type;
 mod lseekwhence;
+mod rename_flags;
 
 // RE-EXPORTS
 
@@ -15,3 +16,4 @@ pub use file_stats::{FileAttributes, FileStats, FileStatsMask};
 pub(crate) use file_stats::{FileStatsRaw, statx_get_all};
 pub use file_type::FileType;
 pub use lseekwhence::LseekWhence;
+pub use rename_flags::RenameFlags;

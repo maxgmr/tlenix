@@ -17,8 +17,12 @@ pub use open_options::OpenOptions;
 pub use permissions::FilePermissions;
 pub use types::{
     DirEnt, FileAttributes, FileDescriptor, FileStats, FileStatsMask, FileType, LseekWhence,
+    RenameFlags,
 };
 pub(crate) use types::{FileStatsRaw, statx_get_all};
 
 #[cfg(test)]
 mod tests;
+
+/// Constant for the "current working directory" file descriptor.
+pub(crate) const AT_FDCWD: i32 = -100;

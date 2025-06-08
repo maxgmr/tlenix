@@ -627,7 +627,7 @@ fn rename_basic() {
     OpenOptions::new().create(true).open(&path).unwrap();
     // Ensure file exists
     OpenOptions::new().open(&path).unwrap();
-    rename(&path, &expected).unwrap();
+    rename(&path, &expected, RenameFlags::empty()).unwrap();
     // Ensure old file name doesn't exist
     assert_err!(OpenOptions::new().open(&path), Errno::Enoent);
     // Ensure new file name does exist
@@ -668,7 +668,7 @@ fn rename_overwrite() {
     drop(f2);
 
     // Overwrite
-    rename(&path, &expected).unwrap();
+    rename(&path, &expected, RenameFlags::empty()).unwrap();
 
     // Make sure original file name is gone
     assert_err!(OpenOptions::new().open(&path), Errno::Enoent);
@@ -702,8 +702,8 @@ fn move_files_to_subdir() {
     OpenOptions::new().open(&f2_orig).unwrap();
 
     // Move files
-    rename(&f1_orig, format!("{subdir}/{F1}")).unwrap();
-    rename(&f2_orig, format!("{subdir}/{F2}")).unwrap();
+    rename(&f1_orig, format!("{subdir}/{F1}"), RenameFlags::empty()).unwrap();
+    rename(&f2_orig, format!("{subdir}/{F2}"), RenameFlags::empty()).unwrap();
 
     // Make sure files are gone from old locations
     assert_err!(OpenOptions::new().open(&f1_orig), Errno::Enoent);
@@ -727,7 +727,7 @@ fn cant_rename_file_to_dir() {
     let _ = mkdir(&d, FilePermissions::from(0o777));
     OpenOptions::new().create(true).open(&f).unwrap();
 
-    assert_err!(rename(&f, &d), Errno::Eisdir);
+    assert_err!(rename(&f, &d, RenameFlags::empty()), Errno::Eisdir);
 
     // Clean up after yourself!
     rm(f).unwrap();
@@ -743,7 +743,7 @@ fn cant_rename_dir_to_file() {
     let _ = mkdir(&d, FilePermissions::from(0o777));
     OpenOptions::new().create(true).open(&f).unwrap();
 
-    assert_err!(rename(&d, &f), Errno::Enotdir);
+    assert_err!(rename(&d, &f, RenameFlags::empty()), Errno::Enotdir);
 
     // Clean up after yourself!
     rm(f).unwrap();
@@ -760,12 +760,12 @@ fn rename_no_overwrite_full_dir() {
     let _ = mkdir(&d2, FilePermissions::from(0o777));
     OpenOptions::new().create(true).open(&f).unwrap();
 
-    assert_err!(rename(&d1, &d2), Errno::Enotempty);
+    assert_err!(rename(&d1, &d2, RenameFlags::empty()), Errno::Enotempty);
 
     rm(f).unwrap();
 
     // OK to overwrite now, d2 is empty
-    rename(&d1, &d2).unwrap();
+    rename(&d1, &d2, RenameFlags::empty()).unwrap();
 
     rmdir(d2).unwrap();
 }

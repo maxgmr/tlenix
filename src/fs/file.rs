@@ -9,8 +9,8 @@ use core::mem::size_of;
 use crate::{
     Errno, NULL_BYTE, NixString, PAGE_SIZE, SyscallNum,
     fs::{
-        DirEnt, FileDescriptor, FileStats, LseekWhence, OpenOptions, statx_get_all,
-        types::DirEntRawHeader,
+        AT_FDCWD, DirEnt, FileDescriptor, FileStats, LseekWhence, OpenOptions, RenameFlags,
+        statx_get_all, types::DirEntRawHeader,
     },
     syscall, syscall_result,
 };
@@ -488,7 +488,7 @@ pub fn rm<NS: Into<NixString>>(path: NS) -> Result<(), Errno> {
 /// If a directory is being renamed and another directory exists at that location, it will only be
 /// overwritten if the existing directory is empty.
 ///
-/// Internally uses the [`rename`](https://man7.org/linux/man-pages/man2/rename.2.html) Linux
+/// Internally uses the [`renameat2`](https://man7.org/linux/man-pages/man2/rename.2.html) Linux
 /// system call.
 ///
 /// # Errors
@@ -497,6 +497,7 @@ pub fn rm<NS: Into<NixString>>(path: NS) -> Result<(), Errno> {
 pub fn rename<NA: Into<NixString>, NB: Into<NixString>>(
     old_path: NA,
     new_path: NB,
+    flags: RenameFlags,
 ) -> Result<(), Errno> {
     let old_path_ns: NixString = old_path.into();
     let new_path_ns: NixString = new_path.into();
@@ -504,9 +505,12 @@ pub fn rename<NA: Into<NixString>, NB: Into<NixString>>(
     // SAFETY: The NixString type guarantees null-terminated UTF-8.
     unsafe {
         syscall_result!(
-            SyscallNum::Rename,
+            SyscallNum::Renameat2,
+            AT_FDCWD,
             old_path_ns.as_ptr(),
-            new_path_ns.as_ptr()
+            AT_FDCWD,
+            new_path_ns.as_ptr(),
+            flags.bits()
         )?;
     }
 
