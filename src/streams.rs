@@ -18,18 +18,34 @@ const STDOUT_FILENO: usize = 1;
 /// File descriptor of the standard error stream.
 const STDERR_FILENO: usize = 2;
 
-/// The
-/// [standard input stream](https://en.wikipedia.org/wiki/Standard_streams#Standard_input_(stdin)),
-/// from which programs can read input data.
-pub static STDIN: Mutex<Stream<Input>> = Mutex::new(Stream::define(STDIN_FILENO));
-/// The
-/// [standard output stream](https://en.wikipedia.org/wiki/Standard_streams#Standard_output_(stdout)),
-/// to which programs can write output data.
-pub static STDOUT: Mutex<Stream<Output>> = Mutex::new(Stream::define(STDOUT_FILENO));
-/// The
-/// [standard error stream](https://en.wikipedia.org/wiki/Standard_streams#Standard_error_(stderr)),
-/// to which programs can write error messages or diagnostics.
-pub static STDERR: Mutex<Stream<Output>> = Mutex::new(Stream::define(STDERR_FILENO));
+/// Creates the definitions of various static streams.
+macro_rules! define_streams {
+    (
+        $(
+            $(#[$doc:meta])*
+            $stream_name:ident<$direction:ident> = $fd:expr;
+        )*
+    ) =>{
+       $(
+            $(#[$doc])*
+            pub static $stream_name: Mutex<Stream<$direction>> = Mutex::new(Stream::define($fd));
+       )*
+    };
+}
+define_streams!(
+    /// The [standard input stream](
+    /// https://en.wikipedia.org/wiki/Standard_streams#Standard_input_(stdin)),
+    /// from which programs can read input data.
+    STDIN<Input> = STDIN_FILENO;
+    /// The [standard output stream](
+    /// https://en.wikipedia.org/wiki/Standard_streams#Standard_output_(stdout)),
+    /// to which programs can write output data.
+    STDOUT<Output> = STDOUT_FILENO;
+    /// The [standard error stream](
+    /// https://en.wikipedia.org/wiki/Standard_streams#Standard_error_(stderr)),
+    /// to which programs can write error messages or diagnostics.
+    STDERR<Output> = STDERR_FILENO;
+);
 
 /// An input stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
