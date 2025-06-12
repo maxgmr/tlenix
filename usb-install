@@ -34,37 +34,53 @@ fi
 
 # Create initramfs
 mkdir -p "${INITRAMFS_DIR}"/{bin,dev,etc,lib,proc,sys,usr}
-sudo rm -f "${INITRAMFS_DIR}/dev/console"
-sudo rm -f "${INITRAMFS_DIR}/dev/null"
+sudo rm -f "${INITRAMFS_DIR}/dev/console" "${INITRAMFS_DIR}/dev/null"
 sudo mknod "${INITRAMFS_DIR}/dev/console" c 5 1
 sudo mknod "${INITRAMFS_DIR}/dev/null" c 1 3
 
-# Create USB root filesystem
+# Create rootfs skeleton
 sudo mkdir -p "${ROOTFS_DIR}"/{bin,dev,etc,home,lib,proc,root,sbin,sys,usr,var}
-sudo rm -f "${ROOTFS_DIR}/dev/console"
-sudo rm -f "${ROOTFS_DIR}/dev/null"
+sudo rm -f "${ROOTFS_DIR}/dev/console" "${ROOTFS_DIR}/dev/null"
 sudo mknod "${ROOTFS_DIR}/dev/console" c 5 1
 sudo mknod "${ROOTFS_DIR}/dev/null" c 1 3
-sudo cp "bzImage" "${BOOT_DIR}"
+
+# Copy kernel and make boot dirs
+sudo mkdir -p "${BOOT_DIR}/EFI/BOOT"
+sudo cp "bzImage" "${BOOT_DIR}/EFI/BOOT"
+
+# Create initramfs archive
+cp "${BINARIES_DIR}/initramfs_init" "${INITRAMFS_DIR}/init"
 cd "${INITRAMFS_DIR}"
-find . | cpio -oH newc | gzip | sudo tee "${BOOT_DIR}/root.cpio.gz" >/dev/null
+find . | cpio -oH newc | gzip | sudo tee "${BOOT_DIR}/EFI/BOOT/root.cpio.gz" >/dev/null
 cd ..
 
-# Install and configure GRUB
-if [ ! -d "${BOOT_DIR}/grub/x86_64-efi" ]; then
-    sudo grub-install \
-        --target=x86_64-efi \
-        --boot-directory=${BOOT_DIR} \
-        --efi-directory=${BOOT_DIR} \
-        "${USB_DEV}"
+# Get UUID of boot partition
+UUID=$(sudo blkid -s UUID -o value "${BOOT_PART}")
+if [ -z "$UUID" ]; then
+    echo "Failed to retrieve UUID for ${BOOT_PART}"
+    exit 1
 fi
-sudo cp "${CONFIG_DIR}/grub.cfg" "${BOOT_DIR}/grub"
 
-# Copy over OS files
+# Generate grub.cfg with UUID
+cat >"${CONFIG_DIR}/grub_with_uuid.cfg" <<EOF
+search --no-floppy --fs-uuid --set=root ${UUID}
+$(cat "${CONFIG_DIR}/grub.cfg")
+EOF
+
+# Build standalone BOOTX64.EFI with embedded grub.cfg
+grub-mkstandalone \
+    -O x86_64-efi \
+    -o BOOTX64.EFI \
+    --modules="part_gpt fat ext2 normal linux search search_fs_uuid configfile echo" \
+    "boot/grub/grub.cfg=${CONFIG_DIR}/grub_with_uuid.cfg"
+# Install EFI
+sudo cp BOOTX64.EFI "${BOOT_DIR}/EFI/BOOT/BOOTX64.EFI"
+rm -f BOOTX64.EFI "${CONFIG_DIR}/grub_with_uuid.cfg"
+
+# Copy over rootfs contents
 sudo cp -a --no-preserve=ownership ${OS_FILES_DIR}/. ${ROOTFS_DIR}
 
-# Add Tlenix build artifacts to their proper places
-cp "${BINARIES_DIR}/initramfs_init" "${INITRAMFS_DIR}/init"
+# Add Tlenix build artifacts to rootfs
 sudo cp "${BINARIES_DIR}/init" "${ROOTFS_DIR}/sbin"
 find "${SRC_BIN_DIR}" -maxdepth 1 -name '*.rs' |
     grep -v -E './(init|initramfs_init)\.rs$' |

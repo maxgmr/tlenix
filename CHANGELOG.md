@@ -12,13 +12,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fun BSOD-style screen on panic.
 - Nicer interface for ANSI colour escape codes (and coloured printing in general).
 - Get `mash` to "bundle together" stuff with quotes and generally handle quotes properly.
+- Build script updates GRUB entry version number automatically
+- Handle non-`/dev/sda{1,2}` configurations in `usb-setup` and `initramfs_init`
+- Abstract away Tlenix program boilerplate (proc macro?)
+- Add `--help` display to all Tlenix programs
+- `man` pages!
+
+## [0.1.0-beta.3] - 2025-06-12
+
+### Added
+
+- `cat`: Concatenate files and print on the standard output.
+- `clear`: Clears the terminal screen.
+- `mv`: Moves/renames files.
+- `File::read_to_bytes`: Reads the whole file into a byte vector.
+- `format!`: Just like the `std` macro!
+- `rename`: Changes the name/path of a file/directory.
+
+### Changed
+
+- Modernized file stats format (`fstat` -> `statx`).
+- Statically access the standard input, standard output, and standard error streams.
+- Prettier test output alignment.
+- Fixed `./usb-install` file schema.
+- `README` instructions now use `./usb-install` script.
 
 ## [0.1.0-beta.2] - 2025-05-27
 
 ### Added
 
 - `hello`: Minimal demo Tlenix program. Useful as a template/example.
-- `printenv`: Print the environment variables.
+- `printenv`: Prints the environment variables.
 
 ### Removed
 

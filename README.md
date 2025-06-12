@@ -1,24 +1,32 @@
 # Tlenix
 
-Custom x86_64 OS built upon the Linux kernel. Boots from a USB.
+Custom x86_64 OS built upon the Linux kernel. The OS consists of Tlenix user programs and a custom Linux kernel. Boots from a USB.
 
 Written in pure Rust without the standard library or any dependencies on a C standard library.
 
 # Programs
 
-`initramfs_init`: Init program for `initramfs`. Sets up important things like devices and the filesystem. Starts `init` when finished.
+`initramfs_init`: Init program for the `initramfs`. Sets up important things like devices and the filesystem. Starts `init` when finished.
 
-`init`: Responsible for booting up the system. Starts up `mash`.
+`init`: Responsible for booting up the system.
 
 `mash`: **Ma**x's **Sh**ell. An extremely primitive command-line-interface shell.
 
-`ls`: List the entries within a directory.
+`cat`: Concatenates files and prints them to the standard output.
+
+`clear`: Clear the terminal screen.
+
+`hello`: Example Tlenix program. Generates a greeting.
+
+`ls`: Lists the entries within a directory.
+
+`printenv`: Prints the current environment variables along with their values.
 
 # Setup Guide
 
 Here's how to get Tlenix running on a USB of your own.
 
-## Watch Out!
+## 0. Watch Out!
 
 Stuff like drive partitioning can screw up your system if you don't know what you're doing! If you aren't confident, I recommend using a virtual machine as the host when setting up the USB.
 
@@ -26,9 +34,19 @@ Additionally, make sure nothing important is stored on your USB you're using to 
 
 This project is in its early stages and is _not thoroughly tested_... Follow these instructions at your own risk.
 
-## Build a Fresh Kernel
+## 1. Get the Tlenix Source
+
+Go to a convenient place on your computer and clone the Tlenix source:
+
+```bash
+git clone https://github.com/maxgmr/tlenix.git
+```
+
+## 2. Build a Fresh Kernel
 
 ### Get the Linux Kernel Source
+
+Go to a different convenient place on your computer and clone the Linux kernel source:
 
 ```bash
 git clone git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
@@ -73,53 +91,13 @@ make -j$(nproc) CC="gcc-13" KCFLAGS="-std=gnu11" 2>&1 | tee log
 
 Your finished kernel is located at `arch/x86_64/boot/bzImage` within the Linux source code directory.
 
-## Build the Tlenix Binaries
-
-Switch to the Tlenix source code directory.
+### Copy Finished Kernel to Tlenix Source Directory
 
 ```bash
-cargo build --all --release
+cp arch/x86_64/boot/bzImage <tlenix dir>/bzImage
 ```
 
-Your completed binaries will be under the `target/x86_64-unknown-linux-none/release` directory.
-
-## Create the `initramfs`
-
-We need to create a root filesystem which is used during the boot process. It loads necessary drivers and modules, then passes on control, switching to the actual persistent root filesystem on the USB.
-
-### Create the `initramfs` Directory
-
-```bash
-mkdir initramfs
-```
-
-### Create the Basic `initramfs` Structure
-
-```bash
-mkdir -v initramfs/{bin,dev,etc,lib,proc,sys,usr}
-```
-
-### Create Essential Device Nodes
-
-```bash
-sudo mknod initramfs/dev/console c 5 1
-sudo mknod initramfs/dev/null c 1 3
-```
-
-### Copy Over the Tlenix `initramfs_init` Program
-
-```bash
-cp <tlenix directory>/target/x86_64-unknown-linux-none/release/initramfs_init initramfs/init
-```
-
-### Create the `initramfs` Archive
-
-```bash
-cd initramfs
-find . | cpio -oH newc | gzip >../root.cpio.gz
-```
-
-## Partition USB
+## 3. Partition USB
 
 ### Warning
 
@@ -174,48 +152,13 @@ sudo mkfs.vfat -F32 /dev/sdX1
 sudo mkfs.ext4 /dev/sdX2
 ```
 
-## Organize USB Structure
+## 4. Configure Tlenix
 
-### Mount Partitions
+Inside the Tlenix source directory, the `config/` directory contains some options for customizing your Tlenix installation.
 
-```bash
-sudo mkdir -pv /mnt/tlenix-usb/{boot,rootfs}
-sudo mount /dev/sdX1 /mnt/tlenix-usb/boot
-sudo mount /dev/sdX2 /mnt/tlenix-usb/rootfs
-```
+### Changing the Terminal Font
 
-### Populate Boot Partition
-
-```bash
-sudo cp <path to bzImage> /mnt/tlenix-usb/boot/
-sudo cp <path to root.cpio.gz> /mnt/tlenix-usb/boot/
-```
-
-### Install GRUB
-
-```bash
-sudo grub-install \
-    --target=x86_64-efi \
-    --boot-directory=/mnt/tlenix-usb/boot \
-    --efi-directory=/mnt/tlenix-usb/boot \
-    /dev/sdX
-```
-
-### Configure GRUB
-
-Copy over the GRUB config:
-
-```bash
-sudo cp <tlenix dir>/config/grub.cfg /mnt/tlenix-usb/boot/grub/grub.cfg
-```
-
-Optionally, you can edit the configuration:
-
-```bash
-sudoedit /mnt/tlenix-usb/boot/grub/grub.cfg
-```
-
-You can choose your own font. In the place of `TER16x32` in the config above, you can choose from any of the following:
+You can choose your own terminal font. To do so, open up `config/grub.cfg` in your preferred text editor. Instead of the default `TER16x32` font, you can set `fbcon=font:` to any of the following:
 
 - `MINI_4x6`
 - `6x8`
@@ -227,44 +170,27 @@ You can choose your own font. In the place of `TER16x32` in the config above, yo
 - `SUN8x16`
 - `10x18`
 - `SUN12x22`
-- `TER16x32`
 
-## Set Up the Root Filesystem
+## 5. Install Tlenix
 
-This is the filesystem which you actually use when running Tlenix.
+Make sure you're in the Tlenix source directory. Here's a pre-install checklist:
 
-### Create Minimal Directory Structure
+- Your partitioned and formatted USB is plugged in.
+- `config/grub.cfg` exists.
+- `bzImage` exists and is in the top level of the Tlenix source directory.
 
-```bash
-sudo mkdir -pv /mnt/tlenix-usb/rootfs/{bin,dev,etc,home,lib,proc,sbin,sys,usr,var}
-```
-
-### Create Essential Device Nodes
+Make sure your partitioned and formatted USB is plugged in. Once you're ready, run the installation script:
 
 ```bash
-sudo mknod /mnt/tlenix-usb/rootfs/dev/console c 5 1
-sudo mknod /mnt/tlenix-usb/rootfs/dev/null c 1 3
+./usb-install
 ```
 
-### Add `init` Program
+## 6. Boot Into Tlenix
 
-```bash
-sudo cp <tlenix dir>/target/x86_64-unknown-linux-none/release/init /mnt/tlenix-usb/rootfs/sbin/init
-```
+With your USB plugged in to your computer, restart your machine. If you boot _back_ into your computer's normal operating system, you'll have to go into your computer's BIOS menu and try the following things one at a time, restarting and retrying after each step:
 
-### Add `mash` Program
-
-```bash
-sudo cp <tlenix dir>/target/x86_64-unknown-linux-none/release/mash /mnt/tlenix-usb/rootfs/bin/mash
-```
-
-## QEMU Test
-
-```bash
-sudo qemu-system-x86_64 \
-    -kernel /mnt/tlenix-usb/boot/bzImage \
-    -initrd /mnt/tlenix-usb/boot/root.cpio.gz \
-    -drive file=/dev/sdX,format=raw \
-    -append "root=/dev/sdX2 console=ttyS0" \
-    -nographic
-```
+1. Make sure your USB drive is at the top of the boot priority. This is the most common reason why you aren't automatically booting into Tlenix!
+2. Make sure Secure Boot is disabled.
+3. Disable CSM.
+4. Set boot mode to UEFI only, not legacy/BIOS.
+5. Disable Fast Boot.

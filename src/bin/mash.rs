@@ -24,7 +24,7 @@ use num_enum::TryFromPrimitive;
 
 use tlenix_core::{
     Console, EnvVar, Errno, align_stack_pointer, eprintln,
-    fs::{self},
+    fs::{self, FilePermissions},
     print,
     process::{self, ExitStatus},
     system,
@@ -253,16 +253,16 @@ fn program_path_subst(argv0: &str, env_vars: &[EnvVar]) -> Result<String, Errno>
             continue;
         };
 
-        let Ok(stats) = file.stat() else {
+        let Ok(stats) = file.stats() else {
             continue;
         };
         // If the file isn't a regular file, try a different option.
-        if stats.file_type != fs::FileType::RegularFile {
+        if stats.file_type != Some(fs::FileType::RegularFile) {
             continue;
         }
 
-        let fp = stats.file_permissions;
-        if !fp.intersects(
+        let mode = stats.mode.unwrap_or(FilePermissions::empty());
+        if !mode.intersects(
             fs::FilePermissions::S_IXUSR
                 | fs::FilePermissions::S_IXGRP
                 | fs::FilePermissions::S_IXOTH,

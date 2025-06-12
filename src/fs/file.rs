@@ -9,8 +9,8 @@ use core::mem::size_of;
 use crate::{
     Errno, NULL_BYTE, NixString, PAGE_SIZE, SyscallNum,
     fs::{
-        DirEnt, FileDescriptor, FileStat, LseekWhence, OpenOptions, types::DirEntRawHeader,
-        types::FileStatRaw,
+        AT_FDCWD, DirEnt, FileDescriptor, FileStats, LseekWhence, OpenOptions, RenameFlags,
+        statx_get_all, types::DirEntRawHeader,
     },
     syscall, syscall_result,
 };
@@ -28,6 +28,17 @@ pub struct File {
     open_options: OpenOptions,
 }
 impl File {
+    /// Statically defines a [`File`] with the given [`FileDescriptor`]. Used to create the
+    /// standard streams.
+    #[doc(hidden)]
+    #[must_use]
+    pub(crate) const fn define(file_descriptor: FileDescriptor) -> Self {
+        Self {
+            file_descriptor,
+            open_options: OpenOptions::dummy(),
+        }
+    }
+
     /// Creates a [`File`] at the given [`FileDescriptor`] with the given open options. Not
     /// intended to be used directly.
     #[doc(hidden)]
@@ -39,24 +50,20 @@ impl File {
         }
     }
 
-    /// Gets information about this [`File`] in the form of a [`FileStat`].
+    /// Gets information about this [`File`] in the form of a [`FileStats`].
     ///
-    /// Wrapper around the [`fstat`](https://man7.org/linux/man-pages/man2/fstat.2.html) Linux
-    /// syscall.
+    /// Internally uses the [`statx`](https://man7.org/linux/man-pages/man2/statx.2.html) Linux
+    /// system call.
     ///
     /// # Errors
     ///
-    /// This function propagates any [`Errno`]s from the underlying `fstat` Linux syscall. It
-    /// also returns [`Errno::Eio`] if it gets malformed data from the syscall itself.
-    pub fn stat(&self) -> Result<FileStat, Errno> {
-        let mut stats = FileStatRaw::default();
-
-        // SAFETY: Arguments are correct. `stats_ptr` is valid at the time of calling and is
-        // dropped right afterwards.
-        unsafe {
-            syscall_result!(SyscallNum::Fstat, self.file_descriptor, &raw mut stats)?;
-        }
-        stats.try_into()
+    /// This function propagates any [`Errno`]s returned from the underlying call to `statx`.
+    pub fn stats(&self) -> Result<FileStats, Errno> {
+        // OK to allow here. The point at which a file descriptor would be truncated/wrapper is far
+        // beyond any reasonable number of open file descriptors.
+        #[allow(clippy::cast_possible_truncation)]
+        #[allow(clippy::cast_possible_wrap)]
+        statx_get_all(usize::from(self.file_descriptor) as i32, NixString::null())
     }
 
     /// Reads bytes from the [`File`] into the given buffer. Returns the number of bytes read from
@@ -86,18 +93,17 @@ impl File {
         }
     }
 
-    /// Reads the entire contents of this file into a [`String`].
+    /// Reads the entire contents of this file into a [`Vec<u8>`].
     ///
     /// Convenience function. Uses [`Self::read`] internally.
     ///
-    /// This function tries to keep the file cursor at the same spot it was before this function was called.
+    /// This function tries to keep the file cursor at the same spot it was before this function
+    /// was called.
     ///
     /// # Errors
     ///
-    /// This function will return [`Errno::Eilseq`] if the bytes of the file are not valid UTF-8.
-    ///
     /// This function will propagate any [`Errno`]s from the internal call to [`Self::read`].
-    pub fn read_to_string(&self) -> Result<String, Errno> {
+    pub fn read_to_bytes(&self) -> Result<Vec<u8>, Errno> {
         let mut buffer = Vec::new();
         // Chunks are page size for better performance
         let mut chunk = [0_u8; PAGE_SIZE];
@@ -117,7 +123,9 @@ impl File {
                     // We have to allow it to be unused, this is simply a last-ditch effort to
                     // restore the cursor after already failing.
                     #[allow(clippy::cast_possible_wrap, unused_must_use)]
-                    self.set_cursor(orig_cursor as i64);
+                    if let Some(orig_cursor) = orig_cursor {
+                        self.set_cursor(orig_cursor as i64);
+                    }
                     return Err(errno);
                 }
             }
@@ -125,9 +133,27 @@ impl File {
 
         // Restore original cursor location
         #[allow(clippy::cast_possible_wrap)]
-        self.set_cursor(orig_cursor as i64)?;
+        if let Some(orig_cursor) = orig_cursor {
+            self.set_cursor(orig_cursor as i64)?;
+        }
 
-        String::from_utf8(buffer).map_err(|_| Errno::Eilseq)
+        Ok(buffer)
+    }
+
+    /// Reads the entire contents of this file into a [`String`].
+    ///
+    /// Convenience function. Uses [`Self::read`] internally.
+    ///
+    /// This function tries to keep the file cursor at the same spot it was before this function
+    /// was called.
+    ///
+    /// # Errors
+    ///
+    /// This function will return [`Errno::Eilseq`] if the bytes of the file are not valid UTF-8.
+    ///
+    /// This function will propagate any [`Errno`]s from the internal call to [`Self::read`].
+    pub fn read_to_string(&self) -> Result<String, Errno> {
+        String::from_utf8(self.read_to_bytes()?).map_err(|_| Errno::Eilseq)
     }
 
     /// Reads a single byte from the file.
@@ -226,10 +252,7 @@ impl File {
         /// Offset of the directory entry name from the start of its bytes.
         const NAME_OFFSET: usize = size_of::<DirEntRawHeader>();
 
-        // Since it's just being passed directly into `self.set_cursor` again, we don't care how
-        // the bytes happen to be interpreted by Rust.
-        #[allow(clippy::cast_possible_wrap)]
-        let orig_cursor = self.cursor()? as i64;
+        let orig_cursor = self.cursor()?;
 
         let mut results: Vec<DirEnt> = Vec::new();
         let mut buf = [0_u8; DIR_ENT_BUF_SIZE];
@@ -254,7 +277,12 @@ impl File {
                     // caused by the original error in the first place, so we don't care as much
                     // about returning the set_cursor error.
                     #[allow(unused_must_use)]
-                    self.set_cursor(orig_cursor);
+                    if let Some(orig_cursor) = orig_cursor {
+                        // We have to allow it to be unused, this is simply a last-ditch effort to
+                        // restore the cursor after already failing.
+                        #[allow(clippy::cast_possible_wrap, unused_must_use)]
+                        self.set_cursor(orig_cursor as i64);
+                    }
                     return Err(errno);
                 }
             };
@@ -296,7 +324,10 @@ impl File {
         }
 
         // Reset the cursor to its original state.
-        self.set_cursor(orig_cursor)?;
+        if let Some(orig_cursor) = orig_cursor {
+            #[allow(clippy::cast_possible_wrap)]
+            self.set_cursor(orig_cursor as i64)?;
+        }
 
         Ok(results)
     }
@@ -329,70 +360,92 @@ impl File {
 
     /// Gets the current cursor location within the [`File`].
     ///
+    /// Returns [`None`] if cursor operations do not apply to this [`File`]; i.e., the file is a
+    /// terminal, socket, pipe, or FIFO.
+    ///
     /// Uses the [`lseek`](https://www.man7.org/linux/man-pages/man2/lseek.2.html) Linux syscall
     /// internally.
     ///
     /// # Errors
     ///
     /// This function propagates any errors encountered during the underlying `lseek` operation.
-    pub fn cursor(&self) -> Result<usize, Errno> {
+    pub fn cursor(&self) -> Result<Option<usize>, Errno> {
         self.cursor_offset(0)
     }
 
     /// Offsets the cursor from its current location by the given number. Returns the new cursor
     /// location.
     ///
+    /// Returns [`None`] if cursor operations do not apply to this [`File`]; i.e., the file is a
+    /// terminal, socket, pipe, or FIFO.
+    ///
     /// Uses the [`lseek`](https://www.man7.org/linux/man-pages/man2/lseek.2.html) Linux syscall
     /// internally.
     ///
     /// # Errors
     ///
     /// This function propagates any errors encountered during the underlying `lseek` operation.
-    pub fn cursor_offset(&self, offset: i64) -> Result<usize, Errno> {
+    pub fn cursor_offset(&self, offset: i64) -> Result<Option<usize>, Errno> {
         self.lseek_wrapper(offset, LseekWhence::SeekCur)
     }
 
     /// Sets the cursor to `offset` bytes. Returns the new cursor location.
     ///
+    /// Returns [`None`] if cursor operations do not apply to this [`File`]; i.e., the file is a
+    /// terminal, socket, pipe, or FIFO.
+    ///
     /// Uses the [`lseek`](https://www.man7.org/linux/man-pages/man2/lseek.2.html) Linux syscall
     /// internally.
     ///
     /// # Errors
     ///
     /// This function propagates any errors encountered during the underlying `lseek` operation.
-    pub fn set_cursor(&self, offset: i64) -> Result<usize, Errno> {
+    pub fn set_cursor(&self, offset: i64) -> Result<Option<usize>, Errno> {
         self.lseek_wrapper(offset, LseekWhence::SeekSet)
     }
 
     /// Sets the cursor to the end of the file. Returns the new cursor location.
     ///
+    /// Returns [`None`] if cursor operations do not apply to this [`File`]; i.e., the file is a
+    /// terminal, socket, pipe, or FIFO.
+    ///
     /// Uses the [`lseek`](https://www.man7.org/linux/man-pages/man2/lseek.2.html) Linux syscall
     /// internally.
     ///
     /// # Errors
     ///
     /// This function propagates any errors encountered during the underlying `lseek` operation.
-    pub fn cursor_to_end(&self) -> Result<usize, Errno> {
+    pub fn cursor_to_end(&self) -> Result<Option<usize>, Errno> {
         self.cursor_to_end_offset(0)
     }
 
     /// Sets the cursor to the end of the file, plus an offset. Returns the new cursor location.
     ///
+    /// Returns [`None`] if cursor operations do not apply to this [`File`]; i.e., the file is a
+    /// terminal, socket, pipe, or FIFO.
+    ///
     /// Uses the [`lseek`](https://www.man7.org/linux/man-pages/man2/lseek.2.html) Linux syscall
     /// internally.
     ///
     /// # Errors
     ///
     /// This function propagates any errors encountered during the underlying `lseek` operation.
-    pub fn cursor_to_end_offset(&self, offset: i64) -> Result<usize, Errno> {
+    pub fn cursor_to_end_offset(&self, offset: i64) -> Result<Option<usize>, Errno> {
         self.lseek_wrapper(offset, LseekWhence::SeekEnd)
     }
 
     /// Wrapper around the `lseek` syscall to reduce code duplication.
-    fn lseek_wrapper(&self, offset: i64, whence: LseekWhence) -> Result<usize, Errno> {
+    ///
+    /// Returns [`None`] if cursor operations do not apply to this [`File`]; i.e., the file is a
+    /// terminal, socket, pipe, or FIFO.
+    fn lseek_wrapper(&self, offset: i64, whence: LseekWhence) -> Result<Option<usize>, Errno> {
         // SAFETY: The `offset` argument matches the C `off_t` type. The `whence` argument is
         // restricted to the allowed values by the `LseekWhence` enum.
-        unsafe { syscall_result!(SyscallNum::Lseek, self.file_descriptor, offset, whence) }
+        match unsafe { syscall_result!(SyscallNum::Lseek, self.file_descriptor, offset, whence) } {
+            Ok(new_cursor) => Ok(Some(new_cursor)),
+            Err(Errno::Espipe) => Ok(None),
+            Err(errno) => Err(errno),
+        }
     }
 }
 impl Drop for File {
@@ -424,6 +477,43 @@ pub fn rm<NS: Into<NixString>>(path: NS) -> Result<(), Errno> {
     unsafe {
         syscall_result!(SyscallNum::Unlink, ns_path.as_ptr())?;
     }
+    Ok(())
+}
+
+/// Renames a file or directory, optionally moving its location if needed.
+///
+/// If a file is being renamed and another file exists at that location, the existing file is
+/// overwritten.
+///
+/// If a directory is being renamed and another directory exists at that location, it will only be
+/// overwritten if the existing directory is empty.
+///
+/// Internally uses the [`renameat2`](https://man7.org/linux/man-pages/man2/rename.2.html) Linux
+/// system call.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s returned by the underlying call to `rename`.
+pub fn rename<NA: Into<NixString>, NB: Into<NixString>>(
+    old_path: NA,
+    new_path: NB,
+    flags: RenameFlags,
+) -> Result<(), Errno> {
+    let old_path_ns: NixString = old_path.into();
+    let new_path_ns: NixString = new_path.into();
+
+    // SAFETY: The NixString type guarantees null-terminated UTF-8.
+    unsafe {
+        syscall_result!(
+            SyscallNum::Renameat2,
+            AT_FDCWD,
+            old_path_ns.as_ptr(),
+            AT_FDCWD,
+            new_path_ns.as_ptr(),
+            flags.bits()
+        )?;
+    }
+
     Ok(())
 }
 

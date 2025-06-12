@@ -89,7 +89,10 @@ pub extern "C" fn _start() -> ! {
     loop {
         process::execute_process(&[SHELL_PATH], &[""; 0]).unwrap();
         println!("Restarting shell...");
+        #[cfg(not(debug_assertions))]
         println!("(Enter the \"poweroff\" command to shut down)");
+        #[cfg(debug_assertions)]
+        println!("(Use CTRL+C to exit)");
     }
 }
 

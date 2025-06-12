@@ -59,6 +59,16 @@ pub struct OpenOptions {
     file_permissions: FilePermissions,
 }
 impl OpenOptions {
+    /// Defines a dummy [`OpenOptions`] in cases where it doesn't matter; e.g., when accessing the
+    /// standard streams.
+    #[doc(hidden)]
+    #[must_use]
+    pub(crate) const fn dummy() -> Self {
+        Self {
+            open_flags: OpenFlags::empty(),
+            file_permissions: FilePermissions::empty(),
+        }
+    }
     /// Creates a new [`OpenOptions`] in read-only and close-on-exec mode, with all other
     /// options/flags disabled.
     ///

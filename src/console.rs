@@ -46,7 +46,7 @@ impl Console {
             .open(CONSOLE_PATH)?;
 
         // Reject if not a character device
-        if FileType::CharacterDevice != file.stat()?.file_type {
+        if Some(FileType::CharacterDevice) != file.stats()?.file_type {
             return Err(Errno::Enotty);
         }
 

@@ -2,10 +2,7 @@
 
 use alloc::string::ToString;
 
-use crate::{
-    Errno, assert_err,
-    fs::{FileType, types::DirEntType},
-};
+use crate::{Errno, assert_err, format, fs::types::DirEntType};
 
 use super::*;
 
@@ -17,6 +14,8 @@ const TEST_PATH_CONTENTS: &str =
 const TEMP_DIR: &str = "/tmp";
 const LARGE_PATH: &str = "test_files/large_file.txt";
 const LARGE_CONTENTS_BYTES: [u8; 10_000] = [b'e'; 10_000];
+
+const RENAME_DIR: &str = "/tmp/tlenix_rename_tests";
 
 #[test_case]
 fn read_bytes() {
@@ -168,28 +167,6 @@ fn o_excl_creat_eexist() {
 }
 
 #[test_case]
-fn stats() {
-    let stats = OpenOptions::new().open(TEST_PATH).unwrap().stat().unwrap();
-    // crate::println!("{:#?}", stats);
-    assert_eq!(stats.file_type, FileType::RegularFile);
-    assert_eq!(
-        stats.file_stat_raw.st_size,
-        TEST_PATH_CONTENTS.len().try_into().unwrap()
-    );
-}
-
-#[test_case]
-fn dir_stats() {
-    let stats = OpenOptions::new()
-        .path_only(true)
-        .open("/")
-        .unwrap()
-        .stat()
-        .unwrap();
-    assert_eq!(stats.file_type, FileType::Directory);
-}
-
-#[test_case]
 fn other_ops_should_fail_o_path() {
     const PATH: &str = "/tmp/other_ops_should_fail_o_path";
     {
@@ -236,16 +213,16 @@ fn trunc_write() {
 fn read_advance_cursor() {
     let mut buffer = [0; 20];
     let file = OpenOptions::new().open(TEST_PATH).unwrap();
-    assert_eq!(file.cursor().unwrap(), 0);
+    assert_eq!(file.cursor().unwrap().unwrap(), 0);
 
     let bytes_read = file.read(&mut buffer).unwrap();
-    assert_eq!(file.cursor().unwrap(), bytes_read);
+    assert_eq!(file.cursor().unwrap().unwrap(), bytes_read);
 
     let bytes_read = file.read(&mut buffer).unwrap();
-    assert_eq!(file.cursor().unwrap(), bytes_read * 2);
+    assert_eq!(file.cursor().unwrap().unwrap(), bytes_read * 2);
 
     let bytes_read = file.read(&mut buffer).unwrap();
-    assert_eq!(file.cursor().unwrap(), bytes_read * 3);
+    assert_eq!(file.cursor().unwrap().unwrap(), bytes_read * 3);
 }
 
 #[test_case]
@@ -297,28 +274,28 @@ fn tempfile() {
 #[test_case]
 fn file_cursor_offset() {
     let file = OpenOptions::new().open(TEST_PATH).unwrap();
-    assert_eq!(file.cursor().unwrap(), 0);
+    assert_eq!(file.cursor().unwrap().unwrap(), 0);
 
-    assert_eq!(file.cursor_offset(4).unwrap(), 4);
-    assert_eq!(file.cursor().unwrap(), 4);
+    assert_eq!(file.cursor_offset(4).unwrap().unwrap(), 4);
+    assert_eq!(file.cursor().unwrap().unwrap(), 4);
 
-    assert_eq!(file.cursor_offset(-2).unwrap(), 2);
-    assert_eq!(file.cursor().unwrap(), 2);
+    assert_eq!(file.cursor_offset(-2).unwrap().unwrap(), 2);
+    assert_eq!(file.cursor().unwrap().unwrap(), 2);
 
-    assert_eq!(file.cursor_offset(10000).unwrap(), 10002);
-    assert_eq!(file.cursor().unwrap(), 10002);
+    assert_eq!(file.cursor_offset(10000).unwrap().unwrap(), 10002);
+    assert_eq!(file.cursor().unwrap().unwrap(), 10002);
 }
 
 #[test_case]
 fn file_set_cursor() {
     let file = OpenOptions::new().open(TEST_PATH).unwrap();
-    assert_eq!(file.cursor().unwrap(), 0);
+    assert_eq!(file.cursor().unwrap().unwrap(), 0);
 
-    assert_eq!(file.set_cursor(200).unwrap(), 200);
-    assert_eq!(file.cursor().unwrap(), 200);
+    assert_eq!(file.set_cursor(200).unwrap().unwrap(), 200);
+    assert_eq!(file.cursor().unwrap().unwrap(), 200);
 
-    assert_eq!(file.set_cursor(200).unwrap(), 200);
-    assert_eq!(file.cursor().unwrap(), 200);
+    assert_eq!(file.set_cursor(200).unwrap().unwrap(), 200);
+    assert_eq!(file.cursor().unwrap().unwrap(), 200);
 
     assert_err!(file.set_cursor(-1), Errno::Einval);
 }
@@ -326,28 +303,43 @@ fn file_set_cursor() {
 #[test_case]
 fn file_cursor_to_end() {
     let file = OpenOptions::new().open(TEST_PATH).unwrap();
-    assert_eq!(file.cursor().unwrap(), 0);
+    assert_eq!(file.cursor().unwrap().unwrap(), 0);
 
-    assert_eq!(file.cursor_to_end().unwrap(), TEST_PATH_CONTENTS.len());
-    assert_eq!(file.cursor().unwrap(), TEST_PATH_CONTENTS.len());
+    assert_eq!(
+        file.cursor_to_end().unwrap().unwrap(),
+        TEST_PATH_CONTENTS.len()
+    );
+    assert_eq!(file.cursor().unwrap().unwrap(), TEST_PATH_CONTENTS.len());
 }
 
 #[test_case]
 fn file_cursor_end_offset() {
     let file = OpenOptions::new().open(TEST_PATH).unwrap();
-    assert_eq!(file.cursor().unwrap(), 0);
+    assert_eq!(file.cursor().unwrap().unwrap(), 0);
 
     assert_eq!(
-        file.cursor_to_end_offset(-20).unwrap(),
+        file.cursor_to_end_offset(-20).unwrap().unwrap(),
         TEST_PATH_CONTENTS.len() - 20
     );
-    assert_eq!(file.cursor().unwrap(), TEST_PATH_CONTENTS.len() - 20);
+    assert_eq!(
+        file.cursor().unwrap().unwrap(),
+        TEST_PATH_CONTENTS.len() - 20
+    );
 
     assert_eq!(
-        file.cursor_to_end_offset(50).unwrap(),
+        file.cursor_to_end_offset(50).unwrap().unwrap(),
         TEST_PATH_CONTENTS.len() + 50
     );
-    assert_eq!(file.cursor().unwrap(), TEST_PATH_CONTENTS.len() + 50);
+    assert_eq!(
+        file.cursor().unwrap().unwrap(),
+        TEST_PATH_CONTENTS.len() + 50
+    );
+}
+
+#[test_case]
+fn cursor_on_stdin() {
+    const STDIN: File = File::define(FileDescriptor::define(0));
+    assert!(STDIN.cursor().unwrap().is_none());
 }
 
 // This test fails if your project directory doesn't end with "tlenix" :/
@@ -621,4 +613,248 @@ fn read_to_string_large() {
         file_contents,
         str::from_utf8(&LARGE_CONTENTS_BYTES).unwrap()
     );
+}
+
+#[test_case]
+fn rename_basic() {
+    let path = format!("{RENAME_DIR}/rename_basic_test");
+    let expected = format!("{RENAME_DIR}/rename_basic_test_pass");
+    // Create dir if it doesn't already exist
+    let _ = mkdir(RENAME_DIR, FilePermissions::from(0o777));
+    // Make sure file doesn't exist already
+    let _ = rm(&path);
+
+    OpenOptions::new().create(true).open(&path).unwrap();
+    // Ensure file exists
+    OpenOptions::new().open(&path).unwrap();
+    rename(&path, &expected, RenameFlags::empty()).unwrap();
+    // Ensure old file name doesn't exist
+    assert_err!(OpenOptions::new().open(&path), Errno::Enoent);
+    // Ensure new file name does exist
+    OpenOptions::new().open(&expected).unwrap();
+    // Clean up after yourself
+    rm(&expected).unwrap();
+    rmdir(RENAME_DIR).unwrap();
+}
+
+#[test_case]
+fn rename_overwrite() {
+    const F1_CONTENTS: &str = "123";
+    const F2_CONTENTS: &str = "abc";
+
+    let path = format!("{RENAME_DIR}/rename_overwrite_test");
+    let expected = format!("{RENAME_DIR}/rename_overwrite_test_pass");
+    // Create dir if it doesn't already exist
+    let _ = mkdir(RENAME_DIR, FilePermissions::from(0o777));
+    // Make sure file doesn't exist already
+    let _ = rm(&path);
+
+    let f1 = OpenOptions::new()
+        .read_write()
+        .create(true)
+        .open(&path)
+        .unwrap();
+    f1.write(F1_CONTENTS.as_bytes()).unwrap();
+    f1.set_cursor(0).unwrap();
+    let f2 = OpenOptions::new()
+        .read_write()
+        .create(true)
+        .open(&expected)
+        .unwrap();
+    f2.write(F2_CONTENTS.as_bytes()).unwrap();
+    f2.set_cursor(0).unwrap();
+    assert_eq!(&f1.read_to_string().unwrap(), F1_CONTENTS);
+    assert_eq!(&f2.read_to_string().unwrap(), F2_CONTENTS);
+    drop(f1);
+    drop(f2);
+
+    // Overwrite
+    rename(&path, &expected, RenameFlags::empty()).unwrap();
+
+    // Make sure original file name is gone
+    assert_err!(OpenOptions::new().open(&path), Errno::Enoent);
+    // Make sure overwritten file exists
+    let overwritten = OpenOptions::new().open(&expected).unwrap();
+    assert_eq!(&overwritten.read_to_string().unwrap(), F1_CONTENTS);
+
+    // Clean up after yourself
+    rm(&expected).unwrap();
+    rmdir(RENAME_DIR).unwrap();
+}
+
+#[test_case]
+fn move_files_to_subdir() {
+    const F1: &str = "rename_files_to_subdir_file_1";
+    const F2: &str = "rename_files_to_subdir_file_2";
+
+    let subdir = format!("{RENAME_DIR}/rename_files_to_subdir_test");
+    let f1_orig = format!("{RENAME_DIR}/{F1}");
+    let f2_orig = format!("{RENAME_DIR}/{F2}");
+    let f1_expected = format!("{subdir}/{F1}");
+    let f2_expected = format!("{subdir}/{F2}");
+
+    let _ = mkdir(RENAME_DIR, FilePermissions::from(0o777));
+
+    OpenOptions::new().create(true).open(&f1_orig).unwrap();
+    OpenOptions::new().create(true).open(&f2_orig).unwrap();
+    let _ = mkdir(&subdir, FilePermissions::from(0o777));
+
+    // Make sure files are there
+    OpenOptions::new().open(&f1_orig).unwrap();
+    OpenOptions::new().open(&f2_orig).unwrap();
+
+    // Move files
+    rename(&f1_orig, format!("{subdir}/{F1}"), RenameFlags::empty()).unwrap();
+    rename(&f2_orig, format!("{subdir}/{F2}"), RenameFlags::empty()).unwrap();
+
+    // Make sure files are gone from old locations
+    assert_err!(OpenOptions::new().open(&f1_orig), Errno::Enoent);
+    assert_err!(OpenOptions::new().open(&f2_orig), Errno::Enoent);
+
+    // Make sure files are at new locations
+    OpenOptions::new().open(&f1_expected).unwrap();
+    OpenOptions::new().open(&f2_expected).unwrap();
+
+    // Clean up after yourself
+    rm(&f1_expected).unwrap();
+    rm(&f2_expected).unwrap();
+    rmdir(&subdir).unwrap();
+    rmdir(RENAME_DIR).unwrap();
+}
+
+#[test_case]
+fn cant_rename_file_to_dir() {
+    let f = format!("{RENAME_DIR}/cant_rename_file_to_dir_file");
+    let d = format!("{RENAME_DIR}/cant_rename_file_to_dir_dir");
+
+    let _ = mkdir(RENAME_DIR, FilePermissions::from(0o777));
+    let _ = mkdir(&d, FilePermissions::from(0o777));
+    OpenOptions::new().create(true).open(&f).unwrap();
+
+    assert_err!(rename(&f, &d, RenameFlags::empty()), Errno::Eisdir);
+
+    // Clean up after yourself!
+    rm(f).unwrap();
+    rmdir(d).unwrap();
+    rmdir(RENAME_DIR).unwrap();
+}
+
+#[test_case]
+fn cant_rename_dir_to_file() {
+    let f = format!("{RENAME_DIR}/cant_rename_file_to_dir_file");
+    let d = format!("{RENAME_DIR}/cant_rename_file_to_dir_dir");
+
+    let _ = mkdir(RENAME_DIR, FilePermissions::from(0o777));
+    let _ = mkdir(&d, FilePermissions::from(0o777));
+    OpenOptions::new().create(true).open(&f).unwrap();
+
+    assert_err!(rename(&d, &f, RenameFlags::empty()), Errno::Enotdir);
+
+    // Clean up after yourself!
+    rm(f).unwrap();
+    rmdir(d).unwrap();
+    rmdir(RENAME_DIR).unwrap();
+}
+
+#[test_case]
+fn rename_no_overwrite_full_dir() {
+    let d1 = format!("{RENAME_DIR}/rename_no_overwrite_full_dir_d1");
+    let d2 = format!("{RENAME_DIR}/rename_no_overwrite_full_dir_d2");
+    let f = format!("{d2}/rename_no_overwrite_full_dir_f");
+
+    let _ = mkdir(RENAME_DIR, FilePermissions::from(0o777));
+    let _ = mkdir(&d1, FilePermissions::from(0o777));
+    let _ = mkdir(&d2, FilePermissions::from(0o777));
+    OpenOptions::new().create(true).open(&f).unwrap();
+
+    assert_err!(rename(&d1, &d2, RenameFlags::empty()), Errno::Enotempty);
+
+    rm(f).unwrap();
+
+    // OK to overwrite now, d2 is empty
+    rename(&d1, &d2, RenameFlags::empty()).unwrap();
+
+    rmdir(d2).unwrap();
+    rmdir(RENAME_DIR).unwrap();
+}
+
+fn assert_file_stats_normal_file(stats: &FileStats) {
+    // The return value tends to depend on the computer filesystem, so we just check for some
+    // basics.
+    assert!(stats.file_stats_mask.contains(
+        FileStatsMask::TYPE
+            | FileStatsMask::MODE
+            | FileStatsMask::NLINK
+            | FileStatsMask::UID
+            | FileStatsMask::GID
+            | FileStatsMask::ATIME
+            | FileStatsMask::MTIME
+            | FileStatsMask::CTIME
+            | FileStatsMask::SIZE
+    ),);
+    assert_eq!(stats.file_type, Some(FileType::RegularFile));
+    assert_eq!(stats.mode, Some(FilePermissions::from(0o644)));
+    assert!(stats.block_size.is_some());
+    assert!(stats.hard_links.is_some());
+    assert!(stats.uid.is_some());
+    assert!(stats.gid.is_some());
+    assert!(stats.inode.is_some());
+    assert!(stats.blocks.is_some());
+    assert!(stats.access_time.is_some());
+    assert!(stats.creation_time.is_some());
+    assert!(stats.status_change_time.is_some());
+    assert!(stats.modification_time.is_some());
+}
+
+#[test_case]
+fn file_stats_read() {
+    const PATH: &str = "/tmp/file_stats_read_test_file";
+    const CONTENTS: &str = "This is my test file.";
+    let file = OpenOptions::new()
+        .read_write()
+        .create(true)
+        .open(PATH)
+        .unwrap();
+    file.write(CONTENTS.as_bytes()).unwrap();
+    let stats = file.stats();
+
+    // Clean up after yourself!
+    drop(file);
+    rm(PATH).unwrap();
+
+    // crate::println!("{file_stats:#?}");
+
+    assert_file_stats_normal_file(&stats.unwrap());
+}
+
+fn assert_is_file_type(path: &'static str, expected: FileType) {
+    let stats = FileStats::try_from_path(path).unwrap();
+    assert_eq!(stats.file_type, Some(expected));
+}
+
+#[test_case]
+fn path_stats_read() {
+    const PATH: &str = "/tmp/path_stats_read_test_file";
+    OpenOptions::new().create(true).open(PATH).unwrap();
+
+    let stats = FileStats::try_from_path(PATH);
+
+    // Clean up after yourself!
+    rm(PATH).unwrap();
+
+    assert_file_stats_normal_file(&stats.unwrap());
+}
+
+#[test_case]
+fn dir_stats_read() {
+    const PATH: &str = "/tmp/dir_stats_read_test_dir";
+    mkdir(PATH, FilePermissions::from(0o777)).unwrap();
+    assert_is_file_type(PATH, FileType::Directory);
+    rmdir(PATH).unwrap();
+}
+
+#[test_case]
+fn char_dev_stats_read() {
+    const PATH: &str = "/dev/tty";
+    assert_is_file_type(PATH, FileType::CharacterDevice);
 }
