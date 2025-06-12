@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `cat`: Concatenate files and print on the standard output.
 - `clear`: Clears the terminal screen.
+- `mv`: Moves/renames files.
 - `File::read_to_bytes`: Reads the whole file into a byte vector.
 - `format!`: Just like the `std` macro!
 - `rename`: Changes the name/path of a file/directory.
