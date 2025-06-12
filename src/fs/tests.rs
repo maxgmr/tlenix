@@ -779,10 +779,19 @@ fn rename_no_overwrite_full_dir() {
 }
 
 fn assert_file_stats_normal_file(stats: &FileStats) {
-    assert_eq!(
-        stats.file_stats_mask,
-        FileStatsMask::BASIC_STATS | FileStatsMask::BTIME | FileStatsMask::MNT_ID_UNIQUE
-    );
+    // The return value tends to depend on the computer filesystem, so we just check for some
+    // basics.
+    assert!(stats.file_stats_mask.contains(
+        FileStatsMask::TYPE
+            | FileStatsMask::MODE
+            | FileStatsMask::NLINK
+            | FileStatsMask::UID
+            | FileStatsMask::GID
+            | FileStatsMask::ATIME
+            | FileStatsMask::MTIME
+            | FileStatsMask::CTIME
+            | FileStatsMask::SIZE
+    ),);
     assert_eq!(stats.file_type, Some(FileType::RegularFile));
     assert_eq!(stats.mode, Some(FilePermissions::from(0o644)));
     assert!(stats.block_size.is_some());
