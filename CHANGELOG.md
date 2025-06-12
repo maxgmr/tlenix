@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `--help` display to all Tlenix programs
 - `man` pages!
 
-## [0.1.0-beta.3] - UNRELEASED
+## [0.1.0-beta.3] - 2025-06-12
 
 ### Added
 
