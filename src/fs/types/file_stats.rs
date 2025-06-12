@@ -45,7 +45,7 @@ pub(crate) fn statx_get_all<NS: Into<NixString>>(dirfd: i32, path: NS) -> Result
     file_stats_raw.try_into()
 }
 
-/// Information about a Linux file. Parsed from a [`FileStatsRaw`] returned by the
+/// Information about a Linux file. Parsed from raw data returned by the
 /// [`statx`](https://man7.org/linux/man-pages/man2/statx.2.html) Linux system call.
 ///
 /// If a field is not included in the [`FileStatsMask`], it will be [`None`], meaning that field
