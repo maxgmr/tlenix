@@ -20,8 +20,5 @@ Cargo.lock
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# ignore built kernel
-bzImage
-
 # ignore initramfs
 initramfs
