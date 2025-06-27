@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+
+set -exuo pipefail
+
+INITRAMFS_DIR="initramfs"
+BINARIES_DIR="target/x86_64-unknown-linux-none/release"
+SRC_BIN_DIR="src/bin"
+OS_FILES_DIR="os_files"
+
+KERNEL="bzImage"
+INIT_BIN="${BINARIES_DIR}/init"
+INITRAMFS_OUT="${INITRAMFS_DIR}/initramfs.cpio.gz"
+
+# Build Tlenix binaries
+cargo build --release --all
+
+# Create initramfs layout
+rm -rf "$INITRAMFS_DIR"
+mkdir -p "$INITRAMFS_DIR"/{bin,sbin,dev,proc,sys,etc,usr,var,root,home,tmp}
+chmod 1777 "$INITRAMFS_DIR/tmp"
+
+# Add device nodes
+sudo mknod -m 600 "$INITRAMFS_DIR/dev/console" c 5 1
+sudo mknod -m 666 "$INITRAMFS_DIR/dev/null" c 1 3
+
+# Add Tlenix binaries
+cp "$INIT_BIN" "$INITRAMFS_DIR/init"
+find "${SRC_BIN_DIR}" -maxdepth 1 -name '*.rs' |
+    grep -v -E './(init|initramfs_init)\.rs$' |
+    sed 's|.*/||; s|\.rs$||' |
+    while read -r name; do
+        sudo cp "${BINARIES_DIR}/${name}" "$INITRAMFS_DIR/bin"
+    done
+
+# Copy other rootfs files
+cp -a --no-preserve=ownership "$OS_FILES_DIR/." "$INITRAMFS_DIR"
+
+# Package into initramfs
+cd "$INITRAMFS_DIR"
+find . | cpio -oH newc | gzip | sudo tee "../$INITRAMFS_OUT" >/dev/null
+cd ..
+
+# Run QEMU
+qemu-system-x86_64 \
+    -kernel "$KERNEL" \
+    -initrd "$INITRAMFS_OUT" \
+    -append "console=ttyS0 loglevel=3 init=/init" \
+    -enable-kvm \
+    -cpu host \
+    -m 1G \
+    -nographic \
+    -serial mon:stdio

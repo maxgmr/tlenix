@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -exuo pipefail
 
 SRC_BIN_DIR="src/bin"
 
@@ -88,3 +88,7 @@ find "${SRC_BIN_DIR}" -maxdepth 1 -name '*.rs' |
     while read -r name; do
         sudo cp "${BINARIES_DIR}/${name}" "${ROOTFS_DIR}/bin"
     done
+
+# Unmount partitions
+sudo umount "${BOOT_DIR}"
+sudo umount "${ROOTFS_DIR}"

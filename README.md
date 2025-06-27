@@ -22,7 +22,15 @@ Written in pure Rust without the standard library or any dependencies on a C sta
 
 `printenv`: Prints the current environment variables along with their values.
 
-# Setup Guide
+# Setup Guide - Virtual Machine
+
+First, make sure you have an `x86_64` QEMU virtual machine on your system (e.g., `qemu-system-x86` for Ubuntu, `qemu-desktop` for Arch, etc.).
+
+Next, if you wish to build your own kernel, consult the "Build a Fresh Kernel" step of the real hardware setup guide below. If you wish to use the prebuilt kernel, no further action is needed.
+
+To run Tlenix in a QEMU VM, simply execute `./vm-run` from the root directory of this repository!
+
+# Setup Guide - Real Hardware
 
 Here's how to get Tlenix running on a USB of your own.
 
@@ -43,6 +51,12 @@ git clone https://github.com/maxgmr/tlenix.git
 ```
 
 ## 2. Build a Fresh Kernel
+
+An already-built kernel is already available at `./bzKernel`. It uses the default Tlenix-tuned kernel configuration from `./config/.config`.
+
+If you wish to use the prebuilt kernel, you may skip this step.
+
+Alternatively, if you wish to build your own kernel, you may follow the instructions below:
 
 ### Get the Linux Kernel Source
 
