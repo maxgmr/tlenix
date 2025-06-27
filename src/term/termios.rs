@@ -263,7 +263,7 @@ bitflags::bitflags! {
     /// All the different input mode flags within the
     /// [`termios`](https://www.man7.org/linux/man-pages/man3/termios.3.html) data structure.
     #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    struct InputModeFlags: u32 {
+    pub struct InputModeFlags: u32 {
         /// Ignore BREAK condition on input.
         const IGNBRK = 0x0000_0001;
         /// If `IGNBRK` is set, a BREAK is ignored. If `IGNBRK` _isn't_ set, but `BRKINT` _is_ set,
@@ -304,7 +304,7 @@ bitflags::bitflags! {
     /// All the different output mode flags within the
     /// [`termios`](https://www.man7.org/linux/man-pages/man3/termios.3.html) data structure.
     #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    struct OutputModeFlags: u32 {
+    pub struct OutputModeFlags: u32 {
         /// Enable implementation-defined output processing.
         const OPOST = 0x0000_0001;
         /// Map NL to CR-NL on output.
@@ -335,7 +335,7 @@ bitflags::bitflags! {
     /// All the different control mode flags.
     /// [`termios`](https://www.man7.org/linux/man-pages/man3/termios.3.html) data structure.
     #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    struct ControlModeFlags: u32 {
+    pub struct ControlModeFlags: u32 {
         /// Baud speed mask (4+1 bits).
         const CBAUD = 0x0000_100F;
         /// Extra baud speed mask (1 bit).

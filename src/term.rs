@@ -2,3 +2,7 @@
 
 mod ioctl;
 mod termios;
+
+// RE-EXPORTS
+
+pub use termios::{ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags};
