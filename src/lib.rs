@@ -34,6 +34,7 @@ pub mod process;
 pub mod streams;
 mod syscall;
 pub mod system;
+pub mod term;
 mod test_framework;
 pub mod thread;
 
