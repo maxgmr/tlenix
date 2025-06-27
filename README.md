@@ -24,7 +24,14 @@ Written in pure Rust without the standard library or any dependencies on a C sta
 
 # Setup Guide - Virtual Machine
 
-First, make sure you have an `x86_64` QEMU virtual machine on your system (e.g., `qemu-system-x86` for Ubuntu, `qemu-desktop` for Arch, etc.).
+First, clone this repository:
+
+```shell
+git clone https://github.com/maxgmr/tlenix
+cd tlenix
+```
+
+Second, make sure you have the prerequisites installed. For instance, you need a relatively up-to-date version of the Rust toolchain. You also need an `x86_64` QEMU virtual machine on your system (e.g., `qemu-system-x86` for Ubuntu, `qemu-desktop` for Arch, etc.).
 
 Next, if you wish to build your own kernel, consult the "Build a Fresh Kernel" step of the real hardware setup guide below. If you wish to use the prebuilt kernel, no further action is needed.
 
