@@ -48,36 +48,46 @@ impl Termios {
         }
     }
 }
-impl From<TermiosRaw> for Termios {
-    fn from(value: TermiosRaw) -> Self {
-        Self::from_raw_helper(
-            value.iflag,
-            value.oflag,
-            value.lflag,
-            value.cflag,
-            value.line,
-            value.cc,
-            value.ispeed,
-            value.ospeed,
-        )
-    }
+macro_rules! impl_from_termiosraw {
+    ($($t:ty),+) => {
+        $(impl From<$t> for Termios {
+            fn from(value: $t) -> Self {
+                Self::from_raw_helper(
+                    value.iflag,
+                    value.oflag,
+                    value.lflag,
+                    value.cflag,
+                    value.line,
+                    value.cc,
+                    value.ispeed,
+                    value.ospeed,
+                )
+            }
+        })+
+    };
 }
-impl From<Termios2Raw> for Termios {
-    fn from(value: Termios2Raw) -> Self {
-        let mut control_characters = [0; TERMIOS_CC_SIZE];
-        control_characters[..TERMIOS2_CC_SIZE].copy_from_slice(&value.cc);
-        Self::from_raw_helper(
-            value.iflag,
-            value.oflag,
-            value.lflag,
-            value.cflag,
-            value.line,
-            control_characters,
-            value.ispeed,
-            value.ospeed,
-        )
-    }
+impl_from_termiosraw!(TermiosRaw, &TermiosRaw);
+macro_rules! impl_from_termios2raw {
+    ($($t:ty),+) => {
+        $(impl From<$t> for Termios {
+            fn from(value: $t) -> Self {
+                let mut control_characters = [0; TERMIOS_CC_SIZE];
+                control_characters[..TERMIOS2_CC_SIZE].copy_from_slice(&value.cc);
+                Self::from_raw_helper(
+                    value.iflag,
+                    value.oflag,
+                    value.lflag,
+                    value.cflag,
+                    value.line,
+                    control_characters,
+                    value.ispeed,
+                    value.ospeed,
+                )
+            }
+        })+
+    };
 }
+impl_from_termios2raw!(Termios2Raw, &Termios2Raw);
 
 /// A raw terminal data type received from calls to
 /// [`ioctl`](https://man7.org/linux/man-pages/man2/ioctl.2.html).
