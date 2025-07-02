@@ -13,6 +13,34 @@ pub use mode_flags::{ControlModeFlags, InputModeFlags, LocalModeFlags, OutputMod
 const TERMIOS_CC_SIZE: usize = 32;
 const TERMIOS2_CC_SIZE: usize = 19;
 
+/// Macro to implement the getter and setter [`Termios`] methods for all the mode flags.
+macro_rules! impl_termios_flags_methods {
+    [$($flags_t:ty),* $(,)?] => {
+        $(paste::paste! {
+            /// Gets the value of the given
+            #[doc = concat!("[`", stringify!($flags_t), "`]")]
+            /// flag.
+            ///
+            /// If multiple flags are given, then this function will only return `true` if *all*
+            /// the given flags are set.
+            #[must_use]
+            pub(crate) fn [<get_ $flags_t:snake>](&self, flag: $flags_t) -> bool {
+                self.[<$flags_t:snake>].contains(flag)
+            }
+
+            /// Sets the value of the given
+            #[doc = concat!("[`", stringify!($flags_t), "`]")]
+            /// flag to the given boolean value.
+            ///
+            /// If multiple flags are given, then *all* given flags will be set to the given
+            /// boolean value.
+            pub(crate) fn [<set_ $flags_t:snake>](&mut self, flag: $flags_t, value: bool) {
+                self.[<$flags_t:snake>].set(flag, value)
+            }
+        })*
+    };
+}
+
 /// A general terminal interface derived from the
 /// [`termios`](https://www.man7.org/linux/man-pages/man3/termios.3.html) type.
 #[derive(Clone, Debug, PartialEq)]
@@ -27,6 +55,13 @@ pub struct Termios {
     output_baud_rate: u32,
 }
 impl Termios {
+    impl_termios_flags_methods![
+        InputModeFlags,
+        OutputModeFlags,
+        LocalModeFlags,
+        ControlModeFlags
+    ];
+
     #[allow(clippy::similar_names)]
     #[allow(clippy::too_many_arguments)]
     fn from_raw_helper(
@@ -164,3 +199,88 @@ macro_rules! impl_from_termios_termios2raw {
     };
 }
 impl_from_termios_termios2raw!(Termios, &Termios);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEST_TERMIOS: Termios = Termios {
+        input_mode_flags: InputModeFlags::empty(),
+        output_mode_flags: OutputModeFlags::empty(),
+        control_mode_flags: ControlModeFlags::empty(),
+        local_mode_flags: LocalModeFlags::empty(),
+        line_discipline: LineDiscipline::Tty,
+        control_characters: [0; TERMIOS_CC_SIZE],
+        input_baud_rate: 0,
+        output_baud_rate: 0,
+    };
+
+    #[test_case]
+    fn get_set_termios_input_flags() {
+        let mut t = TEST_TERMIOS.clone();
+
+        assert!(!t.get_input_mode_flags(InputModeFlags::IGNBRK));
+        t.set_input_mode_flags(InputModeFlags::IGNBRK, true);
+        assert!(t.get_input_mode_flags(InputModeFlags::IGNBRK));
+        t.set_input_mode_flags(InputModeFlags::IGNBRK, true);
+        assert!(t.get_input_mode_flags(InputModeFlags::IGNBRK));
+        t.set_input_mode_flags(InputModeFlags::IGNBRK, false);
+        assert!(!t.get_input_mode_flags(InputModeFlags::IGNBRK));
+        t.set_input_mode_flags(InputModeFlags::IGNBRK, false);
+        assert!(!t.get_input_mode_flags(InputModeFlags::IGNBRK));
+    }
+
+    #[test_case]
+    fn get_set_termios_output_flags() {
+        let mut t = TEST_TERMIOS.clone();
+
+        assert!(!t.get_output_mode_flags(OutputModeFlags::ONOCR));
+        t.set_output_mode_flags(OutputModeFlags::ONOCR, true);
+        assert!(t.get_output_mode_flags(OutputModeFlags::ONOCR));
+    }
+
+    #[test_case]
+    fn get_set_termios_local_flags() {
+        let mut t = TEST_TERMIOS.clone();
+
+        assert!(!t.get_local_mode_flags(LocalModeFlags::ECHO));
+        t.set_local_mode_flags(LocalModeFlags::ECHO, true);
+        assert!(t.get_local_mode_flags(LocalModeFlags::ECHO));
+    }
+
+    #[test_case]
+    fn get_set_termios_control_flags() {
+        let mut t = TEST_TERMIOS.clone();
+
+        assert!(!t.get_control_mode_flags(ControlModeFlags::PARENB));
+        t.set_control_mode_flags(ControlModeFlags::PARENB, true);
+        assert!(t.get_control_mode_flags(ControlModeFlags::PARENB));
+    }
+
+    #[test_case]
+    fn termios_flags_contains() {
+        let mut t = TEST_TERMIOS.clone();
+
+        t.set_input_mode_flags(InputModeFlags::IGNBRK, true);
+        assert!(!t.get_input_mode_flags(InputModeFlags::IGNPAR | InputModeFlags::IGNBRK));
+        t.set_input_mode_flags(InputModeFlags::IGNPAR, true);
+        assert!(t.get_input_mode_flags(InputModeFlags::IGNPAR | InputModeFlags::IGNBRK));
+    }
+
+    #[test_case]
+    fn termios_flags_set_multi() {
+        let mut t = TEST_TERMIOS.clone();
+
+        t.set_input_mode_flags(
+            InputModeFlags::IGNPAR | InputModeFlags::IGNBRK | InputModeFlags::IGNCR,
+            true,
+        );
+        assert!(t.get_input_mode_flags(
+            InputModeFlags::IGNPAR | InputModeFlags::IGNBRK | InputModeFlags::IGNCR
+        ));
+        t.set_input_mode_flags(InputModeFlags::IGNCR | InputModeFlags::IGNPAR, false);
+        assert!(t.get_input_mode_flags(InputModeFlags::IGNBRK));
+        assert!(!t.get_input_mode_flags(InputModeFlags::IGNCR));
+        assert!(!t.get_input_mode_flags(InputModeFlags::IGNPAR));
+    }
+}
