@@ -9,6 +9,10 @@ use spin::Mutex;
 use crate::{
     Errno,
     fs::{File, FileDescriptor},
+    term::{
+        ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags, get_term_attrs,
+        set_term_attrs,
+    },
 };
 
 /// File descriptor of the standard input stream.
@@ -37,6 +41,46 @@ pub struct Input;
 /// An output stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Output;
+
+/// Macro to implement the getter and setter [`Termios`] methods for all the mode flags.
+macro_rules! impl_termios_flags_methods {
+    [$($flags_t:ty),* $(,)?] => {
+        $(paste::paste! {
+            /// Gets the value of the given
+            #[doc = concat!("[`", stringify!($flags_t), "`]")]
+            /// flag.
+            ///
+            /// If multiple flags are given, then this function will only return `true` if *all*
+            /// the given flags are set.
+            ///
+            /// # Errors
+            ///
+            /// This function propagates any [`Errno`]s incurred by the underlying call to
+            /// [`ioctl`](https://man7.org/linux/man-pages/man2/ioctl.2.html).
+            pub fn [<get_ $flags_t:snake>](&self, flag: $flags_t) -> Result<bool, Errno> {
+                let termios = get_term_attrs(self.file.fd_raw())?;
+                Ok(termios.[<$flags_t:snake>].contains(flag))
+            }
+
+            /// Sets the value of the given
+            #[doc = concat!("[`", stringify!($flags_t), "`]")]
+            /// flag to the given boolean value.
+            ///
+            /// If multiple flags are given, then *all* given flags will be set to the given
+            /// boolean value.
+            ///
+            /// # Errors
+            ///
+            /// This function propagates any [`Errno`]s incurred by the underlying calls to
+            /// [`ioctl`](https://man7.org/linux/man-pages/man2/ioctl.2.html).
+            pub fn [<set_ $flags_t:snake>](&self, flag: $flags_t, value: bool) -> Result<(), Errno> {
+                let mut termios = get_term_attrs(self.file.fd_raw())?;
+                termios.[<$flags_t:snake>].set(flag, value);
+                set_term_attrs(self.file.fd_raw(), &termios)
+            }
+        })*
+    };
+}
 
 /// A [`File`] corresponding to a particular
 /// [`standard stream`](https://en.wikipedia.org/wiki/Standard_streams).
@@ -89,6 +133,13 @@ impl Stream<Input> {
     pub fn read_to_string(&self) -> Result<String, Errno> {
         self.file.read_to_string()
     }
+
+    impl_termios_flags_methods![
+        InputModeFlags,
+        OutputModeFlags,
+        ControlModeFlags,
+        LocalModeFlags,
+    ];
 }
 impl Stream<Output> {
     /// Writes bytes from the provided buffer into the stream, returning the number of bytes
