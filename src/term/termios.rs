@@ -103,6 +103,25 @@ pub struct TermiosRaw {
     ispeed: u32,
     ospeed: u32,
 }
+macro_rules! impl_from_termios_termiosraw {
+    ($($t:ty),+) => {
+       $(impl From<$t> for TermiosRaw {
+           fn from(value: $t) -> Self {
+                Self {
+                    iflag: value.input_mode_flags.bits(),
+                    oflag: value.output_mode_flags.bits(),
+                    cflag: value.control_mode_flags.bits(),
+                    lflag: value.local_mode_flags.bits(),
+                    line: value.line_discipline as u8,
+                    cc: value.control_characters,
+                    ispeed: value.input_baud_rate,
+                    ospeed: value.output_baud_rate,
+                }
+           }
+       })+
+    };
+}
+impl_from_termios_termiosraw!(Termios, &Termios);
 
 /// A raw terminal data type received from calls to
 /// [`ioctl`](https://man7.org/linux/man-pages/man2/ioctl.2.html) when used with the '2' versions
@@ -119,6 +138,29 @@ struct Termios2Raw {
     ispeed: u32,
     ospeed: u32,
 }
+macro_rules! impl_from_termios_termios2raw {
+    ($($t:ty),+) => {
+       $(impl From<$t> for Termios2Raw {
+           fn from(value: $t) -> Self {
+               Self {
+                   iflag: value.input_mode_flags.bits(),
+                   oflag: value.output_mode_flags.bits(),
+                   cflag: value.control_mode_flags.bits(),
+                   lflag: value.local_mode_flags.bits(),
+                   line: value.line_discipline as u8,
+                   // OK to unwrap here- `TERMIOS2_CC_SIZE` is the static size of `cc`.
+                   #[allow(clippy::unwrap_used)]
+                   cc: value.control_characters[..TERMIOS2_CC_SIZE]
+                       .try_into()
+                       .unwrap(),
+                   ispeed: value.input_baud_rate,
+                   ospeed: value.output_baud_rate,
+               }
+           }
+       })+
+    };
+}
+impl_from_termios_termios2raw!(Termios, &Termios);
 
 /// The terminal line discipline.
 #[repr(u8)]
