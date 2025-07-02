@@ -5,4 +5,4 @@ mod termios;
 
 // RE-EXPORTS
 
-pub use termios::{ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags};
+pub use termios::{ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags, Termios};
