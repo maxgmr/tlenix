@@ -11,7 +11,7 @@ use crate::{
     fs::{File, FileDescriptor},
     term::{
         ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags, SetTermAttrsCmd,
-        get_term_attrs, set_term_attrs,
+        Termios, get_term_attrs, set_term_attrs,
     },
 };
 
@@ -56,9 +56,9 @@ macro_rules! impl_termios_flags_methods {
             /// # Errors
             ///
             /// This function propagates any [`Errno`]s incurred by the underlying call to
-            /// [`ioctl`](https://man7.org/linux/man-pages/man2/ioctl.2.html).
+            /// [`ioctl(2)`](https://man7.org/linux/man-pages/man2/ioctl.2.html).
             pub fn [<get_ $flags_t:snake>](&self, flag: $flags_t) -> Result<bool, Errno> {
-                let termios = get_term_attrs(self.file.fd_raw())?;
+                let termios = self.termios()?;
                 Ok(termios.[<$flags_t:snake>].contains(flag))
             }
 
@@ -78,13 +78,13 @@ macro_rules! impl_termios_flags_methods {
             /// # Errors
             ///
             /// This function propagates any [`Errno`]s incurred by the underlying calls to
-            /// [`ioctl`](https://man7.org/linux/man-pages/man2/ioctl.2.html).
+            /// [`ioctl(2)`](https://man7.org/linux/man-pages/man2/ioctl.2.html).
             pub fn [<set_ $flags_t:snake>](
-                &self, cmd: SetTermAttrsCmd, flag: $flags_t, value: bool
+                &mut self, cmd: SetTermAttrsCmd, flag: $flags_t, value: bool
             ) -> Result<(), Errno> {
-                let mut termios = get_term_attrs(self.file.fd_raw())?;
+                let mut termios = self.termios()?;
                 termios.[<$flags_t:snake>].set(flag, value);
-                set_term_attrs(cmd, self.file.fd_raw(), &termios)
+                self.set_termios(cmd, &termios)
             }
         })*
     };
@@ -140,6 +140,27 @@ impl Stream<Input> {
     /// This function propagates any [`Errno`]s returned from [`File::read_to_string`].
     pub fn read_to_string(&self) -> Result<String, Errno> {
         self.file.read_to_string()
+    }
+
+    /// Gets the state of the current terminal, in the form of
+    /// [`termios(3)`](https://www.man7.org/linux/man-pages/man3/termios.3.html).
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any [`Errno`]s returned from the underlying
+    /// [`ioctl(2)`](https://man7.org/linux/man-pages/man2/ioctl.2.html) syscall.
+    pub fn termios(&self) -> Result<Termios, Errno> {
+        get_term_attrs(self.file.fd_raw())
+    }
+
+    /// Sets the state of the current terminal to the given [`Termios`].
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any [`Errno`]s returned from the underlying
+    /// [`ioctl(2)`](https://man7.org/linux/man-pages/man2/ioctl.2.html) syscalls.
+    pub fn set_termios(&mut self, cmd: SetTermAttrsCmd, termios: &Termios) -> Result<(), Errno> {
+        set_term_attrs(cmd, self.file.fd_raw(), termios)
     }
 
     impl_termios_flags_methods![
