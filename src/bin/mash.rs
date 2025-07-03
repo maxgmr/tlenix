@@ -94,7 +94,6 @@ extern "C" fn _start() -> ! {
 
         // Do nothing if nothing was typed
         if argv.is_empty() {
-            eprintln!("doing nothin'");
             continue;
         }
 
