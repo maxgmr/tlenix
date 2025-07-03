@@ -10,8 +10,8 @@ use crate::{
     Errno,
     fs::{File, FileDescriptor},
     term::{
-        ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags, get_term_attrs,
-        set_term_attrs,
+        ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags, SetTermAttrsCmd,
+        get_term_attrs, set_term_attrs,
     },
 };
 
@@ -69,14 +69,22 @@ macro_rules! impl_termios_flags_methods {
             /// If multiple flags are given, then *all* given flags will be set to the given
             /// boolean value.
             ///
+            /// The given [`SetTermAttrsCmd`] dictates the following:
+            ///
+            /// - Whether or not the system waits to apply changes after all written output has
+            /// been transmitted.
+            /// - Whether or not the system discards unread input before applying changes.
+            ///
             /// # Errors
             ///
             /// This function propagates any [`Errno`]s incurred by the underlying calls to
             /// [`ioctl`](https://man7.org/linux/man-pages/man2/ioctl.2.html).
-            pub fn [<set_ $flags_t:snake>](&self, flag: $flags_t, value: bool) -> Result<(), Errno> {
+            pub fn [<set_ $flags_t:snake>](
+                &self, cmd: SetTermAttrsCmd, flag: $flags_t, value: bool
+            ) -> Result<(), Errno> {
                 let mut termios = get_term_attrs(self.file.fd_raw())?;
                 termios.[<$flags_t:snake>].set(flag, value);
-                set_term_attrs(self.file.fd_raw(), &termios)
+                set_term_attrs(cmd, self.file.fd_raw(), &termios)
             }
         })*
     };
