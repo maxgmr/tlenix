@@ -13,6 +13,32 @@ const TCSETS: u64 = 0x0000_5402;
 // const TCSETSW2: u64 = 0x402c_542c;
 // const TCSETSF2: u64 = 0x402c_542d;
 
+/// Gets the attributes of the given [`FileDescriptor`].
+///
+/// Internally uses the
+/// [`ioctl`](https://www.man7.org/linux/man-pages/man2/ioctl.2.html) Linux system call.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s incurred during the underling `ioctl` syscall, most
+/// notably [`Errno::Eperm`] in the case of insufficient permissions, or [`Errno::Enotty`] if the
+/// given file descriptor doesn't refer to a TTY.
+pub(crate) fn get_term_attrs(file_descriptor: FileDescriptor) -> Result<Termios, Errno> {
+    let mut termios_raw = TermiosRaw::default();
+    // SAFETY: The number and the type of the parameters matches the system call definition. The
+    // `TCGETS` value is a valid `cmd`. The `TermiosRaw` struct is the right size and alignment to
+    // serve as the provided buffer.
+    unsafe {
+        syscall_result!(
+            SyscallNum::Ioctl,
+            file_descriptor,
+            TCGETS,
+            &raw mut termios_raw as usize
+        )?;
+    }
+    Ok(termios_raw.into())
+}
+
 /// Sets the attributes of the given [`FileDescriptor`] to the given [`Termios`].
 ///
 /// Internally uses the
@@ -40,30 +66,4 @@ pub(crate) fn set_term_attrs(
         )?;
     }
     Ok(())
-}
-
-/// Gets the attributes of the given [`FileDescriptor`].
-///
-/// Internally uses the
-/// [`ioctl`](https://www.man7.org/linux/man-pages/man2/ioctl.2.html) Linux system call.
-///
-/// # Errors
-///
-/// This function propagates any [`Errno`]s incurred during the underling `ioctl` syscall, most
-/// notably [`Errno::Eperm`] in the case of insufficient permissions, or [`Errno::Enotty`] if the
-/// given file descriptor doesn't refer to a TTY.
-pub(crate) fn get_term_attrs(file_descriptor: FileDescriptor) -> Result<Termios, Errno> {
-    let mut termios_raw = TermiosRaw::default();
-    // SAFETY: The number and the type of the parameters matches the system call definition. The
-    // `TCGETS` value is a valid `cmd`. The `TermiosRaw` struct is the right size and alignment to
-    // serve as the provided buffer.
-    unsafe {
-        syscall_result!(
-            SyscallNum::Ioctl,
-            file_descriptor,
-            TCGETS,
-            &raw mut termios_raw as usize
-        )?;
-    }
-    Ok(termios_raw.into())
 }
