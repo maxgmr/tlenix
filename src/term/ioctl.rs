@@ -34,8 +34,8 @@ pub(crate) fn set_term_attrs(
     unsafe {
         syscall_result!(
             SyscallNum::Ioctl,
-            TCSETS,
             file_descriptor,
+            TCSETS,
             &raw const termios_raw as usize
         )?;
     }
@@ -60,8 +60,8 @@ pub(crate) fn get_term_attrs(file_descriptor: FileDescriptor) -> Result<Termios,
     unsafe {
         syscall_result!(
             SyscallNum::Ioctl,
-            TCGETS,
             file_descriptor,
+            TCGETS,
             &raw mut termios_raw as usize
         )?;
     }
