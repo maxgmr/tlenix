@@ -44,4 +44,6 @@ pub enum ControlCharIndex {
     /// Suspend character (SUSP). Send [`crate::ipc::Signo::SigTstp`] signal. Recognized when
     /// `ISIG` is set, and then not passed as input.
     Susp = 10,
+    /// Timeout, in deciseconds, for noncanonical read (TIME).
+    Time = 5,
 }
