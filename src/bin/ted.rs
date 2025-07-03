@@ -22,7 +22,9 @@ use tlenix_core::{
     EnvVar, Errno, eprintln, parse_argv_envp,
     process::{self, ExitStatus},
     streams::STDIN,
-    term::{LocalModeFlags, SetTermAttrsCmd},
+    term::{
+        ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags, SetTermAttrsCmd, Termios,
+    },
     try_exit,
 };
 
@@ -66,28 +68,51 @@ unsafe extern "C" fn start(stack_top: *const usize) -> ! {
     process::exit(exit_code);
 }
 
-fn enter_raw_mode() -> Result<(), Errno> {
-    // Disable echo and canonical mode
-    STDIN.lock().set_local_mode_flags(
+/// Enters terminal "raw mode", returning the original terminal state at the time of the function
+/// call.
+///
+/// Makes input available character-by-character, disables echo, and disables all special
+/// processing of terminal input and output characters.
+///
+/// More info: [termios(3)](https://www.man7.org/linux/man-pages/man3/termios.3.html)
+fn enter_raw_mode() -> Result<Termios, Errno> {
+    let termios_orig = STDIN.lock().termios()?;
+    STDIN.lock().set_input_mode_flags(
         SetTermAttrsCmd::Tcsetsf,
-        LocalModeFlags::ECHO | LocalModeFlags::ICANON,
+        InputModeFlags::IGNBRK
+            | InputModeFlags::BRKINT
+            | InputModeFlags::PARMRK
+            | InputModeFlags::ISTRIP
+            | InputModeFlags::INLCR
+            | InputModeFlags::ICRNL
+            | InputModeFlags::IXON,
         false,
     )?;
-    Ok(())
-}
-
-fn exit_raw_mode() -> Result<(), Errno> {
-    // Re-enable echo and canonical mode
+    STDIN
+        .lock()
+        .set_output_mode_flags(SetTermAttrsCmd::Tcsetsf, OutputModeFlags::OPOST, false)?;
     STDIN.lock().set_local_mode_flags(
         SetTermAttrsCmd::Tcsetsf,
-        LocalModeFlags::ECHO | LocalModeFlags::ICANON,
-        true,
+        LocalModeFlags::ECHO
+            | LocalModeFlags::ECHONL
+            | LocalModeFlags::ICANON
+            | LocalModeFlags::ISIG
+            | LocalModeFlags::IEXTEN,
+        false,
     )?;
-    Ok(())
+    STDIN
+        .lock()
+        .set_control_mode_flags(SetTermAttrsCmd::Tcsetsf, ControlModeFlags::CSIZE, true)?;
+    Ok(termios_orig)
+}
+
+/// Restores the terminal to the provided [`Termios`].
+fn restore_terminal(termios: &Termios) -> Result<(), Errno> {
+    STDIN.lock().set_termios(SetTermAttrsCmd::Tcsetsf, termios)
 }
 
 fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
-    try_exit!(enter_raw_mode());
+    let orig_termios = try_exit!(enter_raw_mode());
 
     // Quit the program when `q` is pressed
     let mut current_char: [u8; 1] = [0];
@@ -100,8 +125,7 @@ fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
         }
     }
 
-    try_exit!(exit_raw_mode());
-
+    try_exit!(restore_terminal(&orig_termios));
     ExitStatus::ExitSuccess
 }
 
@@ -109,9 +133,4 @@ fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
 fn panic(info: &PanicInfo<'_>) -> ! {
     eprintln!("{PANIC_TITLE} {info}");
     process::exit(ExitStatus::ExitFailure(1))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 }
