@@ -7,4 +7,6 @@ mod termios;
 
 pub use ioctl::SetTermAttrsCmd;
 pub(crate) use ioctl::{get_term_attrs, set_term_attrs};
-pub use termios::{ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags, Termios};
+pub use termios::{
+    ControlCharIndex, ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags, Termios,
+};

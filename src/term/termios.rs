@@ -7,6 +7,7 @@ mod mode_flags;
 
 // RE-EXPORTS
 
+pub use control_char_index::ControlCharIndex;
 use line_discipline::LineDiscipline;
 pub use mode_flags::{ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags};
 
