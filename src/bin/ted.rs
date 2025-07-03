@@ -15,10 +15,9 @@
 
 extern crate alloc;
 
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use core::panic::PanicInfo;
 
-use getargs::{Arg, Options};
 use tlenix_core::{
     EnvVar, Errno, eprintln, parse_argv_envp,
     process::{self, ExitStatus},
@@ -87,7 +86,7 @@ fn exit_raw_mode() -> Result<(), Errno> {
     Ok(())
 }
 
-fn main(args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
+fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
     try_exit!(enter_raw_mode());
 
     // Quit the program when `q` is pressed
