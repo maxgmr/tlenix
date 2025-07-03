@@ -19,7 +19,7 @@ use alloc::string::String;
 use core::panic::PanicInfo;
 
 use tlenix_core::{
-    EnvVar, Errno, eprintln, parse_argv_envp,
+    EnvVar, Errno, eprintln, parse_argv_envp, print,
     process::{self, ExitStatus},
     streams::STDIN,
     term::{
@@ -31,8 +31,14 @@ use tlenix_core::{
 
 const PANIC_TITLE: &str = "ted";
 
+/// ANSI escape code to clear the entire screen.
+const CLEAR_SCREEN: &str = "\u{001b}[2J";
+/// ANSI escape code to move the cursor to the top-left corner.
+const CURSOR_TOP_LEFT: &str = "\u{001b}[H";
+
 const READ_MIN_BYTES_READ: u8 = 0;
 const READ_MAX_TIME_PASSED: Deciseconds = Deciseconds(1);
+const EXIT_CODE: u8 = ctrl_key(b'q');
 
 core::arch::global_asm! {
     ".global _start",
@@ -43,6 +49,11 @@ core::arch::global_asm! {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Deciseconds(u8);
+
+/// Get the byte version of "CTRL + this key".
+const fn ctrl_key(byte: u8) -> u8 {
+    byte & 0x1f
+}
 
 /// A simple text editor.
 ///
@@ -125,6 +136,11 @@ fn set_read_timeouts(min_bytes_read: u8, max_time_passed: Deciseconds) -> Result
     )
 }
 
+/// Clears the screen.
+fn clear_screen() {
+    print!("{CLEAR_SCREEN}{CURSOR_TOP_LEFT}");
+}
+
 /// Restores the terminal to the provided [`Termios`].
 fn restore_terminal(termios: &Termios) -> Result<(), Errno> {
     STDIN.lock().set_termios(SetTermAttrsCmd::Tcsetsf, termios)
@@ -134,8 +150,8 @@ fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
     let orig_termios = try_exit!(STDIN.lock().termios());
     try_exit!(enter_raw_mode());
     try_exit!(set_read_timeouts(READ_MIN_BYTES_READ, READ_MAX_TIME_PASSED));
+    clear_screen();
 
-    // Quit the program when `q` is pressed
     let mut current_char: [u8; 1] = [0];
     loop {
         match STDIN.lock().read(&mut current_char) {
@@ -145,12 +161,13 @@ fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
             Ok(_) => {}
             Err(e) => {
                 try_exit!(restore_terminal(&orig_termios));
+                clear_screen();
                 return ExitStatus::ExitFailure(e as i32);
             }
         }
 
-        // Quit if 'q' is pressed
-        if current_char[0] == b'q' {
+        // Quit if 'CTRL+q' is pressed
+        if current_char[0] == EXIT_CODE {
             break;
         }
 
@@ -163,6 +180,7 @@ fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
     }
 
     try_exit!(restore_terminal(&orig_termios));
+    clear_screen();
     ExitStatus::ExitSuccess
 }
 
