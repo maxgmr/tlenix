@@ -1,17 +1,39 @@
 //! Functionality related to the
 //! [`ioctl`](https://www.man7.org/linux/man-pages/man2/ioctl.2.html) Linux system call.
 
-use super::termios::TermiosRaw;
+use super::termios::{Termios2Raw, TermiosRaw};
 use crate::{Errno, SyscallNum, fs::FileDescriptor, syscall_result, term::Termios};
 
 const TCGETS: u64 = 0x0000_5401;
-const TCSETS: u64 = 0x0000_5402;
-// const TCSETSW: u64 = 0x0000_5403;
-// const TCSETSF: u64 = 0x0000_5404;
 // const TCGETS2: u64 = 0x802c_542a;
-// const TCSETS2: u64 = 0x402c_542b;
-// const TCSETSW2: u64 = 0x402c_542c;
-// const TCSETSF2: u64 = 0x402c_542d;
+
+/// The different commands for setting terminal attributes.
+#[repr(u64)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum SetTermAttrsCmd {
+    /// Set the current serial port settings to the given `termios`.
+    Tcsets = 0x0000_5402,
+    /// Allow the output buffer to drain, and set the current serial port settings to the given
+    /// `termios`.
+    Tcsetsw = 0x0000_5403,
+    /// Allow the output buffer to drain, discard pending input, and set the current serial port
+    /// settings to the given `termios`.
+    Tcsetsf = 0x0000_5404,
+    /// Set the current serial port settings to the given `termios2`.
+    Tcsets2 = 0x402c_542b,
+    /// Allow the output buffer to drain, and set the current serial port settings to the given
+    /// `termios2`.
+    Tcsetsw2 = 0x402c_542c,
+    /// Allow the output buffer to drain, discard pending input, and set the current serial port
+    /// settings to the given `termios2`.
+    Tcsetsf2 = 0x402c_542d,
+}
+impl SetTermAttrsCmd {
+    /// Returns `true` if the command uses a `termios2`; returns `false` otherwise.
+    fn uses_termios2(&self) -> bool {
+        matches!(self, Self::Tcsets2 | Self::Tcsetsw2 | Self::Tcsetsf2)
+    }
+}
 
 /// Gets the attributes of the given [`FileDescriptor`].
 ///
@@ -41,6 +63,8 @@ pub(crate) fn get_term_attrs(file_descriptor: FileDescriptor) -> Result<Termios,
 
 /// Sets the attributes of the given [`FileDescriptor`] to the given [`Termios`].
 ///
+/// Uses the given [`SetTermAttrsCmd`] to determine specific behaviour.
+///
 /// Internally uses the
 /// [`ioctl`](https://www.man7.org/linux/man-pages/man2/ioctl.2.html) Linux system call.
 ///
@@ -49,21 +73,32 @@ pub(crate) fn get_term_attrs(file_descriptor: FileDescriptor) -> Result<Termios,
 /// This function propagates any [`Errno`]s incurred during the underling `ioctl` syscall, most
 /// notably [`Errno::Eperm`] in the case of insufficient permissions, or [`Errno::Enotty`] if the
 /// given file descriptor doesn't refer to a TTY.
+#[allow(clippy::similar_names)]
 pub(crate) fn set_term_attrs(
+    cmd: SetTermAttrsCmd,
     file_descriptor: FileDescriptor,
     termios: &Termios,
 ) -> Result<(), Errno> {
+    let termios_ptr: usize;
+
+    // Define the raw types to ensure they live long enough
     let termios_raw: TermiosRaw = termios.into();
+    let termios2_raw: Termios2Raw = termios.into();
+
+    termios_ptr = if cmd.uses_termios2() {
+        &raw const termios2_raw as usize
+    } else {
+        &raw const termios_raw as usize
+    };
+
     // SAFETY: The number and the type of the parameters matches the system call definition. The
-    // `TCSETS` value is a valid `cmd`. The `TermiosRaw` struct is the right size and alignment to
-    // serve as the provided buffer.
+    // `SetTermAttrsCmd` enum restricts `cmd` values to those which write the given `Termios` to
+    // the given file descriptor.
+    // `TCSETS` value is a valid `cmd`. The pointer either points to `TermiosRaw` or `Termios2Raw`.
+    // Both structs match the expected size and alignment, and the termios vs termios2 decision is
+    // made based on the `SetTermAttrsCmd` enum. Finally, defining `termios_raw` and `termios2_raw` at the function-level scope guarantees the raw pointer is valid throughout the syscall.
     unsafe {
-        syscall_result!(
-            SyscallNum::Ioctl,
-            file_descriptor,
-            TCSETS,
-            &raw const termios_raw as usize
-        )?;
+        syscall_result!(SyscallNum::Ioctl, file_descriptor, cmd as u64, termios_ptr)?;
     }
     Ok(())
 }

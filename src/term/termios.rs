@@ -104,7 +104,7 @@ impl_from_termios2raw!(Termios2Raw, &Termios2Raw);
 /// [`ioctl`](https://man7.org/linux/man-pages/man2/ioctl.2.html).
 #[repr(C)]
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct TermiosRaw {
+pub(crate) struct TermiosRaw {
     iflag: u32,
     oflag: u32,
     cflag: u32,
@@ -139,7 +139,7 @@ impl_from_termios_termiosraw!(Termios, &Termios);
 /// of different `ioctl` commands.
 #[repr(C)]
 #[derive(Clone, Debug, Default, PartialEq)]
-struct Termios2Raw {
+pub(crate) struct Termios2Raw {
     iflag: u32,
     oflag: u32,
     cflag: u32,
