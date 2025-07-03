@@ -10,27 +10,41 @@ const TCGETS: u64 = 0x0000_5401;
 /// The different commands for setting terminal attributes.
 #[repr(u64)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) enum SetTermAttrsCmd {
+pub enum SetTermAttrsCmd {
     /// Set the current serial port settings to the given `termios`.
+    ///
+    /// This command applies the changes immediately, regardless of pending I/O.
     Tcsets = 0x0000_5402,
     /// Allow the output buffer to drain, and set the current serial port settings to the given
     /// `termios`.
+    ///
+    /// This command waits for all output to be transmitted before applying changes.
     Tcsetsw = 0x0000_5403,
     /// Allow the output buffer to drain, discard pending input, and set the current serial port
     /// settings to the given `termios`.
+    ///
+    /// This command waits for output to complete *and* discards unread input before applying
+    /// changes.
     Tcsetsf = 0x0000_5404,
     /// Set the current serial port settings to the given `termios2`.
+    ///
+    /// This command applies the changes immediately, regardless of pending I/O.
     Tcsets2 = 0x402c_542b,
     /// Allow the output buffer to drain, and set the current serial port settings to the given
     /// `termios2`.
+    ///
+    /// This command waits for all output to be transmitted before applying changes.
     Tcsetsw2 = 0x402c_542c,
     /// Allow the output buffer to drain, discard pending input, and set the current serial port
     /// settings to the given `termios2`.
+    ///
+    /// This command waits for output to complete *and* discards unread input before applying
+    /// changes.
     Tcsetsf2 = 0x402c_542d,
 }
 impl SetTermAttrsCmd {
     /// Returns `true` if the command uses a `termios2`; returns `false` otherwise.
-    fn uses_termios2(&self) -> bool {
+    fn uses_termios2(self) -> bool {
         matches!(self, Self::Tcsets2 | Self::Tcsetsw2 | Self::Tcsetsf2)
     }
 }
@@ -79,13 +93,11 @@ pub(crate) fn set_term_attrs(
     file_descriptor: FileDescriptor,
     termios: &Termios,
 ) -> Result<(), Errno> {
-    let termios_ptr: usize;
-
     // Define the raw types to ensure they live long enough
     let termios_raw: TermiosRaw = termios.into();
     let termios2_raw: Termios2Raw = termios.into();
 
-    termios_ptr = if cmd.uses_termios2() {
+    let termios_ptr = if cmd.uses_termios2() {
         &raw const termios2_raw as usize
     } else {
         &raw const termios_raw as usize
