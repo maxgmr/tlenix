@@ -2,10 +2,17 @@
 //! [`ioctl`](https://www.man7.org/linux/man-pages/man2/ioctl.2.html) Linux system call.
 
 use super::termios::{Termios2Raw, TermiosRaw};
-use crate::{Errno, SyscallNum, fs::FileDescriptor, syscall_result, term::Termios};
+use super::winsize::WinSizeRaw;
+use crate::{
+    Errno, SyscallNum,
+    fs::FileDescriptor,
+    syscall_result,
+    term::{Termios, WinSize},
+};
 
 const TCGETS: u64 = 0x0000_5401;
 // const TCGETS2: u64 = 0x802c_542a;
+const TIOCGWINSZ: u64 = 0x0000_5413;
 
 /// The different commands for setting terminal attributes.
 #[repr(u64)]
@@ -113,4 +120,28 @@ pub(crate) fn set_term_attrs(
         syscall_result!(SyscallNum::Ioctl, file_descriptor, cmd as u64, termios_ptr)?;
     }
     Ok(())
+}
+
+/// Get the size of the terminal pointed to by the given [`FileDescriptor`].
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s incurred by the underlying call to `ioctl`.
+pub(crate) fn get_term_size(file_descriptor: FileDescriptor) -> Result<WinSize, Errno> {
+    let mut win_size_raw: WinSizeRaw = WinSizeRaw::default();
+
+    // SAFETY: The number and type of the parameters matches the system call definition. The use of
+    // the `TIOCGWINSZ` constant for the `cmd` arg ensures *only* that command is possible. The
+    // `WinSizeRaw` type is the correct alignment and size to store the returned WinSize.
+    // `win_size_raw` lives long enough for the raw pointer to be valid.
+    unsafe {
+        syscall_result!(
+            SyscallNum::Ioctl,
+            file_descriptor,
+            TIOCGWINSZ,
+            &raw mut win_size_raw as usize
+        )?;
+    }
+
+    Ok(win_size_raw.into())
 }
