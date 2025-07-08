@@ -146,36 +146,63 @@ fn restore_terminal(termios: &Termios) -> Result<(), Errno> {
     STDIN.lock().set_termios(SetTermAttrsCmd::Tcsetsf, termios)
 }
 
+/// Reads a single keypress from `stdin`.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s from the underlying calls to `read`.
+fn read_keypress() -> Result<u8, Errno> {
+    let mut byte_buf = [0];
+    // Try to read a byte from stdin.
+    loop {
+        match STDIN.lock().read(&mut byte_buf) {
+            Ok(0) | Err(Errno::Eagain) => {
+                // Nothing was read. Try again.
+            }
+            Ok(_) => {
+                // A byte was read. Return the byte.
+                return Ok(byte_buf[0]);
+            }
+            Err(e) => {
+                // Non-retryable error. Return the error.
+                return Err(e);
+            }
+        }
+    }
+}
+
+/// Handles user input, propagating any [`Errno`]s from underlying syscalls. Returns a boolean
+/// value dictating whether or not the program should exit.
+fn handle_input() -> Result<bool, Errno> {
+    let input_byte = read_keypress()?;
+
+    match input_byte {
+        EXIT_CODE => {
+            // Exit.
+            return Ok(true);
+        }
+        _ => {
+            // TODO debug: print input char
+            if let Ok(utf8_char) = str::from_utf8(&[input_byte]) {
+                tlenix_core::print!("{utf8_char}");
+            } else {
+                tlenix_core::print!("{:#x}", input_byte);
+            }
+        }
+    }
+
+    Ok(false)
+}
+
 fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
     let orig_termios = try_exit!(STDIN.lock().termios());
     try_exit!(enter_raw_mode());
     try_exit!(set_read_timeouts(READ_MIN_BYTES_READ, READ_MAX_TIME_PASSED));
     clear_screen();
 
-    let mut current_char: [u8; 1] = [0];
     loop {
-        match STDIN.lock().read(&mut current_char) {
-            Ok(0) | Err(Errno::Eagain) => {
-                continue;
-            }
-            Ok(_) => {}
-            Err(e) => {
-                try_exit!(restore_terminal(&orig_termios));
-                clear_screen();
-                return ExitStatus::ExitFailure(e as i32);
-            }
-        }
-
-        // Quit if 'CTRL+q' is pressed
-        if current_char[0] == EXIT_CODE {
+        if try_exit!(handle_input()) {
             break;
-        }
-
-        // TODO debug
-        if let Ok(utf8_char) = str::from_utf8(&current_char) {
-            tlenix_core::print!("{utf8_char}");
-        } else {
-            tlenix_core::print!("{:#x}", current_char[0]);
         }
     }
 
