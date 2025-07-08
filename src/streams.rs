@@ -11,7 +11,7 @@ use crate::{
     fs::{File, FileDescriptor},
     term::{
         ControlCharIndex, ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags,
-        SetTermAttrsCmd, Termios, get_term_attrs, set_term_attrs,
+        SetTermAttrsCmd, Termios, WinSize, get_term_attrs, get_term_size, set_term_attrs,
     },
 };
 
@@ -194,6 +194,16 @@ impl Stream<Input> {
         // OK to index here- the ControlCharIndex enum restricts the index to valid values.
         termios.control_characters[ctrl_char as usize] = value;
         self.set_termios(cmd, &termios)
+    }
+
+    /// Gets the window size of the terminal.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any [`Errno`]s returned from the underlying
+    /// [`ioctl(2)`](https://man7.org/linux/man-pages/man2/ioctl.2.html) syscall.
+    pub fn win_size(&self) -> Result<WinSize, Errno> {
+        get_term_size(self.file.fd_raw())
     }
 
     impl_termios_flags_methods![
