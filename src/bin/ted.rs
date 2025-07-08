@@ -19,7 +19,7 @@ use alloc::string::String;
 use core::panic::PanicInfo;
 
 use tlenix_core::{
-    EnvVar, Errno, eprintln, parse_argv_envp, print,
+    EnvVar, Errno, eprintln, parse_argv_envp, print, println,
     process::{self, ExitStatus},
     streams::STDIN,
     term::{
@@ -53,6 +53,11 @@ struct Deciseconds(u8);
 /// Get the byte version of "CTRL + this key".
 const fn ctrl_key(byte: u8) -> u8 {
     byte & 0x1f
+}
+
+/// The current configuration of the editor.
+struct Config {
+    orig_termios: Termios,
 }
 
 /// A simple text editor.
@@ -146,11 +151,22 @@ fn restore_terminal(termios: &Termios) -> Result<(), Errno> {
     STDIN.lock().set_termios(SetTermAttrsCmd::Tcsetsf, termios)
 }
 
+/// Renders the rows of the interface onto the terminal.
+fn render_rows() {
+    // TODO get actual terminal height
+    for _ in 0..24 {
+        println!("~");
+    }
+    print!("{CURSOR_TOP_LEFT}");
+}
+
+/// Refreshes the screen, displaying the intended content.
+fn refresh_screen() {
+    clear_screen();
+    render_rows();
+}
+
 /// Reads a single keypress from `stdin`.
-///
-/// # Errors
-///
-/// This function propagates any [`Errno`]s from the underlying calls to `read`.
 fn read_keypress() -> Result<u8, Errno> {
     let mut byte_buf = [0];
     // Try to read a byte from stdin.
@@ -196,17 +212,19 @@ fn handle_input() -> Result<bool, Errno> {
 
 fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
     let orig_termios = try_exit!(STDIN.lock().termios());
+    let mut config = Config { orig_termios };
     try_exit!(enter_raw_mode());
     try_exit!(set_read_timeouts(READ_MIN_BYTES_READ, READ_MAX_TIME_PASSED));
     clear_screen();
 
     loop {
+        refresh_screen();
         if try_exit!(handle_input()) {
             break;
         }
     }
 
-    try_exit!(restore_terminal(&orig_termios));
+    try_exit!(restore_terminal(&config.orig_termios));
     clear_screen();
     ExitStatus::ExitSuccess
 }
