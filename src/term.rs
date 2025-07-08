@@ -2,6 +2,7 @@
 
 mod ioctl;
 mod termios;
+mod winsize;
 
 // RE-EXPORTS
 
@@ -10,3 +11,4 @@ pub(crate) use ioctl::{get_term_attrs, set_term_attrs};
 pub use termios::{
     ControlCharIndex, ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags, Termios,
 };
+pub use winsize::WinSize;
