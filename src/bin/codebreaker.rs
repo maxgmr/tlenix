@@ -24,7 +24,7 @@ use core::{error::Error, panic::PanicInfo, write};
 
 use lazy_static::lazy_static;
 use tlenix_core::{
-    Console, EnvVar, Errno, eprintln, format, parse_argv_envp, print, println,
+    EnvVar, Errno, eprintln, format, parse_argv_envp, print, println,
     process::{self, ExitStatus},
     streams::STDIN,
     term::{
@@ -42,6 +42,9 @@ const LOGO: &str = r"    __   ___   ___      ___  ____   ____     ___   ____  __
 \     ||     ||     ||     ||     ||  .  \|     ||  |  ||  .  ||     ||  .  \
  \____| \___/ |_____||_____||_____||__|\_||_____||__|__||__|\_||_____||__|\_|";
 
+const HEADER_LINES: usize = 16;
+const GAME_START_LINE: usize = HEADER_LINES + 1;
+
 const PANIC_TITLE: &str = "codebreaker";
 
 const CODE_LEN: usize = 5;
@@ -53,10 +56,13 @@ const RIGHT_PLACE_SYMBOL: &str = "!";
 const RIGHT_COLOUR_SYMBOL: &str = "?";
 const NEITHER_SYMBOL: &str = ".";
 
-/// ANSI escape code to clear the entire screen.
 const CLEAR_SCREEN: &str = "\u{001b}[2J";
-/// ANSI escape code to move the cursor to the top-left corner.
 const CURSOR_TOP_LEFT: &str = "\u{001b}[H";
+const HIDE_CURSOR: &str = "\u{001b}[?25l";
+const SHOW_CURSOR: &str = "\u{001b}[?25h";
+const ENTER_ALT_SCREEN: &str = "\u{001b}[?1049h";
+const LEAVE_ALT_SCREEN: &str = "\u{001b}[?1049l";
+const CLEAR_LINE: &str = "\u{001b}[2K";
 
 const READ_MIN_BYTES_READ: u8 = 0;
 /// In deciseconds
@@ -106,19 +112,6 @@ enum Peg {
     White,
 }
 impl Peg {
-    fn try_from_str(s: &str) -> Option<Self> {
-        match s.to_ascii_lowercase().as_str() {
-            "red" => Some(Self::Red),
-            "green" => Some(Self::Green),
-            "yellow" => Some(Self::Yellow),
-            "blue" => Some(Self::Blue),
-            "purple" => Some(Self::Purple),
-            "aqua" => Some(Self::Aqua),
-            "white" => Some(Self::White),
-            s => Self::try_from_char(s.chars().next().unwrap_or('\0')),
-        }
-    }
-
     fn try_from_char(c: char) -> Option<Self> {
         match c.to_ascii_lowercase() {
             'r' => Some(Self::Red),
@@ -204,30 +197,6 @@ impl Display for IncompleteCodeError {
 }
 impl Error for IncompleteCodeError {}
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum CodeFromStrError {
-    TooFew,
-    TooMany,
-    UnknownColour,
-}
-impl Display for CodeFromStrError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::TooFew => write!(f, "not enough colours given, expected {CODE_LEN}"),
-            Self::TooMany => write!(f, "too many colours given, expected {CODE_LEN}"),
-            Self::UnknownColour => write!(
-                f,
-                "unrecognized colour given, valid colours are {}",
-                Peg::iterator()
-                    .map(Peg::as_word)
-                    .collect::<Vec<&'static str>>()
-                    .join(", ")
-            ),
-        }
-    }
-}
-impl Error for CodeFromStrError {}
-
 /// A given code. A sequence of [`Peg`]s.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Code([Peg; CODE_LEN]);
@@ -255,48 +224,8 @@ impl Code {
             .collect::<Vec<String>>()
             .join(" ")
     }
-
-    fn try_from_str(s: &str) -> Result<Self, CodeFromStrError> {
-        let mut contents = [Peg::Red; CODE_LEN];
-
-        if s.len() == CODE_LEN {
-            // Interpret as a string of single-letter colour codes
-            for (i, c) in s.chars().enumerate() {
-                if let Some(pin) = Peg::try_from_char(c) {
-                    // OK to index- `s` and `contents` are both pinned to `CODE_LEN`.
-                    contents[i] = pin;
-                } else {
-                    return Err(CodeFromStrError::UnknownColour);
-                }
-            }
-            // `CODE_LEN` valid colours have been parsed from the string. Return.
-            return Ok(Self(contents));
-        }
-
-        // Interpret as whitespace-separated colours
-        let str_list = s.split_whitespace().collect::<Vec<_>>();
-
-        if str_list.len() < CODE_LEN {
-            return Err(CodeFromStrError::TooFew);
-        }
-
-        if str_list.len() > CODE_LEN {
-            return Err(CodeFromStrError::TooMany);
-        }
-
-        // List is valid length.
-        for (i, elem) in str_list.iter().enumerate() {
-            if let Some(pin) = Peg::try_from_str(elem) {
-                // OK to index- we've already confirmed `str_list` is length `CODE_LEN`.
-                contents[i] = pin;
-            } else {
-                return Err(CodeFromStrError::UnknownColour);
-            }
-        }
-
-        Ok(Self(contents))
-    }
 }
+
 impl TryFrom<InProgressCode> for Code {
     type Error = IncompleteCodeError;
 
@@ -504,19 +433,6 @@ impl GameState {
         }
     }
 
-    fn current_guess_number(&self) -> usize {
-        let mut guess_num = 0;
-        let mut guesses_iter = self.guesses.iter();
-        while let Some(Some(_)) = guesses_iter.next() {
-            guess_num += 1;
-        }
-        guess_num
-    }
-
-    fn remaining_guesses(&self) -> usize {
-        NUM_GUESSES - self.current_guess_number()
-    }
-
     // Returns `None` if no more guesses are left.
     fn next_guess_index(&self) -> Option<usize> {
         let mut index = 0;
@@ -546,15 +462,25 @@ impl GameState {
     }
 
     fn render(&self) {
+        // Move to start of game area
+        print!("\u{001b}[{GAME_START_LINE};1H");
         for maybe_guess in self.guesses.iter().rev() {
             if let Some(guess) = maybe_guess {
-                println!("{}", guess.as_string(self.in_colour));
+                println!("{}{}", CLEAR_LINE, guess.as_string(self.in_colour));
             } else {
-                println!("{}", Guess::empty_guess_string(self.in_colour));
+                println!(
+                    "{}{}",
+                    CLEAR_LINE,
+                    Guess::empty_guess_string(self.in_colour)
+                );
             }
         }
-        println!("---------------------");
-        println!("{}", self.current_guess.as_string(self.in_colour));
+        println!("{}---------------------", CLEAR_LINE);
+        println!(
+            "{}{}",
+            CLEAR_LINE,
+            self.current_guess.as_string(self.in_colour)
+        );
     }
 }
 
@@ -617,43 +543,6 @@ fn render_upper_status(in_colour: bool) {
     println!("=====================");
 }
 
-fn read_guess() -> Result<Code, Errno> {
-    // Keep trying to read a line until the user inputs something correct
-    loop {
-        print!("Please input your guess: ");
-        let input = read_line()?;
-        match Code::try_from_str(&input) {
-            Ok(guess) => {
-                return Ok(guess);
-            }
-            Err(e) => {
-                eprintln!("{e}");
-                eprintln!(
-                    "Expected input: Either a list of colours (e.g. \"red green yellow blue purple\") or a length-{CODE_LEN} string of single-letter colours (e.g. \"rgybp\")."
-                );
-            }
-        }
-    }
-}
-
-fn response(game_state: &GameState, guess: Code) {
-    print!(
-        "Guess {} ({} remaining): ",
-        game_state.current_guess_number() + 1,
-        game_state.remaining_guesses() - 1,
-    );
-    // println!(
-    //     "{} | {}",
-    //     Peg::list_string(&guess.0, game_state.in_colour),
-    //     Hint::list_string(&game_state.get_feedback(guess).0, game_state.in_colour)
-    // );
-}
-
-fn read_line() -> Result<String, Errno> {
-    let console = Console::open()?;
-    Ok(String::from_utf8_lossy(&console.read_line(64)?).into_owned())
-}
-
 fn set_read_timeouts(min_bytes_read: u8, max_time_passed: u8) -> Result<(), Errno> {
     STDIN.lock().set_control_character(
         SetTermAttrsCmd::Tcsetsf,
@@ -697,8 +586,20 @@ fn enter_raw_mode() -> Result<(), Errno> {
     Ok(())
 }
 
+fn terminal_setup() -> Result<(), Errno> {
+    print!("{ENTER_ALT_SCREEN}{HIDE_CURSOR}");
+    enter_raw_mode()?;
+    set_read_timeouts(READ_MIN_BYTES_READ, READ_MAX_TIME_PASSED)?;
+    clear_screen();
+    Ok(())
+}
+
 fn restore_terminal(termios: &Termios) -> Result<(), Errno> {
-    STDIN.lock().set_termios(SetTermAttrsCmd::Tcsetsf, termios)
+    STDIN
+        .lock()
+        .set_termios(SetTermAttrsCmd::Tcsetsf, termios)?;
+    print!("{LEAVE_ALT_SCREEN}{SHOW_CURSOR}");
+    Ok(())
 }
 
 fn clear_screen() {
@@ -706,8 +607,6 @@ fn clear_screen() {
 }
 
 fn refresh_screen(game_state: &GameState) {
-    clear_screen();
-    render_upper_status(game_state.in_colour);
     game_state.render();
 }
 
@@ -734,12 +633,10 @@ fn poll_input() -> Result<u8, Errno> {
 
 fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
     let orig_termios = try_exit!(STDIN.lock().termios());
-
-    try_exit!(enter_raw_mode());
-    try_exit!(set_read_timeouts(READ_MIN_BYTES_READ, READ_MAX_TIME_PASSED));
-    clear_screen();
+    try_exit!(terminal_setup());
 
     let mut game_state = GameState::new(true);
+    render_upper_status(game_state.in_colour);
 
     loop {
         refresh_screen(&game_state);
@@ -762,33 +659,6 @@ fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
             }
         }
     }
-
-    // loop {
-    //     refresh_screen(&game_state);
-    // }
-
-    // while game_state.remaining_guesses() > 0 {
-    //     let guess = try_exit!(read_guess());
-    //     response(&game_state, guess);
-    //
-    //     // Check if win
-    //     if guess == game_state.actual_code {
-    //         println!(
-    //             "You cracked the code in {} guess(es)!",
-    //             game_state.current_guess_number()
-    //         );
-    //         return ExitStatus::ExitSuccess;
-    //     }
-    //
-    //     game_state.guesses[game_state.current_guess_number()] = Some(guess);
-    // }
-
-    // Out of guesses. Lost.
-    // println!("You ran out of guesses :(");
-    // println!(
-    //     "Actual code: {}",
-    //     Peg::list_string(&game_state.actual_code.0, game_state.in_colour)
-    // );
 
     try_exit!(restore_terminal(&orig_termios));
     ExitStatus::ExitSuccess
@@ -870,94 +740,4 @@ mod tests {
         assert_eq!(ipc.pop_peg(), None);
         assert_eq!(ipc.0, expected);
     }
-
-    // #[test_case]
-    // fn gs_guess_num_remaining() {
-    //     let mut gs = GameState::new(true);
-    //     for i in 0..NUM_GUESSES {
-    //         assert_eq!(gs.current_guess_number(), i);
-    //         assert_eq!(gs.remaining_guesses(), NUM_GUESSES - i);
-    //         gs.guesses[i] = Some(Code([Peg::Red; CODE_LEN]));
-    //         assert_eq!(gs.current_guess_number(), i + 1);
-    //     }
-    //     assert_eq!(gs.remaining_guesses(), 0);
-    //     assert_eq!(gs.current_guess_number(), NUM_GUESSES);
-    // }
-    //
-    // #[test_case]
-    // fn code_from_valid_list() {
-    //     assert_eq!(
-    //         Code::try_from_str("RED bluE a green W"),
-    //         Ok(Code([
-    //             Peg::Red,
-    //             Peg::Blue,
-    //             Peg::Aqua,
-    //             Peg::Green,
-    //             Peg::White
-    //         ])),
-    //     );
-    // }
-    //
-    // #[test_case]
-    // fn code_from_valid_single_chars() {
-    //     assert_eq!(
-    //         Code::try_from_str("wpyyg"),
-    //         Ok(Code([
-    //             Peg::White,
-    //             Peg::Purple,
-    //             Peg::Yellow,
-    //             Peg::Yellow,
-    //             Peg::Green,
-    //         ]))
-    //     );
-    // }
-    //
-    // #[test_case]
-    // fn code_from_other_whitespace_list() {
-    //     assert_eq!(
-    //         Code::try_from_str("r\tblue\t\tgreen YELLOW     aqua"),
-    //         Ok(Code([
-    //             Peg::Red,
-    //             Peg::Blue,
-    //             Peg::Green,
-    //             Peg::Yellow,
-    //             Peg::Aqua,
-    //         ]))
-    //     );
-    // }
-    //
-    // #[test_case]
-    // fn code_from_too_short_list() {
-    //     assert_eq!(
-    //         Code::try_from_str("red blue green yellow"),
-    //         Err(CodeFromStrError::TooFew),
-    //     );
-    // }
-    //
-    // #[test_case]
-    // fn code_from_too_long_list() {
-    //     assert_eq!(
-    //         Code::try_from_str("aqua white purple blue yellow green"),
-    //         Err(CodeFromStrError::TooMany),
-    //     );
-    // }
-    //
-    // #[test_case]
-    // fn code_from_incorrect_str_len() {
-    //     assert_eq!(Code::try_from_str("rgybpa"), Err(CodeFromStrError::TooFew),);
-    // }
-    //
-    // #[test_case]
-    // fn code_from_list_with_commas() {
-    //     assert_eq!(
-    //         Code::try_from_str("aqua, GREEN, w, b, p"),
-    //         Ok(Code([
-    //             Peg::Aqua,
-    //             Peg::Green,
-    //             Peg::White,
-    //             Peg::Blue,
-    //             Peg::Purple
-    //         ]))
-    //     );
-    // }
 }
