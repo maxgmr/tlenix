@@ -9,7 +9,7 @@
 )]
 #![no_std]
 #![no_main]
-#![feature(custom_test_frameworks)]
+#![feature(custom_test_frameworks, variant_count)]
 #![cfg_attr(test, test_runner(tlenix_core::custom_test_runner))]
 #![cfg_attr(test, reexport_test_harness_main = "test_main")]
 
@@ -20,12 +20,13 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use core::{error::Error, panic::PanicInfo, write};
+use core::{error::Error, mem::variant_count, panic::PanicInfo, write};
 
 use lazy_static::lazy_static;
 use tlenix_core::{
     EnvVar, Errno, eprintln, format, parse_argv_envp, print, println,
     process::{self, ExitStatus},
+    rand,
     streams::STDIN,
     term::{
         ControlCharIndex, ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags,
@@ -73,6 +74,10 @@ const EXIT_CODE: u8 = ctrl_key(b'q');
 const ENTER_CODE: u8 = 0x0d;
 const BACKSP_CODE: u8 = 0x7f;
 
+/// Highest multiple of number of colours under 0xff
+const RAND_COLOUR_LIMIT: usize =
+    variant_count::<Peg>() * ((u8::MAX as usize) / variant_count::<Peg>());
+
 const fn ctrl_key(byte: u8) -> u8 {
     byte & 0x1f
 }
@@ -112,6 +117,18 @@ enum Peg {
     White,
 }
 impl Peg {
+    fn random() -> Self {
+        loop {
+            let rand_val = rand::get_random_byte(rand::GetRandomFlags::default()).unwrap() as usize;
+            // Avoid modulo bias via rejection resampling
+            if (rand_val) < RAND_COLOUR_LIMIT {
+                let colour_list = Self::iterator().collect::<Vec<Peg>>();
+                // OK to index here- we are moduloing by the number of enum variants
+                return colour_list[rand_val % variant_count::<Peg>()];
+            }
+        }
+    }
+
     fn try_from_char(c: char) -> Option<Self> {
         match c.to_ascii_lowercase() {
             'r' => Some(Self::Red),
@@ -201,6 +218,24 @@ impl Error for IncompleteCodeError {}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Code([Peg; CODE_LEN]);
 impl Code {
+    fn random() -> Self {
+        let mut contents = [Peg::Red; CODE_LEN];
+        let mut chosen_pegs = Vec::with_capacity(CODE_LEN);
+        for peg in &mut contents {
+            // Must resample until unique colour is generated.
+            'resample_rand_peg: loop {
+                let rand_peg = Peg::random();
+                if !chosen_pegs.contains(&rand_peg) {
+                    chosen_pegs.push(rand_peg);
+                    *peg = rand_peg;
+                    break 'resample_rand_peg;
+                }
+            }
+        }
+
+        Self(contents)
+    }
+
     fn as_string(self, in_colour: bool) -> String {
         if in_colour {
             self.as_string_colour()
@@ -424,9 +459,8 @@ struct GameState {
 }
 impl GameState {
     fn new(in_colour: bool) -> Self {
-        // TODO generate random code
         Self {
-            actual_code: Code([Peg::Red, Peg::Green, Peg::Yellow, Peg::Blue, Peg::Purple]),
+            actual_code: Code::random(),
             guesses: [None; NUM_GUESSES],
             in_colour,
             current_guess: InProgressCode::new(),
@@ -459,6 +493,16 @@ impl GameState {
         self.guesses[index] = Some(Guess::create(self, code));
 
         self.current_guess = InProgressCode::new();
+    }
+
+    fn is_won(&self) -> bool {
+        self.guesses
+            .iter()
+            .any(|maybe_guess| maybe_guess.map(|guess| guess.code) == Some(self.actual_code))
+    }
+
+    fn is_lost(&self) -> bool {
+        !self.is_won() && !self.guesses.iter().any(&Option::<Guess>::is_none)
     }
 
     fn render(&self) {
@@ -638,11 +682,40 @@ fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
     let mut game_state = GameState::new(true);
     render_upper_status(game_state.in_colour);
 
-    loop {
+    'game: loop {
+        // Redraw game
         refresh_screen(&game_state);
-        let input_byte = try_exit!(poll_input());
 
-        match input_byte {
+        // Check if game has been won or lost
+        if game_state.is_won() {
+            println!(
+                "\nCONGRATULATIONS! You guessed the code in {} guess(es)!",
+                game_state.next_guess_index().unwrap_or(NUM_GUESSES)
+            );
+        } else if game_state.is_lost() {
+            println!("\nSadly, you failed to guess the code...");
+            println!(
+                "The code was {}",
+                game_state.actual_code.as_string(game_state.in_colour)
+            );
+        }
+
+        if game_state.is_won() || game_state.is_lost() {
+            println!("Type <Enter> to exit...");
+
+            // Wait for user to exit
+            loop {
+                match try_exit!(poll_input()) {
+                    ENTER_CODE | EXIT_CODE => {
+                        break 'game;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // Handle input
+        match try_exit!(poll_input()) {
             EXIT_CODE => {
                 break;
             }
