@@ -35,13 +35,13 @@ use tlenix_core::{
     try_exit,
 };
 
-const LOGO: &str = r"    __   ___   ___      ___  ____   ____     ___   ____  __  _    ___  ____  
-   /  ] /   \ |   \    /  _]|    \ |    \   /  _] /    ||  |/ ]  /  _]|    \ 
-  /  / |     ||    \  /  [_ |  o  )|  D  ) /  [_ |  o  ||  ' /  /  [_ |  D  )
- /  /  |  O  ||  D  ||    _]|     ||    / |    _]|     ||    \ |    _]|    / 
-/   \_ |     ||     ||   [_ |  O  ||    \ |   [_ |  _  ||     \|   [_ |    \ 
-\     ||     ||     ||     ||     ||  .  \|     ||  |  ||  .  ||     ||  .  \
- \____| \___/ |_____||_____||_____||__|\_||_____||__|__||__|\_||_____||__|\_|";
+const LOGO: &str = r" _______  _______  ______   _______  _______  ______    _______  _______  ___   _  _______  ______   
+|       ||       ||      | |       ||  _    ||    _ |  |       ||   _   ||   | | ||       ||    _ |  
+|       ||   _   ||  _    ||    ___|| |_|   ||   | ||  |    ___||  |_|  ||   |_| ||    ___||   | ||  
+|       ||  | |  || | |   ||   |___ |       ||   |_||_ |   |___ |       ||      _||   |___ |   |_||_ 
+|      _||  |_|  || |_|   ||    ___||  _   | |    __  ||    ___||       ||     |_ |    ___||    __  |
+|     |_ |       ||       ||   |___ | |_|   ||   |  | ||   |___ |   _   ||    _  ||   |___ |   |  | |
+|_______||_______||______| |_______||_______||___|  |_||_______||__| |__||___| |_||_______||___|  |_|";
 
 const HEADER_LINES: usize = 16;
 const GAME_START_LINE: usize = HEADER_LINES + 1;
@@ -71,8 +71,10 @@ const READ_MAX_TIME_PASSED: u8 = 1;
 
 // CONTROLS
 const EXIT_CODE: u8 = ctrl_key(b'q');
+const RESTART_CODE: u8 = ctrl_key(b'r');
 const ENTER_CODE: u8 = 0x0d;
 const BACKSP_CODE: u8 = 0x7f;
+const ESC_CODE: u8 = 0x1b;
 
 /// Highest multiple of number of colours under 0xff
 const RAND_COLOUR_LIMIT: usize =
@@ -569,7 +571,7 @@ fn render_upper_status(in_colour: bool) {
     );
     println!("Type the first letter of a colour to place a peg.");
     println!("Press <Backspace> to undo. Press <Enter> to confirm your complete guess.");
-    println!("Press <Ctrl+Q> to quit.");
+    println!("Press <Ctrl+R> to restart, or <Ctrl+Q> to quit.");
     println!(
         "'{}' means a peg is the correct colour and correct position.",
         Hint::RightPlace.as_string(in_colour)
@@ -679,55 +681,62 @@ fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
     let orig_termios = try_exit!(STDIN.lock().termios());
     try_exit!(terminal_setup());
 
-    let mut game_state = GameState::new(true);
-    render_upper_status(game_state.in_colour);
-
     'game: loop {
-        // Redraw game
-        refresh_screen(&game_state);
+        clear_screen();
+        let mut game_state = GameState::new(true);
+        render_upper_status(game_state.in_colour);
 
-        // Check if game has been won or lost
-        if game_state.is_won() {
-            println!(
-                "\nCONGRATULATIONS! You guessed the code in {} guess(es)!",
-                game_state.next_guess_index().unwrap_or(NUM_GUESSES)
-            );
-        } else if game_state.is_lost() {
-            println!("\nSadly, you failed to guess the code...");
-            println!(
-                "The code was {}",
-                game_state.actual_code.as_string(game_state.in_colour)
-            );
-        }
+        loop {
+            // Redraw game
+            refresh_screen(&game_state);
 
-        if game_state.is_won() || game_state.is_lost() {
-            println!("Type <Enter> to exit...");
+            // Check if game has been won or lost
+            if game_state.is_won() {
+                println!(
+                    "\nCONGRATULATIONS! You guessed the code in {} guess(es)!",
+                    game_state.next_guess_index().unwrap_or(NUM_GUESSES)
+                );
+            } else if game_state.is_lost() {
+                println!("\nSadly, you failed to guess the code...");
+                println!(
+                    "The code was {}",
+                    game_state.actual_code.as_string(game_state.in_colour)
+                );
+            }
 
-            // Wait for user to exit
-            loop {
-                match try_exit!(poll_input()) {
-                    ENTER_CODE | EXIT_CODE => {
-                        break 'game;
+            if game_state.is_won() || game_state.is_lost() {
+                println!("Type <Esc> to exit, type <Enter> to play again...");
+                loop {
+                    match try_exit!(poll_input()) {
+                        ESC_CODE | EXIT_CODE => {
+                            break 'game;
+                        }
+                        ENTER_CODE | RESTART_CODE => {
+                            continue 'game;
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
             }
-        }
 
-        // Handle input
-        match try_exit!(poll_input()) {
-            EXIT_CODE => {
-                break;
-            }
-            ENTER_CODE => {
-                game_state.push_guess();
-            }
-            BACKSP_CODE => {
-                game_state.current_guess.pop_peg();
-            }
-            byte => {
-                if let Some(peg) = Peg::try_from_char(byte as char) {
-                    game_state.current_guess.push_peg(peg);
+            // Handle input
+            match try_exit!(poll_input()) {
+                EXIT_CODE => {
+                    break 'game;
+                }
+                ENTER_CODE => {
+                    game_state.push_guess();
+                }
+                RESTART_CODE => {
+                    continue 'game;
+                }
+                BACKSP_CODE => {
+                    game_state.current_guess.pop_peg();
+                }
+                byte => {
+                    if let Some(peg) = Peg::try_from_char(byte as char) {
+                        game_state.current_guess.push_peg(peg);
+                    }
                 }
             }
         }
