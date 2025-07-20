@@ -207,3 +207,17 @@ fn fork() -> Result<usize, Errno> {
     // SAFETY: This syscall has no arguments, and errors are handled gracefully.
     unsafe { syscall_result!(SyscallNum::Fork) }
 }
+
+/// Creates a session and sets the process group ID. Wrapper around the
+/// [`setsid`](https://man7.org/linux/man-pages/man2/setsid.2.html) Linux system call. On success,
+/// the new session ID of the calling process is returned.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s incurred by the underlying call to `setsid`. In
+/// particular, [`Errno::Eperm`] is returned if the calling process if already a process group
+/// leader.
+pub fn setsid() -> Result<usize, Errno> {
+    // SAFETY: This syscall has no arguments, and errors are handled gracefully.
+    unsafe { syscall_result!(SyscallNum::Setsid) }
+}
