@@ -2,7 +2,7 @@
 //! input, standard output, and standard error.
 
 use alloc::{string::String, vec::Vec};
-use core::marker::PhantomData;
+use core::{marker::PhantomData, time::Duration};
 
 use spin::Mutex;
 
@@ -13,7 +13,15 @@ use crate::{
         ControlCharIndex, ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags,
         SetTermAttrsCmd, Termios, WinSize, get_term_attrs, get_term_size, set_term_attrs,
     },
+    thread,
 };
+
+/// Byte representing a backspace.
+const BACKSPACE_BYTE: u8 = 8;
+/// Byte representing a newline.
+const NEWLINE_BYTE: u8 = b'\n';
+/// Byte representing a backslash.
+const BACKSLASH_BYTE: u8 = b'\\';
 
 /// File descriptor of the standard input stream.
 const STDIN_FILENO: usize = 0;
@@ -121,6 +129,69 @@ impl Stream<Input> {
     /// This function propagates any [`Errno`]s returned from [`File::read`].
     pub fn read(&self, buffer: &mut [u8]) -> Result<usize, Errno> {
         self.file.read(buffer)
+    }
+
+    /// Loops until a single byte is read from the stream.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any [`Errno`]s incurred by the underlying calls to
+    /// [`File::read_byte`] and [`thread::sleep`].
+    pub fn await_read_byte(&mut self) -> Result<u8, Errno> {
+        let sleep_duration = Duration::from_nanos(thread::PIT_IRQ_PERIOD);
+
+        loop {
+            match self.file.read_byte() {
+                // Nothing read; sleep then try again
+                Ok(None) | Err(Errno::Eagain) => thread::sleep(&sleep_duration)?,
+                // Propagate non-retryable errors
+                Err(e) => return Err(e),
+                // Got a byte! Return it.
+                Ok(Some(b)) => return Ok(b),
+            }
+        }
+    }
+
+    /// Reads a line from the stream (up to a maximum size).
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any [`Errno`]s incurred by the underlying calls to
+    /// [`Self::await_read_byte`].
+    pub fn read_line(&mut self, max: usize) -> Result<Vec<u8>, Errno> {
+        let mut result = Vec::new();
+
+        let mut last_was_backslash = false;
+
+        while result.len() < max {
+            match self.await_read_byte()? {
+                NEWLINE_BYTE => {
+                    if last_was_backslash {
+                        // Escaped newline
+                        result.push(NEWLINE_BYTE);
+                    } else {
+                        // Newline; return right away
+                        return Ok(result);
+                    }
+                }
+                BACKSLASH_BYTE => {
+                    if last_was_backslash {
+                        // Escaped backslash
+                        result.push(BACKSLASH_BYTE);
+                    } else {
+                        // Escape the next byte
+                        last_was_backslash = true;
+                        continue;
+                    }
+                }
+                BACKSPACE_BYTE => {
+                    result.pop();
+                }
+                new_byte => result.push(new_byte),
+            }
+            last_was_backslash = false;
+        }
+        Ok(result)
     }
 
     /// Reads the entire stream, up to EOF, into a [`Vec<u8>`].

@@ -24,7 +24,6 @@ extern crate alloc;
 
 mod allocator;
 mod args;
-mod console;
 pub mod fs;
 pub mod ipc;
 mod nix_bytes;
@@ -44,7 +43,6 @@ pub(crate) mod test_utils;
 
 // RE-EXPORTS
 pub use args::{EnvVar, parse_argv_envp};
-pub use console::Console;
 pub use nix_bytes::NixBytes;
 pub use nix_str::NixString;
 pub use print::{__format, __print_err, __print_str};
