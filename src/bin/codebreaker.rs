@@ -645,6 +645,7 @@ fn restore_terminal(termios: &Termios) -> Result<(), Errno> {
         .lock()
         .set_termios(SetTermAttrsCmd::Tcsetsf, termios)?;
     print!("{SHOW_CURSOR}{LEAVE_ALT_SCREEN}");
+    clear_screen();
     Ok(())
 }
 
