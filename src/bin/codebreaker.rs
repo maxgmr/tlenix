@@ -24,9 +24,9 @@ use core::{error::Error, mem::variant_count, panic::PanicInfo, write};
 
 use lazy_static::lazy_static;
 use tlenix_core::{
-    EnvVar, Errno, eprintln, format, parse_argv_envp, print, println,
+    EnvVar, Errno, eprintln, format, parse_argv_envp, print,
     process::{self, ExitStatus},
-    rand,
+    rand, raw_println,
     streams::STDIN,
     term::{
         ControlCharIndex, ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags,
@@ -512,17 +512,17 @@ impl GameState {
         print!("\u{001b}[{GAME_START_LINE};1H");
         for maybe_guess in self.guesses.iter().rev() {
             if let Some(guess) = maybe_guess {
-                println!("{}{}", CLEAR_LINE, guess.as_string(self.in_colour));
+                raw_println!("{}{}", CLEAR_LINE, guess.as_string(self.in_colour));
             } else {
-                println!(
+                raw_println!(
                     "{}{}",
                     CLEAR_LINE,
                     Guess::empty_guess_string(self.in_colour)
                 );
             }
         }
-        println!("{}---------------------", CLEAR_LINE);
-        println!(
+        raw_println!("{}---------------------", CLEAR_LINE);
+        raw_println!(
             "{}{}",
             CLEAR_LINE,
             self.current_guess.as_string(self.in_colour)
@@ -530,9 +530,7 @@ impl GameState {
     }
 }
 
-/// Minimal Tlenix program. Says hello.
-///
-/// Intended to be used as a blueprint/reference for other Tlenix programs.
+/// Guessing game.
 ///
 /// # Safety
 ///
@@ -564,19 +562,19 @@ unsafe extern "C" fn start(stack_top: *const usize) -> ! {
 }
 
 fn render_upper_status(in_colour: bool) {
-    println!("{LOGO}");
-    println!();
-    println!(
+    raw_println!("{LOGO}");
+    raw_println!();
+    raw_println!(
         "Guess the secret pattern of {CODE_LEN} unique colours in {NUM_GUESSES} guesses or less."
     );
-    println!("Type the first letter of a colour to place a peg.");
-    println!("Press <Backspace> to undo. Press <Enter> to confirm your complete guess.");
-    println!("Press <Ctrl+R> to restart, or <Ctrl+Q> to quit.");
-    println!(
+    raw_println!("Type the first letter of a colour to place a peg.");
+    raw_println!("Press <Backspace> to undo. Press <Enter> to confirm your complete guess.");
+    raw_println!("Press <Ctrl+R> to restart, or <Ctrl+Q> to quit.");
+    raw_println!(
         "'{}' means a peg is the correct colour and correct position.",
         Hint::RightPlace.as_string(in_colour)
     );
-    println!(
+    raw_println!(
         "'{}' means a peg is the correct colour, but in the incorrect position.",
         Hint::RightColour.as_string(in_colour)
     );
@@ -585,8 +583,8 @@ fn render_upper_status(in_colour: bool) {
     } else {
         &*COLOURS_LIST_MONO
     };
-    println!("Possible colours: {colours_list}");
-    println!("=====================");
+    raw_println!("Possible colours: {colours_list}");
+    raw_println!("=====================");
 }
 
 fn set_read_timeouts(min_bytes_read: u8, max_time_passed: u8) -> Result<(), Errno> {
@@ -692,20 +690,20 @@ fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
 
             // Check if game has been won or lost
             if game_state.is_won() {
-                println!(
+                raw_println!(
                     "\nCONGRATULATIONS! You guessed the code in {} guess(es)!",
                     game_state.next_guess_index().unwrap_or(NUM_GUESSES)
                 );
             } else if game_state.is_lost() {
-                println!("\nSadly, you failed to guess the code...");
-                println!(
+                raw_println!("\nSadly, you failed to guess the code...");
+                raw_println!(
                     "The code was {}",
                     game_state.actual_code.as_string(game_state.in_colour)
                 );
             }
 
             if game_state.is_won() || game_state.is_lost() {
-                println!("Type <Esc> to exit, type <Enter> to play again...");
+                raw_println!("Type <Esc> to exit, type <Enter> to play again...");
                 loop {
                     match try_exit!(poll_input()) {
                         ESC_CODE | EXIT_CODE => {
