@@ -19,12 +19,13 @@ use alloc::string::String;
 use core::panic::PanicInfo;
 
 use tlenix_core::{
-    EnvVar, Errno, eprintln, parse_argv_envp, print, println,
+    EnvVar, Errno, eprintln, parse_argv_envp, print,
     process::{self, ExitStatus},
+    raw_println,
     streams::STDIN,
     term::{
         ControlCharIndex, ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags,
-        SetTermAttrsCmd, Termios,
+        SetTermAttrsCmd, Termios, WinSize,
     },
     try_exit,
 };
@@ -56,8 +57,25 @@ const fn ctrl_key(byte: u8) -> u8 {
 }
 
 /// The current configuration of the editor.
+#[derive(Debug, Clone)]
 struct Config {
     orig_termios: Termios,
+    win_size: WinSize,
+}
+impl Config {
+    fn try_new() -> Result<Self, Errno> {
+        let orig_termios = STDIN.lock().termios()?;
+        let try_win_size = STDIN.lock().win_size()?;
+        let win_size = if try_win_size.rows != 0 && try_win_size.cols != 0 {
+            try_win_size
+        } else {
+            WinSize::default()
+        };
+        Ok(Self {
+            orig_termios,
+            win_size,
+        })
+    }
 }
 
 /// A simple text editor.
@@ -152,18 +170,17 @@ fn restore_terminal(termios: &Termios) -> Result<(), Errno> {
 }
 
 /// Renders the rows of the interface onto the terminal.
-fn render_rows() {
-    // TODO get actual terminal height
-    for _ in 0..24 {
-        println!("~");
+fn render_rows(config: &Config) {
+    for _ in 0..config.win_size.rows {
+        raw_println!("~");
     }
     print!("{CURSOR_TOP_LEFT}");
 }
 
 /// Refreshes the screen, displaying the intended content.
-fn refresh_screen() {
+fn refresh_screen(config: &Config) {
     clear_screen();
-    render_rows();
+    render_rows(config);
 }
 
 /// Reads a single keypress from `stdin`.
@@ -211,14 +228,13 @@ fn handle_input() -> Result<bool, Errno> {
 }
 
 fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
-    let orig_termios = try_exit!(STDIN.lock().termios());
-    let mut config = Config { orig_termios };
+    let config = try_exit!(Config::try_new());
     try_exit!(enter_raw_mode());
     try_exit!(set_read_timeouts(READ_MIN_BYTES_READ, READ_MAX_TIME_PASSED));
     clear_screen();
 
     loop {
-        refresh_screen();
+        refresh_screen(&config);
         if try_exit!(handle_input()) {
             break;
         }
