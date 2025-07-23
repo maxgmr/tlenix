@@ -11,4 +11,4 @@ pub(crate) use ioctl::{get_term_attrs, get_term_size, set_controlling_term, set_
 pub use termios::{
     ControlCharIndex, ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags, Termios,
 };
-pub use winsize::WinSize;
+pub use winsize::{DEFAULT_COLS, DEFAULT_ROWS, WinSize};
