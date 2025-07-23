@@ -58,8 +58,6 @@ pub extern "C" fn _start() -> ! {
     #[allow(clippy::no_effect)]
     ();
 
-    welcome_msg();
-
     #[cfg(not(debug_assertions))]
     {
         use tlenix_core::fs;
@@ -84,6 +82,8 @@ pub extern "C" fn _start() -> ! {
             panic!("Failed to mount /sys: {}", e);
         }
     }
+
+    welcome_msg();
 
     // Launch shell with no args
     loop {
