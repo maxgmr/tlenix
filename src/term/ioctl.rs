@@ -13,6 +13,7 @@ use crate::{
 const TCGETS: u64 = 0x0000_5401;
 // const TCGETS2: u64 = 0x802c_542a;
 const TIOCGWINSZ: u64 = 0x0000_5413;
+const TIOCSCTTY: u64 = 0x0000_540e;
 
 /// The different commands for setting terminal attributes.
 #[repr(u64)]
@@ -122,7 +123,7 @@ pub(crate) fn set_term_attrs(
     Ok(())
 }
 
-/// Get the size of the terminal pointed to by the given [`FileDescriptor`].
+/// Gets the size of the terminal pointed to by the given [`FileDescriptor`].
 ///
 /// # Errors
 ///
@@ -144,4 +145,21 @@ pub(crate) fn get_term_size(file_descriptor: FileDescriptor) -> Result<WinSize, 
     }
 
     Ok(win_size_raw.into())
+}
+
+/// Sets the terminal pointed to by the given [`FileDescriptor`] as the controlling terminal.
+///
+/// Fails if anything other than the session leader calls this function.
+///
+/// Internally uses the
+/// [`TIOCSCTTY`](https://www.man7.org/linux/man-pages/man2/TIOCNOTTY.2const.html) command of the
+/// [`ioctl`](https://man7.org/linux/man-pages/man2/ioctl.2.html) Linux system call.
+///
+/// # Errors
+///
+/// This function propagates any [`Errno`]s incurred by the call to `ioctl`.
+pub(crate) fn set_controlling_term(file_descriptor: FileDescriptor) -> Result<(), Errno> {
+    // SAFETY: The number and type of the parameters matches the syscall definition. The use of
+    // `TIOCSCTTY` ensures that *only* this command is possible.
+    unsafe { syscall_result!(SyscallNum::Ioctl, file_descriptor, TIOCSCTTY, 0).map(|_| ()) }
 }

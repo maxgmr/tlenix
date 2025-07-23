@@ -81,6 +81,12 @@ pub extern "C" fn _start() -> ! {
         ) {
             panic!("Failed to mount /sys: {}", e);
         }
+
+        #[cfg(not(qemu))]
+        tlenix_core::streams::STDIN
+            .lock()
+            .make_controlling_terminal()
+            .unwrap();
     }
 
     welcome_msg();

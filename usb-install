@@ -49,11 +49,13 @@ sudo mkdir -p "${ROOTFS_DIR}"/{bin,dev,etc,home,lib,proc,root,sbin,sys,usr,var}
 sudo rm -f "${ROOTFS_DIR}/dev/console" \
     "${ROOTFS_DIR}/dev/null" \
     "${ROOTFS_DIR}/dev/random" \
-    "${ROOTFS_DIR}/dev/urandom"
+    "${ROOTFS_DIR}/dev/urandom" \
+    "${ROOTFS_DIR}/dev/tty1"
 sudo mknod "${ROOTFS_DIR}/dev/console" c 5 1
 sudo mknod "${ROOTFS_DIR}/dev/null" c 1 3
 sudo mknod "${ROOTFS_DIR}/dev/random" c 1 8
 sudo mknod "${ROOTFS_DIR}/dev/urandom" c 1 9
+sudo mknod -m 620 "${ROOTFS_DIR}/dev/tty1" c 4 1
 
 # Copy kernel and make boot dirs
 sudo mkdir -p "${BOOT_DIR}/EFI/BOOT"

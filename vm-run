@@ -12,7 +12,7 @@ INIT_BIN="${BINARIES_DIR}/init"
 INITRAMFS_OUT="${INITRAMFS_DIR}/initramfs.cpio.gz"
 
 # Build Tlenix binaries
-cargo build --release --all
+RUSTFLAGS="--cfg qemu" cargo build --release --all
 
 # Create initramfs layout
 rm -rf "$INITRAMFS_DIR"

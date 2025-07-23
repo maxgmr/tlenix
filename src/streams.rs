@@ -9,9 +9,11 @@ use spin::Mutex;
 use crate::{
     Errno,
     fs::{File, FileDescriptor},
+    process::setsid,
     term::{
         ControlCharIndex, ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags,
-        SetTermAttrsCmd, Termios, WinSize, get_term_attrs, get_term_size, set_term_attrs,
+        SetTermAttrsCmd, Termios, WinSize, get_term_attrs, get_term_size, set_controlling_term,
+        set_term_attrs,
     },
     thread,
 };
@@ -214,6 +216,20 @@ impl Stream<Input> {
     /// This function propagates any [`Errno`]s returned from [`File::read_to_string`].
     pub fn read_to_string(&self) -> Result<String, Errno> {
         self.file.read_to_string()
+    }
+
+    /// Makes this stream the controlling terminal, becoming the session leader in the process. The
+    /// new session ID is returned.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any [`Errno`]s incurred by the underlying calls to [`setsid`]
+    pub fn make_controlling_terminal(&mut self) -> Result<usize, Errno> {
+        // Become session leader
+        let new_session_id = setsid()?;
+        // Make self the controlling terminal
+        set_controlling_term(self.file.fd_raw())?;
+        Ok(new_session_id)
     }
 
     /// Gets the state of the current terminal, in the form of
