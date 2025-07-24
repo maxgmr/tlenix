@@ -19,9 +19,8 @@ use alloc::string::String;
 use core::panic::PanicInfo;
 
 use tlenix_core::{
-    EnvVar, Errno, eprintln, parse_argv_envp, print,
+    EnvVar, Errno, eprintln, format, parse_argv_envp, print,
     process::{self, ExitStatus},
-    raw_println,
     streams::STDIN,
     term::{
         ControlCharIndex, ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags,
@@ -34,20 +33,25 @@ const PANIC_TITLE: &str = "ted";
 
 const ESC_CODE: u8 = 0x1b;
 
-/// ANSI escape code to clear the entire screen.
 const CLEAR_SCREEN: &str = "\u{001b}[2J";
-/// ANSI escape code to move the cursor to the top-left corner.
+const CLEAR_REMAINING_LINE: &str = "\u{001b}[K";
 const CURSOR_TOP_LEFT: &str = "\u{001b}[H";
-/// ANSI sequence to move the cursor to the bottom-right corner.
 const CURSOR_BOTTOM_RIGHT: &str = "\u{001b}[999C\u{001b}[999B";
-/// ANSI device status report sequence to get the cursor position.
 const GET_CURSOR_POS: &str = "\u{001b}[6n";
+const HIDE_CURSOR: &str = "\u{001b}[?25l";
+const SHOW_CURSOR: &str = "\u{001b}[?25h";
 
 const READ_MIN_BYTES_READ: u8 = 0;
 const READ_MAX_TIME_PASSED: Deciseconds = Deciseconds(1);
-const EXIT_CODE: u8 = ctrl_key(b'q');
 
 const CHECK_TERM_RESPONSE_LIMIT: usize = 64;
+
+// Controls
+const EXIT_CODE: u8 = ctrl_key(b'q');
+const CURSOR_U: u8 = b'k';
+const CURSOR_D: u8 = b'j';
+const CURSOR_L: u8 = b'h';
+const CURSOR_R: u8 = b'l';
 
 core::arch::global_asm! {
     ".global _start",
@@ -101,12 +105,59 @@ impl TryFrom<&str> for Point {
         Self::try_from_string_helper(value).ok_or("failed to parse Point from string")
     }
 }
+impl From<&Point> for String {
+    fn from(value: &Point) -> Self {
+        format!("\u{001b}[{};{}H", value.row, value.col)
+    }
+}
 
-/// The current configuration of the editor.
+/// The current state of the editor.
 #[derive(Debug, Clone)]
-struct Config {
+struct EditorState {
     orig_termios: Termios,
     win_size: WinSize,
+    render_buf: RenderBuffer,
+    cursor_pos: Point,
+}
+impl EditorState {
+    /// Refreshes the screen, rendering the current state of the editor.
+    fn refresh_screen(&mut self) {
+        let cursor_pos_string: String = (&self.cursor_pos).into();
+
+        self.render_buf.0.clear();
+
+        self.render_buf.0.push_str(HIDE_CURSOR);
+        self.render_buf.0.push_str(CURSOR_TOP_LEFT);
+        self.add_rows();
+        self.render_buf.0.push_str(&cursor_pos_string);
+        self.render_buf.0.push_str(SHOW_CURSOR);
+
+        print!("{}", self.render_buf.0);
+    }
+
+    /// Adds the interface rows to the render buffer.
+    fn add_rows(&mut self) {
+        for i in 0..self.win_size.rows {
+            self.render_buf.0.push('~');
+            self.render_buf.0.push_str(CLEAR_REMAINING_LINE);
+            if i < self.win_size.rows - 1 {
+                self.render_buf.0.push('\r');
+                self.render_buf.0.push('\n');
+            }
+        }
+    }
+}
+
+/// A [`String`] storing all content to be rendered onto the screen every frame.
+#[derive(Debug, Clone)]
+struct RenderBuffer(String);
+impl RenderBuffer {
+    fn new(win_size: &WinSize) -> Self {
+        RenderBuffer(String::with_capacity(
+            // Add a little extra capacity to account for escape codes
+            (win_size.rows * win_size.cols) + 20,
+        ))
+    }
 }
 
 /// A simple text editor.
@@ -239,25 +290,6 @@ fn restore_terminal(termios: &Termios) -> Result<(), Errno> {
     STDIN.lock().set_termios(SetTermAttrsCmd::Tcsetsf, termios)
 }
 
-/// Renders the rows of the interface onto the terminal.
-fn render_rows(config: &Config) {
-    let mut render_buf = String::with_capacity(config.win_size.rows * config.win_size.cols);
-    for i in 0..config.win_size.rows {
-        render_buf.push('~');
-        if i < config.win_size.rows - 1 {
-            render_buf.push('\r');
-            render_buf.push('\n');
-        }
-    }
-    print!("{render_buf}{CURSOR_TOP_LEFT}");
-}
-
-/// Refreshes the screen, displaying the intended content.
-fn refresh_screen(config: &Config) {
-    clear_screen();
-    render_rows(config);
-}
-
 /// Reads a single keypress from `stdin`.
 fn read_keypress() -> Result<u8, Errno> {
     let mut byte_buf = [0];
@@ -309,19 +341,23 @@ fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
     try_exit!(set_read_timeouts(READ_MIN_BYTES_READ, READ_MAX_TIME_PASSED));
     clear_screen();
 
-    let config = Config {
+    let win_size = get_win_size();
+    let render_buf = RenderBuffer::new(&win_size);
+    let mut state = EditorState {
         orig_termios,
-        win_size: get_win_size(),
+        win_size,
+        render_buf,
+        cursor_pos: Point { row: 0, col: 0 },
     };
 
     loop {
-        refresh_screen(&config);
+        state.refresh_screen();
         if try_exit!(handle_input()) {
             break;
         }
     }
 
-    try_exit!(restore_terminal(&config.orig_termios));
+    try_exit!(restore_terminal(&state.orig_termios));
     clear_screen();
     ExitStatus::ExitSuccess
 }
