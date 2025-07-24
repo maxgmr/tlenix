@@ -243,8 +243,8 @@ fn enter_raw_mode() -> Result<(), Errno> {
             | InputModeFlags::BRKINT
             | InputModeFlags::PARMRK
             | InputModeFlags::ISTRIP
-            // | InputModeFlags::INLCR
-            // | InputModeFlags::ICRNL
+            | InputModeFlags::INLCR
+            | InputModeFlags::ICRNL
             | InputModeFlags::IXON,
         false,
     )?;
