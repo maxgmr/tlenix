@@ -52,6 +52,10 @@ const CURSOR_U: u8 = b'k';
 const CURSOR_D: u8 = b'j';
 const CURSOR_L: u8 = b'h';
 const CURSOR_R: u8 = b'l';
+const CURSOR_TOP: u8 = b'g';
+const CURSOR_BOT: u8 = b'G';
+const CURSOR_START: u8 = b'^';
+const CURSOR_END: u8 = b'$';
 
 core::arch::global_asm! {
     ".global _start",
@@ -60,12 +64,24 @@ core::arch::global_asm! {
     "call start"
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct Deciseconds(u8);
-
 /// Get the byte version of "CTRL + this key".
 const fn ctrl_key(byte: u8) -> u8 {
     byte & 0x1f
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct Deciseconds(u8);
+
+/// A [`String`] storing all content to be rendered onto the screen every frame.
+#[derive(Debug, Clone)]
+struct RenderBuffer(String);
+impl RenderBuffer {
+    fn new(win_size: &WinSize) -> Self {
+        RenderBuffer(String::with_capacity(
+            // Add a little extra capacity to account for escape codes
+            (win_size.rows * win_size.cols) + 20,
+        ))
+    }
 }
 
 /// A given row-column point within the screen.
@@ -75,6 +91,26 @@ struct Point {
     col: usize,
 }
 impl Point {
+    fn row_bounded_add(&mut self, value: usize, win_size: &WinSize) {
+        self.row = Self::bounded_change_helper(self.row.saturating_add(value), win_size.rows - 1);
+    }
+
+    fn row_bounded_sub(&mut self, value: usize) {
+        self.row = self.row.saturating_sub(value);
+    }
+
+    fn col_bounded_add(&mut self, value: usize, win_size: &WinSize) {
+        self.col = Self::bounded_change_helper(self.col.saturating_add(value), win_size.cols - 1);
+    }
+
+    fn col_bounded_sub(&mut self, value: usize) {
+        self.col = self.col.saturating_sub(value);
+    }
+
+    fn bounded_change_helper(result: usize, bound: usize) -> usize {
+        if result <= bound { result } else { bound }
+    }
+
     fn try_from_string_helper(value: &str) -> Option<Self> {
         // Format: "[<row>;<col>R"
         let start = value.rfind('[')? + 1;
@@ -107,7 +143,7 @@ impl TryFrom<&str> for Point {
 }
 impl From<&Point> for String {
     fn from(value: &Point) -> Self {
-        format!("\u{001b}[{};{}H", value.row, value.col)
+        format!("\u{001b}[{};{}H", value.row + 1, value.col + 1)
     }
 }
 
@@ -118,6 +154,7 @@ struct EditorState {
     win_size: WinSize,
     render_buf: RenderBuffer,
     cursor_pos: Point,
+    should_exit: bool,
 }
 impl EditorState {
     /// Refreshes the screen, rendering the current state of the editor.
@@ -146,17 +183,45 @@ impl EditorState {
             }
         }
     }
-}
 
-/// A [`String`] storing all content to be rendered onto the screen every frame.
-#[derive(Debug, Clone)]
-struct RenderBuffer(String);
-impl RenderBuffer {
-    fn new(win_size: &WinSize) -> Self {
-        RenderBuffer(String::with_capacity(
-            // Add a little extra capacity to account for escape codes
-            (win_size.rows * win_size.cols) + 20,
-        ))
+    /// Handles user input, propagating any [`Errno`]s incurred by underlying syscalls.
+    fn handle_input(&mut self) -> Result<(), Errno> {
+        let input_byte = read_keypress()?;
+
+        match input_byte {
+            EXIT_CODE => {
+                self.should_exit = true;
+            }
+            CURSOR_U | CURSOR_D | CURSOR_L | CURSOR_R => {
+                self.move_cursor(input_byte);
+            }
+            CURSOR_TOP => {
+                self.cursor_pos.row = 0;
+            }
+            CURSOR_BOT => {
+                self.cursor_pos.row = self.win_size.rows - 1;
+            }
+            CURSOR_START => {
+                self.cursor_pos.col = 0;
+            }
+            CURSOR_END => {
+                self.cursor_pos.col = self.win_size.cols - 1;
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    /// Moves the cursor matching the given direction.
+    fn move_cursor(&mut self, input: u8) {
+        match input {
+            CURSOR_U => self.cursor_pos.row_bounded_sub(1),
+            CURSOR_D => self.cursor_pos.row_bounded_add(1, &self.win_size),
+            CURSOR_L => self.cursor_pos.col_bounded_sub(1),
+            CURSOR_R => self.cursor_pos.col_bounded_add(1, &self.win_size),
+            _ => {}
+        }
     }
 }
 
@@ -311,29 +376,6 @@ fn read_keypress() -> Result<u8, Errno> {
     }
 }
 
-/// Handles user input, propagating any [`Errno`]s from underlying syscalls. Returns a boolean
-/// value dictating whether or not the program should exit.
-fn handle_input() -> Result<bool, Errno> {
-    let input_byte = read_keypress()?;
-
-    match input_byte {
-        EXIT_CODE => {
-            // Exit.
-            return Ok(true);
-        }
-        _ => {
-            // TODO debug: print input char
-            if let Ok(utf8_char) = str::from_utf8(&[input_byte]) {
-                tlenix_core::print!("{utf8_char}");
-            } else {
-                tlenix_core::print!("{:#x}", input_byte);
-            }
-        }
-    }
-
-    Ok(false)
-}
-
 fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
     let orig_termios = try_exit!(STDIN.lock().termios());
 
@@ -348,11 +390,14 @@ fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
         win_size,
         render_buf,
         cursor_pos: Point { row: 0, col: 0 },
+        should_exit: false,
     };
 
     loop {
         state.refresh_screen();
-        if try_exit!(handle_input()) {
+        try_exit!(state.handle_input());
+
+        if state.should_exit {
             break;
         }
     }
