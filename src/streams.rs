@@ -67,7 +67,7 @@ macro_rules! impl_termios_flags_methods {
             ///
             /// This function propagates any [`Errno`]s incurred by the underlying call to
             /// [`ioctl(2)`](https://man7.org/linux/man-pages/man2/ioctl.2.html).
-            pub fn [<get_ $flags_t:snake>](&self, flag: $flags_t) -> Result<bool, Errno> {
+            pub fn [<get_ $flags_t:snake>](&mut self, flag: $flags_t) -> Result<bool, Errno> {
                 let termios = self.termios()?;
                 Ok(termios.[<$flags_t:snake>].contains(flag))
             }
@@ -129,7 +129,7 @@ impl Stream<Input> {
     /// # Errors
     ///
     /// This function propagates any [`Errno`]s returned from [`File::read`].
-    pub fn read(&self, buffer: &mut [u8]) -> Result<usize, Errno> {
+    pub fn read(&mut self, buffer: &mut [u8]) -> Result<usize, Errno> {
         self.file.read(buffer)
     }
 
@@ -203,7 +203,7 @@ impl Stream<Input> {
     /// # Errors
     ///
     /// This function propagates any [`Errno`]s returned from [`File::read_to_bytes`].
-    pub fn read_to_bytes(&self) -> Result<Vec<u8>, Errno> {
+    pub fn read_to_bytes(&mut self) -> Result<Vec<u8>, Errno> {
         self.file.read_to_bytes()
     }
 
@@ -214,7 +214,7 @@ impl Stream<Input> {
     /// # Errors
     ///
     /// This function propagates any [`Errno`]s returned from [`File::read_to_string`].
-    pub fn read_to_string(&self) -> Result<String, Errno> {
+    pub fn read_to_string(&mut self) -> Result<String, Errno> {
         self.file.read_to_string()
     }
 
@@ -239,7 +239,7 @@ impl Stream<Input> {
     ///
     /// This function propagates any [`Errno`]s returned from the underlying
     /// [`ioctl(2)`](https://man7.org/linux/man-pages/man2/ioctl.2.html) syscall.
-    pub fn termios(&self) -> Result<Termios, Errno> {
+    pub fn termios(&mut self) -> Result<Termios, Errno> {
         get_term_attrs(self.file.fd_raw())
     }
 
@@ -259,7 +259,7 @@ impl Stream<Input> {
     ///
     /// This function propagates any [`Errno`]s returned from the underlying
     /// [`ioctl(2)`](https://man7.org/linux/man-pages/man2/ioctl.2.html) syscall.
-    pub fn control_character(&self, ctrl_char: ControlCharIndex) -> Result<u8, Errno> {
+    pub fn control_character(&mut self, ctrl_char: ControlCharIndex) -> Result<u8, Errno> {
         let termios = self.termios()?;
         // OK to index here- the ControlCharIndex enum restricts the index to valid values.
         Ok(termios.control_characters[ctrl_char as usize])
@@ -289,7 +289,7 @@ impl Stream<Input> {
     ///
     /// This function propagates any [`Errno`]s returned from the underlying
     /// [`ioctl(2)`](https://man7.org/linux/man-pages/man2/ioctl.2.html) syscall.
-    pub fn win_size(&self) -> Result<WinSize, Errno> {
+    pub fn win_size(&mut self) -> Result<WinSize, Errno> {
         get_term_size(self.file.fd_raw())
     }
 
@@ -309,7 +309,7 @@ impl Stream<Output> {
     /// # Errors
     ///
     /// This function propagates any [`Errno`]s returned from [`File::write`].
-    pub fn write(&self, buffer: &[u8]) -> Result<usize, Errno> {
+    pub fn write(&mut self, buffer: &[u8]) -> Result<usize, Errno> {
         self.file.write(buffer)
     }
 }
