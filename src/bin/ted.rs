@@ -16,7 +16,7 @@
 extern crate alloc;
 
 use alloc::string::String;
-use core::panic::PanicInfo;
+use core::{panic::PanicInfo, slice};
 
 use tlenix_core::{
     EnvVar, Errno, eprintln, format, parse_argv_envp, print,
@@ -45,6 +45,8 @@ const READ_MIN_BYTES_READ: u8 = 0;
 const READ_MAX_TIME_PASSED: Deciseconds = Deciseconds(1);
 
 const CHECK_TERM_RESPONSE_LIMIT: usize = 64;
+
+const KEYPRESS_BUF_LEN: usize = 3;
 
 // Controls
 const EXIT_CODE: u8 = ctrl_key(b'q');
@@ -283,7 +285,7 @@ fn get_cursor_pos() -> Result<Point, Errno> {
     let mut stdin = STDIN.lock();
 
     for byte in &mut buf {
-        if stdin.read(core::slice::from_mut(byte))? != 1 || *byte == b'R' {
+        if stdin.read(slice::from_mut(byte))? != 1 || *byte == b'R' {
             break;
         }
     }
@@ -357,23 +359,41 @@ fn restore_terminal(termios: &Termios) -> Result<(), Errno> {
 
 /// Reads a single keypress from `stdin`.
 fn read_keypress() -> Result<u8, Errno> {
-    let mut byte_buf = [0];
+    let mut stdin = STDIN.lock();
+
     // Try to read a byte from stdin.
-    loop {
-        match STDIN.lock().read(&mut byte_buf) {
-            Ok(0) | Err(Errno::Eagain) => {
-                // Nothing was read. Try again.
-            }
-            Ok(_) => {
-                // A byte was read. Return the byte.
-                return Ok(byte_buf[0]);
-            }
-            Err(e) => {
-                // Non-retryable error. Return the error.
-                return Err(e);
-            }
-        }
+    let first_byte = stdin.await_read_byte()?;
+
+    // If it's not an escape code, return it. Otherwise, continue...
+    if first_byte != ESC_CODE {
+        return Ok(first_byte);
     }
+
+    // Byte is the beginning of an escape sequence. Continue reading.
+    let mut seq_buf = [0; KEYPRESS_BUF_LEN];
+    if stdin.read(slice::from_mut(&mut seq_buf[0]))? != 1
+        || stdin.read(slice::from_mut(&mut seq_buf[1]))? != 1
+    {
+        // Just the escape code or an incomplete escape sequence was sent. Return.
+        return Ok(first_byte);
+    }
+
+    stdin.read(slice::from_mut(&mut seq_buf[2]))?;
+
+    // If the char after the escape code _isn't_ `[`, then this isn't an ANSI escape sequence.
+    // Return the escape code itself.
+    if seq_buf.first() != Some(&b'[') {
+        return Ok(first_byte);
+    }
+
+    Ok(match (seq_buf.get(1), seq_buf.get(2)) {
+        // Bind arrow keys to cursor movements
+        (Some(b'A'), _) => CURSOR_U,
+        (Some(b'B'), _) => CURSOR_D,
+        (Some(b'C'), _) => CURSOR_R,
+        (Some(b'D'), _) => CURSOR_L,
+        _ => first_byte,
+    })
 }
 
 fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
