@@ -392,6 +392,9 @@ fn read_keypress() -> Result<u8, Errno> {
         (Some(b'B'), _) => CURSOR_D,
         (Some(b'C'), _) => CURSOR_R,
         (Some(b'D'), _) => CURSOR_L,
+        // Bind page up and page down keys to top and bottom of screen
+        (Some(b'5'), Some(b'~')) => CURSOR_TOP,
+        (Some(b'6'), Some(b'~')) => CURSOR_BOT,
         _ => first_byte,
     })
 }
