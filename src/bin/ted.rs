@@ -15,8 +15,8 @@
 
 extern crate alloc;
 
-use alloc::string::String;
-use core::{panic::PanicInfo, slice};
+use alloc::{string::String, vec::Vec};
+use core::{ops::Deref, panic::PanicInfo, slice};
 
 use tlenix_core::{
     EnvVar, Errno, eprintln, format, parse_argv_envp, print,
@@ -150,7 +150,7 @@ impl RenderBuffer {
 }
 
 /// A given row-column point within the screen.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 struct Point {
     row: usize,
     col: usize,
@@ -212,16 +212,51 @@ impl From<&Point> for String {
     }
 }
 
+/// A [`String`] representing a row of text in the editor.
+#[derive(Debug, Clone)]
+struct EditorRow(String);
+impl Deref for EditorRow {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 /// The current state of the editor.
 #[derive(Debug, Clone)]
 struct EditorState {
     orig_termios: Termios,
     win_size: WinSize,
+    editor_rows: Vec<EditorRow>,
     render_buf: RenderBuffer,
     cursor_pos: Point,
     should_exit: bool,
 }
 impl EditorState {
+    /// Start up the editor, setting up the terminal accordingly. The terminal is returned to its
+    /// previous state when this [`EditorState`] is dropped.
+    fn start() -> Result<Self, Errno> {
+        let orig_termios = STDIN.lock().termios()?;
+
+        enter_raw_mode()?;
+        set_read_timeouts(READ_MIN_BYTES_READ, READ_MAX_TIME_PASSED)?;
+        clear_screen();
+
+        let win_size = get_win_size();
+
+        let editor_rows = Vec::with_capacity(win_size.rows);
+        let render_buf = RenderBuffer::new(&win_size);
+        Ok(Self {
+            orig_termios,
+            win_size,
+            editor_rows,
+            render_buf,
+            cursor_pos: Point::default(),
+            should_exit: false,
+        })
+    }
+
     /// Refreshes the screen, rendering the current state of the editor.
     fn refresh_screen(&mut self) {
         let cursor_pos_string: String = (&self.cursor_pos).into();
@@ -295,6 +330,14 @@ impl EditorState {
             Ascii(CURSOR_R) | Key::RightArrow => self.cursor_pos.col_bounded_add(1, &self.win_size),
             _ => {}
         }
+    }
+}
+impl Drop for EditorState {
+    fn drop(&mut self) {
+        // `Self::drop` has to succeed- we unfortunately can't check to see whether or not this was
+        // successful :(
+        let _ = restore_terminal(&self.orig_termios);
+        clear_screen();
     }
 }
 
@@ -461,21 +504,7 @@ fn read_keypress() -> Result<Key, Errno> {
 }
 
 fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
-    let orig_termios = try_exit!(STDIN.lock().termios());
-
-    try_exit!(enter_raw_mode());
-    try_exit!(set_read_timeouts(READ_MIN_BYTES_READ, READ_MAX_TIME_PASSED));
-    clear_screen();
-
-    let win_size = get_win_size();
-    let render_buf = RenderBuffer::new(&win_size);
-    let mut state = EditorState {
-        orig_termios,
-        win_size,
-        render_buf,
-        cursor_pos: Point { row: 0, col: 0 },
-        should_exit: false,
-    };
+    let mut state = try_exit!(EditorState::start());
 
     loop {
         state.refresh_screen();
@@ -486,8 +515,6 @@ fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
         }
     }
 
-    try_exit!(restore_terminal(&state.orig_termios));
-    clear_screen();
     ExitStatus::ExitSuccess
 }
 
