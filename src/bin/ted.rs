@@ -80,6 +80,14 @@ enum Key {
     LeftArrow,
     PageUp,
     PageDown,
+    F5,
+    F6,
+    F7,
+    F8,
+    F9,
+    F10,
+    F11,
+    F12,
     Home,
     End,
     Insert,
@@ -95,6 +103,27 @@ impl Key {
             (Some(b'D'), _) => Some(Self::LeftArrow),
             (Some(b'5'), Some(b'~')) => Some(Self::PageUp),
             (Some(b'6'), Some(b'~')) => Some(Self::PageDown),
+            (Some(b'1'), Some(b'5')) => Some(Self::F5),
+            (Some(b'1'), Some(b'7')) => Some(Self::F6),
+            (Some(b'1'), Some(b'8')) => Some(Self::F7),
+            (Some(b'1'), Some(b'9')) => Some(Self::F8),
+            (Some(b'2'), Some(b'0')) => Some(Self::F9),
+            (Some(b'2'), Some(b'1')) => Some(Self::F10),
+            (Some(b'2'), Some(b'3')) => Some(Self::F11),
+            (Some(b'2'), Some(b'4')) => Some(Self::F12),
+            (Some(b'H'), _) => Some(Self::Home),
+            (Some(b'F'), _) => Some(Self::End),
+            (Some(b'2'), Some(b'~')) => Some(Self::Insert),
+            (Some(b'3'), Some(b'~')) => Some(Self::Delete),
+            // // DEBUG ONLY
+            // _ => {
+            //     print!(
+            //         "{CLEAR_SCREEN}{CURSOR_TOP_LEFT}{}",
+            //         String::from_utf8(seq.to_vec()).unwrap()
+            //     );
+            //     tlenix_core::thread::sleep(&core::time::Duration::from_secs(1)).unwrap();
+            //     None
+            // }
             _ => None,
         }
     }
