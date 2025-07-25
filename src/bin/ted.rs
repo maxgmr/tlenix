@@ -71,6 +71,40 @@ const fn ctrl_key(byte: u8) -> u8 {
     byte & 0x1f
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+enum Key {
+    Ascii(u8),
+    UpArrow,
+    DownArrow,
+    RightArrow,
+    LeftArrow,
+    PageUp,
+    PageDown,
+    Home,
+    End,
+    Insert,
+    Delete,
+}
+impl Key {
+    /// Attempts to match the given escape sequence to a [`Key`] variant.
+    fn try_from_esc(seq: [u8; KEYPRESS_BUF_LEN]) -> Option<Self> {
+        match (seq.get(1), seq.get(2)) {
+            (Some(b'A'), _) => Some(Self::UpArrow),
+            (Some(b'B'), _) => Some(Self::DownArrow),
+            (Some(b'C'), _) => Some(Self::RightArrow),
+            (Some(b'D'), _) => Some(Self::LeftArrow),
+            (Some(b'5'), Some(b'~')) => Some(Self::PageUp),
+            (Some(b'6'), Some(b'~')) => Some(Self::PageDown),
+            _ => None,
+        }
+    }
+}
+impl From<u8> for Key {
+    fn from(value: u8) -> Self {
+        Self::Ascii(value)
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Deciseconds(u8);
 
@@ -188,25 +222,31 @@ impl EditorState {
 
     /// Handles user input, propagating any [`Errno`]s incurred by underlying syscalls.
     fn handle_input(&mut self) -> Result<(), Errno> {
-        let input_byte = read_keypress()?;
+        use Key::Ascii;
 
-        match input_byte {
-            EXIT_CODE => {
+        let keypress = read_keypress()?;
+
+        match keypress {
+            Ascii(EXIT_CODE) => {
                 self.should_exit = true;
             }
-            CURSOR_U | CURSOR_D | CURSOR_L | CURSOR_R => {
-                self.move_cursor(input_byte);
+            Ascii(CURSOR_U | CURSOR_D | CURSOR_L | CURSOR_R)
+            | Key::UpArrow
+            | Key::DownArrow
+            | Key::LeftArrow
+            | Key::RightArrow => {
+                self.move_cursor(keypress);
             }
-            CURSOR_TOP => {
+            Ascii(CURSOR_TOP) | Key::PageUp => {
                 self.cursor_pos.row = 0;
             }
-            CURSOR_BOT => {
+            Ascii(CURSOR_BOT) | Key::PageDown => {
                 self.cursor_pos.row = self.win_size.rows - 1;
             }
-            CURSOR_START => {
+            Ascii(CURSOR_START) => {
                 self.cursor_pos.col = 0;
             }
-            CURSOR_END => {
+            Ascii(CURSOR_END) => {
                 self.cursor_pos.col = self.win_size.cols - 1;
             }
             _ => {}
@@ -216,12 +256,14 @@ impl EditorState {
     }
 
     /// Moves the cursor matching the given direction.
-    fn move_cursor(&mut self, input: u8) {
+    fn move_cursor(&mut self, input: Key) {
+        use Key::Ascii;
+
         match input {
-            CURSOR_U => self.cursor_pos.row_bounded_sub(1),
-            CURSOR_D => self.cursor_pos.row_bounded_add(1, &self.win_size),
-            CURSOR_L => self.cursor_pos.col_bounded_sub(1),
-            CURSOR_R => self.cursor_pos.col_bounded_add(1, &self.win_size),
+            Ascii(CURSOR_U) | Key::UpArrow => self.cursor_pos.row_bounded_sub(1),
+            Ascii(CURSOR_D) | Key::DownArrow => self.cursor_pos.row_bounded_add(1, &self.win_size),
+            Ascii(CURSOR_L) | Key::LeftArrow => self.cursor_pos.col_bounded_sub(1),
+            Ascii(CURSOR_R) | Key::RightArrow => self.cursor_pos.col_bounded_add(1, &self.win_size),
             _ => {}
         }
     }
@@ -358,7 +400,7 @@ fn restore_terminal(termios: &Termios) -> Result<(), Errno> {
 }
 
 /// Reads a single keypress from `stdin`.
-fn read_keypress() -> Result<u8, Errno> {
+fn read_keypress() -> Result<Key, Errno> {
     let mut stdin = STDIN.lock();
 
     // Try to read a byte from stdin.
@@ -366,7 +408,7 @@ fn read_keypress() -> Result<u8, Errno> {
 
     // If it's not an escape code, return it. Otherwise, continue...
     if first_byte != ESC_CODE {
-        return Ok(first_byte);
+        return Ok(first_byte.into());
     }
 
     // Byte is the beginning of an escape sequence. Continue reading.
@@ -375,7 +417,7 @@ fn read_keypress() -> Result<u8, Errno> {
         || stdin.read(slice::from_mut(&mut seq_buf[1]))? != 1
     {
         // Just the escape code or an incomplete escape sequence was sent. Return.
-        return Ok(first_byte);
+        return Ok(first_byte.into());
     }
 
     stdin.read(slice::from_mut(&mut seq_buf[2]))?;
@@ -383,20 +425,10 @@ fn read_keypress() -> Result<u8, Errno> {
     // If the char after the escape code _isn't_ `[`, then this isn't an ANSI escape sequence.
     // Return the escape code itself.
     if seq_buf.first() != Some(&b'[') {
-        return Ok(first_byte);
+        return Ok(first_byte.into());
     }
 
-    Ok(match (seq_buf.get(1), seq_buf.get(2)) {
-        // Bind arrow keys to cursor movements
-        (Some(b'A'), _) => CURSOR_U,
-        (Some(b'B'), _) => CURSOR_D,
-        (Some(b'C'), _) => CURSOR_R,
-        (Some(b'D'), _) => CURSOR_L,
-        // Bind page up and page down keys to top and bottom of screen
-        (Some(b'5'), Some(b'~')) => CURSOR_TOP,
-        (Some(b'6'), Some(b'~')) => CURSOR_BOT,
-        _ => first_byte,
-    })
+    Ok(Key::try_from_esc(seq_buf).unwrap_or(first_byte.into()))
 }
 
 fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
