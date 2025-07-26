@@ -15,11 +15,16 @@
 
 extern crate alloc;
 
-use alloc::{string::String, vec::Vec};
-use core::{ops::Deref, panic::PanicInfo, slice};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
+use core::{panic::PanicInfo, slice};
 
 use tlenix_core::{
-    EnvVar, Errno, eprintln, format, parse_argv_envp, print,
+    EnvVar, Errno, NixString, eprintln, format,
+    fs::OpenOptions,
+    numbers, parse_argv_envp, print,
     process::{self, ExitStatus},
     streams::STDIN,
     term::{
@@ -212,23 +217,12 @@ impl From<&Point> for String {
     }
 }
 
-/// A [`String`] representing a row of text in the editor.
-#[derive(Debug, Clone)]
-struct EditorRow(String);
-impl Deref for EditorRow {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 /// The current state of the editor.
 #[derive(Debug, Clone)]
 struct EditorState {
     orig_termios: Termios,
     win_size: WinSize,
-    editor_rows: Vec<EditorRow>,
+    editor_rows: Vec<String>,
     render_buf: RenderBuffer,
     cursor_pos: Point,
     should_exit: bool,
@@ -275,7 +269,16 @@ impl EditorState {
     /// Adds the interface rows to the render buffer.
     fn add_rows(&mut self) {
         for i in 0..self.win_size.rows {
-            self.render_buf.0.push('~');
+            let total_width = numbers::num_digits_base10(self.editor_rows.len());
+            if let Some(line) = self.editor_rows.get(i) {
+                let line_num = format!("{:>total_width$} ", i + 1);
+                self.render_buf.0.push_str(&line_num);
+                self.render_buf.0.push_str(line);
+            } else {
+                // Empty line
+                self.render_buf.0.push('~');
+                self.render_buf.0.push(' ');
+            }
             self.render_buf.0.push_str(CLEAR_REMAINING_LINE);
             if i < self.win_size.rows - 1 {
                 self.render_buf.0.push('\r');
@@ -330,6 +333,19 @@ impl EditorState {
             Ascii(CURSOR_R) | Key::RightArrow => self.cursor_pos.col_bounded_add(1, &self.win_size),
             _ => {}
         }
+    }
+
+    fn read_file<NS: Into<NixString>>(&mut self, path: NS) -> Result<(), Errno> {
+        let file_contents = OpenOptions::new()
+            .read_only()
+            .open(path)?
+            .read_to_string()?;
+
+        for line in file_contents.lines() {
+            self.editor_rows.push(line.to_string());
+        }
+
+        Ok(())
     }
 }
 impl Drop for EditorState {
@@ -503,8 +519,12 @@ fn read_keypress() -> Result<Key, Errno> {
     Ok(Key::try_from_esc(seq_buf).unwrap_or(first_byte.into()))
 }
 
-fn main(_args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
+fn main(args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
     let mut state = try_exit!(EditorState::start());
+
+    if let Some(path) = args.get(1) {
+        try_exit!(state.read_file(path));
+    }
 
     loop {
         state.refresh_screen();
