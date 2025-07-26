@@ -25,12 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Random number generation.
 - `codebreaker`: A simple code-guessing game inspired by the "Mastermind" board game.
+- Random number generation.
+- The Tlenix source code is now included in the installation within `/usr/src/tlenix`.
 
 ### Changed
 
-- Bump memory allocator to 256 MiB.
+- Bumped memory allocator to 256 MiB.
 
 ## [0.1.0-beta.3] - 2025-06-12
 
