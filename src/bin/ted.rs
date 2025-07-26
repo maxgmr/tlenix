@@ -362,7 +362,7 @@ impl EditorState {
             .0
             .row
             .saturating_add(amount)
-            .clamp(0, self.editor_rows.len());
+            .clamp(0, self.editor_rows.len() - 1);
 
         self.cursor_right(0);
         self.scroll();
@@ -384,8 +384,8 @@ impl EditorState {
             // Move screen left
             self.screen_offset.col = self.cursor.0.col;
         } else if self.cursor.0.col >= (self.screen_offset.col + self.win_size.cols) {
-            // Move screen down
-            self.screen_offset.col = (self.cursor.0.col - self.win_size.rows) + 1;
+            // Move screen right
+            self.screen_offset.col = (self.cursor.0.col - self.win_size.cols) + 1;
         }
     }
 
@@ -407,11 +407,16 @@ impl EditorState {
         numbers::num_digits_base10(self.editor_rows.len()) + 1
     }
 
-    /// Gets the length of the current editor line.
-    fn current_line_len(&self) -> usize {
+    /// Gets the current editor line.
+    fn current_line(&self) -> &str {
         self.editor_rows
             .get(self.cursor.0.row)
-            .map_or(0, String::len)
+            .map_or("", String::as_ref)
+    }
+
+    /// Gets the length of the current editor line.
+    fn current_line_len(&self) -> usize {
+        self.current_line().len()
     }
 }
 impl Drop for EditorState {
