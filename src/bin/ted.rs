@@ -19,7 +19,7 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use core::{panic::PanicInfo, slice};
+use core::{fmt::Display, panic::PanicInfo, slice};
 
 use tlenix_core::{
     EnvVar, Errno, NixString, eprintln, format,
@@ -52,6 +52,8 @@ const READ_MAX_TIME_PASSED: Deciseconds = Deciseconds(1);
 const CHECK_TERM_RESPONSE_LIMIT: usize = 64;
 
 const KEYPRESS_BUF_LEN: usize = 3;
+
+const TAB_LEN: usize = 4;
 
 // Controls
 const EXIT_CODE: u8 = ctrl_key(b'q');
@@ -153,6 +155,22 @@ impl RenderBuffer {
         ))
     }
 }
+impl Display for RenderBuffer {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut formatted =
+            String::with_capacity(self.0.len() + self.0.matches('\t').count() * (TAB_LEN - 1));
+        for c in self.0.chars() {
+            if c == '\t' {
+                for _ in 0..TAB_LEN {
+                    formatted.push(' ');
+                }
+            } else {
+                formatted.push(c);
+            }
+        }
+        write!(f, "{formatted}")
+    }
+}
 
 /// The cursor position within the document.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -231,7 +249,8 @@ impl EditorState {
 
         let win_size = get_win_size();
 
-        let editor_rows = Vec::with_capacity(win_size.rows);
+        let mut editor_rows = Vec::with_capacity(win_size.rows);
+        editor_rows.push(String::new());
         let render_buf = RenderBuffer::new(&win_size);
         let mut result = Self {
             orig_termios,
@@ -257,7 +276,7 @@ impl EditorState {
         self.render_buf.0.push_str(&self.cursor.term_seq());
         self.render_buf.0.push_str(SHOW_CURSOR);
 
-        print!("{}", self.render_buf.0);
+        print!("{}", self.render_buf);
     }
 
     /// Adds the interface rows to the render buffer.
@@ -269,7 +288,9 @@ impl EditorState {
             if let Some(line) = self.editor_rows.get(i) {
                 let line_num = format!("{:>index_width$} ", i + 1);
                 self.render_buf.0.push_str(&line_num);
-                self.render_buf.0.push_str(self.visible_row_slice(line));
+                self.render_buf
+                    .0
+                    .push_str(self.visible_row_slice(line.as_ref()));
             } else {
                 // Empty line
                 self.render_buf.0.push('~');
@@ -394,6 +415,8 @@ impl EditorState {
             .read_only()
             .open(path)?
             .read_to_string()?;
+
+        self.editor_rows.clear();
 
         for line in file_contents.lines() {
             self.editor_rows.push(line.to_string());
