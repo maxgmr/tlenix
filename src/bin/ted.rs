@@ -261,7 +261,8 @@ impl EditorState {
             screen_offset: Point::default(),
             should_exit: false,
         };
-        result.cursor.0.col = result.col_lower_bound();
+        result.cursor_up(usize::MAX);
+        result.cursor_left(usize::MAX);
         Ok(result)
     }
 
