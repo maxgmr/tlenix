@@ -354,7 +354,7 @@ impl EditorState {
     }
 
     fn cursor_right(&mut self, amount: usize) {
-        let upper_bound = (self.col_lower_bound() + self.current_line_len()) - 1;
+        let upper_bound = (self.col_lower_bound() + core::cmp::max(self.current_line_len(), 1)) - 1;
         self.cursor.0.col = self
             .cursor
             .0
