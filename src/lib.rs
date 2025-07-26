@@ -28,6 +28,7 @@ pub mod fs;
 pub mod ipc;
 mod nix_bytes;
 mod nix_str;
+pub mod numbers;
 mod print;
 pub mod process;
 pub mod rand;
