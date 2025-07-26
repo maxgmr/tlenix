@@ -14,7 +14,7 @@ pub struct WinSize {
     pub cols: usize,
     /// The width of the terminal in pixels.
     pub width: usize,
-    /// The heigh of the terminal in pixels.
+    /// The height of the terminal in pixels.
     pub height: usize,
 }
 impl From<WinSizeRaw> for WinSize {
