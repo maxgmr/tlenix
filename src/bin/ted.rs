@@ -45,6 +45,7 @@ const CURSOR_BOTTOM_RIGHT: &str = "\u{001b}[999C\u{001b}[999B";
 const GET_CURSOR_POS: &str = "\u{001b}[6n";
 const HIDE_CURSOR: &str = "\u{001b}[?25l";
 const SHOW_CURSOR: &str = "\u{001b}[?25h";
+const CURSOR_DOWN_SEQ: &str = "\u{001b}[1B";
 
 const READ_MIN_BYTES_READ: u8 = 0;
 const READ_MAX_TIME_PASSED: Deciseconds = Deciseconds(1);
@@ -178,8 +179,12 @@ struct Cursor(Point);
 impl Cursor {
     /// Converts this position to the cursor position on the visible screen, then produces the
     /// terminal sequence which moves the terminal cursor to that position.
-    fn term_seq(&self) -> String {
-        format!("\u{001b}[{};{}H", self.0.row + 1, self.0.col + 1)
+    fn term_seq(&self, row_offset: usize, col_offset: usize) -> String {
+        format!(
+            "\u{001b}[{};{}H",
+            self.0.row.saturating_sub(row_offset) + 1,
+            self.0.col.saturating_sub(col_offset) + 1
+        )
     }
 }
 
@@ -229,12 +234,20 @@ impl From<&Point> for String {
 /// The current state of the editor.
 #[derive(Debug, Clone)]
 struct EditorState {
+    /// The original state of the terminal.
     orig_termios: Termios,
+    /// The size of the terminal window.
     win_size: WinSize,
+    /// The individual lines of the text currently being edited.
     editor_rows: Vec<String>,
+    /// Wrapper around a [`String`]. This [`String`] is generated and rendered to the screen every
+    /// frame.
     render_buf: RenderBuffer,
+    /// The position of the cursor within the text being edited.
     cursor: Cursor,
+    /// The offset of the screen relative to the start of the file.
     screen_offset: Point,
+    /// Whether or not the program should exit on the next frame.
     should_exit: bool,
 }
 impl EditorState {
@@ -274,7 +287,11 @@ impl EditorState {
         self.render_buf.0.push_str(CURSOR_TOP_LEFT);
         self.add_rows();
         // Move the cursor to its current position on the screen
-        self.render_buf.0.push_str(&self.cursor.term_seq());
+        self.render_buf.0.push_str(
+            &self
+                .cursor
+                .term_seq(self.screen_offset.row, self.screen_offset.col),
+        );
         self.render_buf.0.push_str(SHOW_CURSOR);
 
         print!("{}", self.render_buf);
@@ -298,9 +315,12 @@ impl EditorState {
                 self.render_buf.0.push(' ');
             }
             self.render_buf.0.push_str(CLEAR_REMAINING_LINE);
+
+            self.render_buf.0.push('\r');
             if i < self.win_size.rows - 1 {
-                self.render_buf.0.push('\r');
                 self.render_buf.0.push('\n');
+            } else {
+                self.render_buf.0.push_str(CURSOR_DOWN_SEQ);
             }
         }
     }
@@ -422,6 +442,9 @@ impl EditorState {
         for line in file_contents.lines() {
             self.editor_rows.push(line.to_string());
         }
+
+        self.cursor_up(usize::MAX);
+        self.cursor_left(usize::MAX);
 
         Ok(())
     }
