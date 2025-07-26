@@ -154,6 +154,17 @@ impl RenderBuffer {
     }
 }
 
+/// The cursor position within the document.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+struct Cursor(Point);
+impl Cursor {
+    /// Converts this position to the cursor position on the visible screen, then produces the
+    /// terminal sequence which moves the terminal cursor to that position.
+    fn term_seq(&self) -> String {
+        format!("\u{001b}[{};{}H", self.0.row + 1, self.0.col + 1)
+    }
+}
+
 /// A given row-column point within the screen.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 struct Point {
@@ -161,26 +172,6 @@ struct Point {
     col: usize,
 }
 impl Point {
-    fn row_bounded_add(&mut self, value: usize, win_size: &WinSize) {
-        self.row = Self::bounded_change_helper(self.row.saturating_add(value), win_size.rows - 1);
-    }
-
-    fn row_bounded_sub(&mut self, value: usize) {
-        self.row = self.row.saturating_sub(value);
-    }
-
-    fn col_bounded_add(&mut self, value: usize, win_size: &WinSize) {
-        self.col = Self::bounded_change_helper(self.col.saturating_add(value), win_size.cols - 1);
-    }
-
-    fn col_bounded_sub(&mut self, value: usize) {
-        self.col = self.col.saturating_sub(value);
-    }
-
-    fn bounded_change_helper(result: usize, bound: usize) -> usize {
-        if result <= bound { result } else { bound }
-    }
-
     fn try_from_string_helper(value: &str) -> Option<Self> {
         // Format: "[<row>;<col>R"
         let start = value.rfind('[')? + 1;
@@ -224,7 +215,8 @@ struct EditorState {
     win_size: WinSize,
     editor_rows: Vec<String>,
     render_buf: RenderBuffer,
-    cursor_pos: Point,
+    cursor: Cursor,
+    screen_offset: Point,
     should_exit: bool,
 }
 impl EditorState {
@@ -241,26 +233,28 @@ impl EditorState {
 
         let editor_rows = Vec::with_capacity(win_size.rows);
         let render_buf = RenderBuffer::new(&win_size);
-        Ok(Self {
+        let mut result = Self {
             orig_termios,
             win_size,
             editor_rows,
             render_buf,
-            cursor_pos: Point::default(),
+            cursor: Cursor(Point::default()),
+            screen_offset: Point::default(),
             should_exit: false,
-        })
+        };
+        result.cursor.0.col = result.col_lower_bound();
+        Ok(result)
     }
 
     /// Refreshes the screen, rendering the current state of the editor.
     fn refresh_screen(&mut self) {
-        let cursor_pos_string: String = (&self.cursor_pos).into();
-
         self.render_buf.0.clear();
 
         self.render_buf.0.push_str(HIDE_CURSOR);
         self.render_buf.0.push_str(CURSOR_TOP_LEFT);
         self.add_rows();
-        self.render_buf.0.push_str(&cursor_pos_string);
+        // Move the cursor to its current position on the screen
+        self.render_buf.0.push_str(&self.cursor.term_seq());
         self.render_buf.0.push_str(SHOW_CURSOR);
 
         print!("{}", self.render_buf.0);
@@ -268,12 +262,14 @@ impl EditorState {
 
     /// Adds the interface rows to the render buffer.
     fn add_rows(&mut self) {
-        for i in 0..self.win_size.rows {
-            let total_width = numbers::num_digits_base10(self.editor_rows.len());
+        let row_start = self.screen_offset.row;
+        let row_finish = self.win_size.rows + self.screen_offset.row;
+        for i in row_start..row_finish {
+            let index_width = self.col_lower_bound() - 1;
             if let Some(line) = self.editor_rows.get(i) {
-                let line_num = format!("{:>total_width$} ", i + 1);
+                let line_num = format!("{:>index_width$} ", i + 1);
                 self.render_buf.0.push_str(&line_num);
-                self.render_buf.0.push_str(line);
+                self.render_buf.0.push_str(self.visible_row_slice(line));
             } else {
                 // Empty line
                 self.render_buf.0.push('~');
@@ -287,6 +283,20 @@ impl EditorState {
         }
     }
 
+    /// Gets the slice of the editor row which is visible on the screen.
+    fn visible_row_slice<'a>(&self, current_row: &'a str) -> &'a str {
+        if current_row.is_empty() {
+            return "";
+        }
+        let slice_start = self.screen_offset.col.clamp(0, current_row.len() - 1);
+        let slice_end = (self.win_size.cols + self.screen_offset.col).clamp(0, current_row.len());
+        if slice_start >= slice_end {
+            return "";
+        }
+
+        &current_row[slice_start..slice_end]
+    }
+
     /// Handles user input, propagating any [`Errno`]s incurred by underlying syscalls.
     fn handle_input(&mut self) -> Result<(), Errno> {
         use Key::Ascii;
@@ -297,41 +307,85 @@ impl EditorState {
             Ascii(EXIT_CODE) => {
                 self.should_exit = true;
             }
-            Ascii(CURSOR_U | CURSOR_D | CURSOR_L | CURSOR_R)
-            | Key::UpArrow
-            | Key::DownArrow
-            | Key::LeftArrow
-            | Key::RightArrow => {
-                self.move_cursor(keypress);
-            }
-            Ascii(CURSOR_TOP) | Key::PageUp => {
-                self.cursor_pos.row = 0;
-            }
-            Ascii(CURSOR_BOT) | Key::PageDown => {
-                self.cursor_pos.row = self.win_size.rows - 1;
-            }
-            Ascii(CURSOR_START) => {
-                self.cursor_pos.col = 0;
-            }
-            Ascii(CURSOR_END) => {
-                self.cursor_pos.col = self.win_size.cols - 1;
-            }
+            Ascii(CURSOR_U) | Key::UpArrow => self.cursor_up(1),
+            Ascii(CURSOR_TOP) | Key::PageUp => self.cursor_up(usize::MAX),
+            Ascii(CURSOR_D) | Key::DownArrow => self.cursor_down(1),
+            Ascii(CURSOR_BOT) | Key::PageDown => self.cursor_down(usize::MAX),
+            Ascii(CURSOR_L) | Key::LeftArrow => self.cursor_left(1),
+            Ascii(CURSOR_START) | Key::Home => self.cursor_left(usize::MAX),
+            Ascii(CURSOR_R) | Key::RightArrow => self.cursor_right(1),
+            Ascii(CURSOR_END) | Key::End => self.cursor_right(usize::MAX),
             _ => {}
         }
 
         Ok(())
     }
 
-    /// Moves the cursor matching the given direction.
-    fn move_cursor(&mut self, input: Key) {
-        use Key::Ascii;
+    fn cursor_left(&mut self, amount: usize) {
+        self.cursor.0.col = self
+            .cursor
+            .0
+            .col
+            .saturating_sub(amount)
+            .clamp(self.col_lower_bound(), usize::MAX);
 
-        match input {
-            Ascii(CURSOR_U) | Key::UpArrow => self.cursor_pos.row_bounded_sub(1),
-            Ascii(CURSOR_D) | Key::DownArrow => self.cursor_pos.row_bounded_add(1, &self.win_size),
-            Ascii(CURSOR_L) | Key::LeftArrow => self.cursor_pos.col_bounded_sub(1),
-            Ascii(CURSOR_R) | Key::RightArrow => self.cursor_pos.col_bounded_add(1, &self.win_size),
-            _ => {}
+        self.scroll();
+    }
+
+    fn cursor_right(&mut self, amount: usize) {
+        let upper_bound = (self.col_lower_bound() + self.current_line_len()) - 1;
+        self.cursor.0.col = self
+            .cursor
+            .0
+            .col
+            .saturating_add(amount)
+            .clamp(0, upper_bound);
+
+        self.scroll();
+    }
+
+    fn cursor_up(&mut self, amount: usize) {
+        self.cursor.0.row = self
+            .cursor
+            .0
+            .row
+            .saturating_sub(amount)
+            .clamp(0, usize::MAX);
+
+        self.cursor_right(0);
+        self.scroll();
+    }
+
+    fn cursor_down(&mut self, amount: usize) {
+        self.cursor.0.row = self
+            .cursor
+            .0
+            .row
+            .saturating_add(amount)
+            .clamp(0, self.editor_rows.len());
+
+        self.cursor_right(0);
+        self.scroll();
+    }
+
+    /// Moves the screen offset to accomodate the new cursor position (if necessary).
+    fn scroll(&mut self) {
+        // Handle vertical scrolling
+        if self.cursor.0.row < self.screen_offset.row {
+            // Move screen up
+            self.screen_offset.row = self.cursor.0.row;
+        } else if self.cursor.0.row >= (self.screen_offset.row + self.win_size.rows) {
+            // Move screen down
+            self.screen_offset.row = (self.cursor.0.row - self.win_size.rows) + 1;
+        }
+
+        // Handle horizontal scrolling
+        if self.cursor.0.col < self.screen_offset.col {
+            // Move screen left
+            self.screen_offset.col = self.cursor.0.col;
+        } else if self.cursor.0.col >= (self.screen_offset.col + self.win_size.cols) {
+            // Move screen down
+            self.screen_offset.col = (self.cursor.0.col - self.win_size.rows) + 1;
         }
     }
 
@@ -346,6 +400,18 @@ impl EditorState {
         }
 
         Ok(())
+    }
+
+    /// Gets the lower bound of the cursor X-coordinate.
+    fn col_lower_bound(&self) -> usize {
+        numbers::num_digits_base10(self.editor_rows.len()) + 1
+    }
+
+    /// Gets the length of the current editor line.
+    fn current_line_len(&self) -> usize {
+        self.editor_rows
+            .get(self.cursor.0.row)
+            .map_or(0, String::len)
     }
 }
 impl Drop for EditorState {
