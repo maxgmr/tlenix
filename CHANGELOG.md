@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Random number generation.
 - `codebreaker`: A simple code-guessing game inspired by the "Mastermind" board game.
 
+### Changed
+
+- Bump memory allocator to 256 MiB.
+
 ## [0.1.0-beta.3] - 2025-06-12
 
 ### Added
