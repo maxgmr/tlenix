@@ -46,7 +46,6 @@ const CURSOR_BOTTOM_RIGHT: &str = "\u{001b}[999C\u{001b}[999B";
 const GET_CURSOR_POS: &str = "\u{001b}[6n";
 const HIDE_CURSOR: &str = "\u{001b}[?25l";
 const SHOW_CURSOR: &str = "\u{001b}[?25h";
-const CURSOR_DOWN_SEQ: &str = "\u{001b}[1B";
 
 const FMT_NORMAL: &str = "\u{001b}[m";
 const FMT_INVERT: &str = "\u{001b}[7m";
@@ -312,17 +311,6 @@ impl StatusBar {
                 break;
             }
 
-            // clear_screen();
-            // print!(
-            //     "{}",
-            //     match elem {
-            //         Code(c) => format!("{c}"),
-            //         Text(t) => format!("{t}"),
-            //         Char(c) => format!("{c}"),
-            //     }
-            // );
-            // tlenix_core::thread::sleep(&core::time::Duration::from_secs(1));
-            //
             match elem {
                 Code(c) => self.rendered.push_str(c),
                 Text(t) => self.rendered.push_str(t),
@@ -377,7 +365,9 @@ impl EditorState {
         set_read_timeouts(READ_MIN_BYTES_READ, READ_MAX_TIME_PASSED)?;
         clear_screen();
 
-        let win_size = get_win_size();
+        let mut win_size = get_win_size();
+        // Shrink the window height by 1 to make room for status bar
+        win_size.rows -= 1;
 
         let mut editor_rows = Vec::with_capacity(win_size.rows);
         editor_rows.push(String::new());
@@ -446,8 +436,6 @@ impl EditorState {
     /// Adds the status bar to the render buffer.
     fn add_status_bar(&mut self) {
         self.render_buf.0.push_str(&self.status_bar.rendered);
-        self.render_buf.0.push('\r');
-        self.render_buf.0.push_str(CURSOR_DOWN_SEQ);
     }
 
     /// Gets the slice of the editor row which is visible on the screen.
@@ -644,16 +632,12 @@ fn get_win_size() -> WinSize {
 
     // Fallback: Move the cursor to the bottom-right and get cursor position
     print!("{CURSOR_BOTTOM_RIGHT}");
-    let mut win_size = if let Ok(pos) = get_cursor_pos() {
+    let win_size = if let Ok(pos) = get_cursor_pos() {
         pos.into()
     } else {
         WinSize::default()
     };
     print!("{CURSOR_TOP_LEFT}");
-    // Shrink the window height by one to make room for the status bar
-    if win_size.rows > 1 {
-        win_size.rows -= 1;
-    }
     win_size
 }
 
