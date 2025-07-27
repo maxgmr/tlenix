@@ -39,6 +39,7 @@ pub mod system;
 pub mod term;
 mod test_framework;
 pub mod thread;
+pub mod time;
 
 #[cfg(test)]
 pub(crate) mod test_utils;

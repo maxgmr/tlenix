@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `codebreaker`: A simple code-guessing game inspired by the "Mastermind" board game.
 - Random number generation.
+- A collection of common ANSI console control sequences.
+- Time measurement.
 - The Tlenix source code is now included in the installation within `/usr/src/tlenix`.
 
 ### Changed
