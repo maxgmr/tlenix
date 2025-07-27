@@ -20,7 +20,7 @@ use alloc::{
     vec,
     vec::Vec,
 };
-use core::{fmt::Display, panic::PanicInfo, slice};
+use core::{fmt::Display, mem, panic::PanicInfo, slice};
 
 use getargs::{Arg, Options};
 use tlenix_core::{
@@ -381,6 +381,8 @@ struct EditorState {
     win_size: WinSize,
     /// The individual lines of the text currently being edited.
     editor_rows: Vec<String>,
+    /// The previous frame's individual lines of the text currently being edited.
+    editor_rows_prev: Vec<String>,
     /// The status bar of the editor.
     status_bar: StatusBar,
     /// Wrapper around a [`String`]. This [`String`] is generated and rendered to the screen every
@@ -424,6 +426,7 @@ impl EditorState {
             er.push(String::new());
             er
         };
+        let editor_rows_prev = editor_rows.clone();
 
         let render_buf = RenderBuffer::new(&win_size);
         let cols = win_size.cols;
@@ -435,6 +438,7 @@ impl EditorState {
             options,
             win_size,
             editor_rows,
+            editor_rows_prev,
             render_buf,
             status_bar: StatusBar::new(&sb_file, cols),
             cursor: Cursor(Point::default()),
@@ -460,9 +464,12 @@ impl EditorState {
         self.render_buf.0.push_str(ansi::ANSI_CURSOR_TOP_LEFT);
 
         self.add_rows();
+
+        // Move cursor to bottom left of screen in order to render status bar
+        self.render_buf.0.push_str(ansi_cursor_down_col1!(999));
         self.add_status_bar();
 
-        // Move the cursor to its current position on the screen
+        // Move the cursor to its "actual" position on the screen
         self.render_buf.0.push_str(
             &self
                 .cursor
@@ -470,6 +477,7 @@ impl EditorState {
         );
         self.render_buf.0.push_str(ansi::ANSI_SHOW_CURSOR);
 
+        // Render this frame
         print!("{}", self.render_buf);
 
         if self.options.benchmark {
@@ -493,27 +501,62 @@ impl EditorState {
     fn add_rows(&mut self) {
         let row_start = self.screen_offset.row;
         let row_finish = self.win_size.rows + self.screen_offset.row;
+
+        // Account for ANSI console codes in length
+        let mut new_line = String::with_capacity(self.win_size.cols * 2);
+
         for i in row_start..row_finish {
+            new_line.clear();
+
             let index_width = self.col_lower_bound() - 1;
             if let Some(line) = self.editor_rows.get(i) {
                 let line_num = format!("{:>index_width$} ", i + 1);
-                self.render_buf.0.push_str(ansi::ANSI_FG_B_BLACK);
-                self.render_buf.0.push_str(&line_num);
-                self.render_buf.0.push_str(ansi::ANSI_RESET_GRAPHIC);
-                self.render_buf
-                    .0
-                    .push_str(self.visible_row_slice(line.as_ref()));
+                new_line.push_str(ansi::ANSI_FG_B_BLACK);
+                new_line.push_str(&line_num);
+                new_line.push_str(ansi::ANSI_RESET_GRAPHIC);
+                new_line.push_str(self.visible_row_slice(line.as_ref()));
             } else {
                 // Empty line
-                self.render_buf.0.push_str(ansi::ANSI_FG_B_BLACK);
-                self.render_buf.0.push('~');
-                self.render_buf.0.push(' ');
-                self.render_buf.0.push_str(ansi::ANSI_RESET_GRAPHIC);
+                new_line.push_str(ansi::ANSI_FG_B_BLACK);
+                new_line.push('~');
+                new_line.push(' ');
+                new_line.push_str(ansi::ANSI_RESET_GRAPHIC);
             }
 
-            self.render_buf.0.push_str(ansi::ANSI_ERASE_REMAINING_LINE);
-            self.render_buf.0.push('\r');
-            self.render_buf.0.push('\n');
+            new_line.push_str(ansi::ANSI_ERASE_REMAINING_LINE);
+
+            let screen_row_index = i - row_start;
+            let row_changed = self.editor_rows_prev.get(screen_row_index) != Some(&new_line);
+
+            if row_changed {
+                // Move cursor to screen index of row
+                self.render_buf.0.push_str("\u{001b}[");
+                self.render_buf
+                    .0
+                    .push_str((screen_row_index + 1).to_string().as_str());
+                self.render_buf.0.push_str(";1H");
+                // Draw line
+                self.render_buf.0.push_str(&new_line);
+
+                // Update `Self::editor_rows_prev`
+                if screen_row_index < self.editor_rows_prev.len() {
+                    self.editor_rows_prev[screen_row_index] = mem::take(&mut new_line);
+                } else {
+                    // Draw row
+                    self.editor_rows_prev.push(mem::take(&mut new_line));
+                }
+            }
+        }
+
+        // Truncate extra lines if the previous frame had more
+        if self.editor_rows_prev.len() > self.win_size.rows {
+            for i in self.win_size.rows..self.editor_rows_prev.len() {
+                // Move to line and clear it
+                self.render_buf.0.push_str("\u{001b}[");
+                self.render_buf.0.push_str((i + 1).to_string().as_str());
+                self.render_buf.0.push_str(";1H\u{001b}[K");
+            }
+            self.editor_rows_prev.truncate(self.win_size.rows);
         }
     }
 
@@ -611,11 +654,19 @@ impl EditorState {
     fn scroll(&mut self) {
         // Handle vertical scrolling
         if self.cursor.0.row < self.screen_offset.row {
+            let diff = self.screen_offset.row - self.cursor.0.row;
+            let len = self.editor_rows_prev.len();
             // Move screen up
             self.screen_offset.row = self.cursor.0.row;
+            // Optimize next frame- shift existing rows
+            self.editor_rows_prev.rotate_right(diff % len);
         } else if self.cursor.0.row >= (self.screen_offset.row + self.win_size.rows) {
+            let diff = self.cursor.0.row - ((self.screen_offset.row + self.win_size.rows) - 1);
+            let len = self.editor_rows_prev.len();
             // Move screen down
             self.screen_offset.row = (self.cursor.0.row - self.win_size.rows) + 1;
+            // Optimize next frame- shift existing rows
+            self.editor_rows_prev.rotate_left(diff % len);
         }
 
         // Handle horizontal scrolling
@@ -835,6 +886,7 @@ fn main(args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
     // Attempt to restore the terminal as best as one can given the situation
+    print!("{}", ansi::ANSI_RESET_GRAPHIC);
     let _ = STDIN.lock().set_input_mode_flags(
         SetTermAttrsCmd::Tcsetsf,
         InputModeFlags::IGNBRK
