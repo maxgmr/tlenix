@@ -144,6 +144,17 @@ macro_rules! ansi_cursor_to_pos {
     };
 }
 
+/// Console sequence to move the cursor to the top left of the display.
+pub const ANSI_CURSOR_TOP_LEFT: &str = "\u{001b}[H";
+
+/// Console sequence to hide the cursor.
+pub const ANSI_HIDE_CURSOR: &str = "\u{001b}[?25l";
+/// Console sequence to show the cursor.
+pub const ANSI_SHOW_CURSOR: &str = "\u{001b}[?25h";
+
+/// Console sequence to get the cursor position.
+pub const ANSI_GET_CURSOR_POS: &str = "\u{001b}[6n";
+
 /// Console sequence to erase from the cursor to the end of the display.
 pub const ANSI_ERASE_CURSOR_TO_END: &str = "\u{001b}[J";
 /// Console sequence to erase from the start of the display to the cursor.
