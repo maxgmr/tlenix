@@ -401,14 +401,18 @@ impl EditorState {
             let index_width = self.col_lower_bound() - 1;
             if let Some(line) = self.editor_rows.get(i) {
                 let line_num = format!("{:>index_width$} ", i + 1);
+                self.render_buf.0.push_str(ansi::ANSI_FG_B_BLACK);
                 self.render_buf.0.push_str(&line_num);
+                self.render_buf.0.push_str(ansi::ANSI_RESET_GRAPHIC);
                 self.render_buf
                     .0
                     .push_str(self.visible_row_slice(line.as_ref()));
             } else {
                 // Empty line
+                self.render_buf.0.push_str(ansi::ANSI_FG_B_BLACK);
                 self.render_buf.0.push('~');
                 self.render_buf.0.push(' ');
+                self.render_buf.0.push_str(ansi::ANSI_RESET_GRAPHIC);
             }
 
             self.render_buf.0.push_str(ansi::ANSI_ERASE_REMAINING_LINE);
