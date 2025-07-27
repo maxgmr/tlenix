@@ -22,7 +22,7 @@ use alloc::{
 use core::{fmt::Display, panic::PanicInfo, slice};
 
 use tlenix_core::{
-    EnvVar, Errno, eprintln, format,
+    EnvVar, Errno, ansi, ansi_cursor_down, ansi_cursor_right, eprintln, format,
     fs::OpenOptions,
     numbers, parse_argv_envp, print,
     process::{self, ExitStatus},
@@ -38,23 +38,6 @@ const PANIC_TITLE: &str = "ted";
 const STATUS_BAR_TITLE: &str = "TED";
 
 const ESC_CODE: u8 = 0x1b;
-
-const CLEAR_SCREEN: &str = "\u{001b}[2J";
-const CLEAR_REMAINING_LINE: &str = "\u{001b}[K";
-const CURSOR_TOP_LEFT: &str = "\u{001b}[H";
-const CURSOR_BOTTOM_RIGHT: &str = "\u{001b}[999C\u{001b}[999B";
-const GET_CURSOR_POS: &str = "\u{001b}[6n";
-const HIDE_CURSOR: &str = "\u{001b}[?25l";
-const SHOW_CURSOR: &str = "\u{001b}[?25h";
-
-const FMT_NORMAL: &str = "\u{001b}[m";
-const FMT_INVERT: &str = "\u{001b}[7m";
-const FMT_FG_BLUE: &str = "\u{001b}[34m";
-const FMT_FG_GREEN: &str = "\u{001b}[32m";
-const FMT_FG_DEFAULT: &str = "\u{001b}[39m";
-
-/// Sum of the lengths of all control sequences used in the [`StatusBar`].
-const STATUS_BAR_SEQS_LEN: usize = FMT_INVERT.len() + FMT_NORMAL.len();
 
 const READ_MIN_BYTES_READ: u8 = 0;
 const READ_MAX_TIME_PASSED: Deciseconds = Deciseconds(1);
@@ -134,8 +117,9 @@ impl Key {
             (Some(b'3'), Some(b'~')) => Some(Self::Delete),
             // // DEBUG ONLY
             // _ => {
+            //     clear_screen();
             //     print!(
-            //         "{CLEAR_SCREEN}{CURSOR_TOP_LEFT}{}",
+            //         "{}",
             //         String::from_utf8(seq.to_vec()).unwrap()
             //     );
             //     tlenix_core::thread::sleep(&core::time::Duration::from_secs(1)).unwrap();
@@ -272,7 +256,7 @@ impl StatusBar {
     fn new(file_path: &str, cols: usize) -> Self {
         let mut status_bar = Self {
             file_path: file_path.to_string(),
-            rendered: String::with_capacity(cols + STATUS_BAR_SEQS_LEN),
+            rendered: String::new(),
         };
         status_bar.update_render(cols);
         status_bar
@@ -290,18 +274,18 @@ impl StatusBar {
         use StatusBarElem::{Char, Code, Text};
 
         self.rendered.clear();
-        self.rendered.push_str(FMT_INVERT);
+        self.rendered.push_str(ansi::ANSI_INVERT);
 
         let elems = [
-            Code(FMT_FG_BLUE),
+            Code(ansi::ANSI_FG_BLUE),
             Char(' '),
             Text(STATUS_BAR_TITLE),
             Char(' '),
-            Code(FMT_FG_GREEN),
+            Code(ansi::ANSI_FG_GREEN),
             Char(' '),
             Text(&self.file_path),
             Char(' '),
-            Code(FMT_FG_DEFAULT),
+            Code(ansi::ANSI_FG_DEFAULT),
         ];
 
         let mut elems_len = 0;
@@ -325,7 +309,7 @@ impl StatusBar {
             elems_len += 1;
         }
 
-        self.rendered.push_str(FMT_NORMAL);
+        self.rendered.push_str(ansi::ANSI_INVERT_OFF);
     }
 }
 impl Display for StatusBar {
@@ -392,8 +376,8 @@ impl EditorState {
     fn refresh_screen(&mut self) {
         self.render_buf.0.clear();
 
-        self.render_buf.0.push_str(HIDE_CURSOR);
-        self.render_buf.0.push_str(CURSOR_TOP_LEFT);
+        self.render_buf.0.push_str(ansi::ANSI_HIDE_CURSOR);
+        self.render_buf.0.push_str(ansi::ANSI_CURSOR_TOP_LEFT);
 
         self.add_rows();
         self.add_status_bar();
@@ -404,7 +388,7 @@ impl EditorState {
                 .cursor
                 .term_seq(self.screen_offset.row, self.screen_offset.col),
         );
-        self.render_buf.0.push_str(SHOW_CURSOR);
+        self.render_buf.0.push_str(ansi::ANSI_SHOW_CURSOR);
 
         print!("{}", self.render_buf);
     }
@@ -427,7 +411,7 @@ impl EditorState {
                 self.render_buf.0.push(' ');
             }
 
-            self.render_buf.0.push_str(CLEAR_REMAINING_LINE);
+            self.render_buf.0.push_str(ansi::ANSI_ERASE_REMAINING_LINE);
             self.render_buf.0.push('\r');
             self.render_buf.0.push('\n');
         }
@@ -631,19 +615,19 @@ fn get_win_size() -> WinSize {
     }
 
     // Fallback: Move the cursor to the bottom-right and get cursor position
-    print!("{CURSOR_BOTTOM_RIGHT}");
+    print!("{}{}", ansi_cursor_down!(999), ansi_cursor_right!(999));
     let win_size = if let Ok(pos) = get_cursor_pos() {
         pos.into()
     } else {
         WinSize::default()
     };
-    print!("{CURSOR_TOP_LEFT}");
+    print!("{}", ansi::ANSI_CURSOR_TOP_LEFT);
     win_size
 }
 
 /// Gets the current position of the cursor on the screen.
 fn get_cursor_pos() -> Result<Point, Errno> {
-    print!("{GET_CURSOR_POS}");
+    print!("{}", ansi::ANSI_GET_CURSOR_POS);
     let mut buf = [0; CHECK_TERM_RESPONSE_LIMIT];
     let mut stdin = STDIN.lock();
 
@@ -712,7 +696,7 @@ fn set_read_timeouts(min_bytes_read: u8, max_time_passed: Deciseconds) -> Result
 
 /// Clears the screen.
 fn clear_screen() {
-    print!("{CLEAR_SCREEN}{CURSOR_TOP_LEFT}");
+    print!("{}{}", ansi::ANSI_ERASE_DISPLAY, ansi::ANSI_CURSOR_TOP_LEFT);
 }
 
 /// Restores the terminal to the provided [`Termios`].
