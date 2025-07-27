@@ -757,6 +757,37 @@ fn main(args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
 
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
+    // Attempt to restore the terminal as best as one can given the situation
+    let _ = STDIN.lock().set_input_mode_flags(
+        SetTermAttrsCmd::Tcsetsf,
+        InputModeFlags::IGNBRK
+            | InputModeFlags::BRKINT
+            | InputModeFlags::PARMRK
+            | InputModeFlags::ISTRIP
+            | InputModeFlags::INLCR
+            | InputModeFlags::ICRNL
+            | InputModeFlags::IXON,
+        true,
+    );
+    let _ =
+        STDIN
+            .lock()
+            .set_output_mode_flags(SetTermAttrsCmd::Tcsetsf, OutputModeFlags::OPOST, true);
+    let _ = STDIN.lock().set_local_mode_flags(
+        SetTermAttrsCmd::Tcsetsf,
+        LocalModeFlags::ECHO
+            | LocalModeFlags::ECHONL
+            | LocalModeFlags::ICANON
+            | LocalModeFlags::ISIG
+            | LocalModeFlags::IEXTEN,
+        true,
+    );
+    let _ = STDIN.lock().set_control_mode_flags(
+        SetTermAttrsCmd::Tcsetsf,
+        ControlModeFlags::CSIZE,
+        false,
+    );
+    clear_screen();
     eprintln!("{PANIC_TITLE} {info}");
     process::exit(ExitStatus::ExitFailure(1))
 }
