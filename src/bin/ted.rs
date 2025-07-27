@@ -22,7 +22,7 @@ use alloc::{
 use core::{fmt::Display, panic::PanicInfo, slice};
 
 use tlenix_core::{
-    EnvVar, Errno, NixString, eprintln, format,
+    EnvVar, Errno, eprintln, format,
     fs::OpenOptions,
     numbers, parse_argv_envp, print,
     process::{self, ExitStatus},
@@ -35,6 +35,7 @@ use tlenix_core::{
 };
 
 const PANIC_TITLE: &str = "ted";
+const STATUS_BAR_TITLE: &str = "TED";
 
 const ESC_CODE: u8 = 0x1b;
 
@@ -46,6 +47,15 @@ const GET_CURSOR_POS: &str = "\u{001b}[6n";
 const HIDE_CURSOR: &str = "\u{001b}[?25l";
 const SHOW_CURSOR: &str = "\u{001b}[?25h";
 const CURSOR_DOWN_SEQ: &str = "\u{001b}[1B";
+
+const FMT_NORMAL: &str = "\u{001b}[m";
+const FMT_INVERT: &str = "\u{001b}[7m";
+const FMT_FG_BLUE: &str = "\u{001b}[34m";
+const FMT_FG_GREEN: &str = "\u{001b}[32m";
+const FMT_FG_DEFAULT: &str = "\u{001b}[39m";
+
+/// Sum of the lengths of all control sequences used in the [`StatusBar`].
+const STATUS_BAR_SEQS_LEN: usize = FMT_INVERT.len() + FMT_NORMAL.len();
 
 const READ_MIN_BYTES_READ: u8 = 0;
 const READ_MAX_TIME_PASSED: Deciseconds = Deciseconds(1);
@@ -231,15 +241,122 @@ impl From<&Point> for String {
     }
 }
 
+/// The different types of elements which can be rendered as part of the [`StatusBar`].
+///
+/// [`StatusBarElem::Code`]s don't take up space, while [`StatusBarElem::Text`]s and
+/// [`StatusBarElem::Char`]s _do_.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+enum StatusBarElem<'a> {
+    Code(&'a str),
+    Text(&'a str),
+    Char(char),
+}
+impl StatusBarElem<'_> {
+    fn len(&self) -> usize {
+        match self {
+            Self::Code(_) => 0,
+            Self::Text(t) => t.len(),
+            Self::Char(_) => 1,
+        }
+    }
+}
+
+/// The editor's status bar, displaying information about the current file.
+#[derive(Debug, Clone)]
+struct StatusBar {
+    /// The path of the currently-open file.
+    file_path: String,
+    /// The rendered form of the status bar.
+    rendered: String,
+}
+impl StatusBar {
+    fn new(file_path: &str, cols: usize) -> Self {
+        let mut status_bar = Self {
+            file_path: file_path.to_string(),
+            rendered: String::with_capacity(cols + STATUS_BAR_SEQS_LEN),
+        };
+        status_bar.update_render(cols);
+        status_bar
+    }
+
+    /// Updates [`Self::file_path`].
+    fn update_file(&mut self, file: &str, cols: usize) {
+        self.file_path = file.to_string();
+        self.update_render(cols);
+    }
+
+    /// Updates the rendered state of this [`StatusBar`]. Must be called every time the state is
+    /// changed in any way.
+    fn update_render(&mut self, cols: usize) {
+        use StatusBarElem::{Char, Code, Text};
+
+        self.rendered.clear();
+        self.rendered.push_str(FMT_INVERT);
+
+        let elems = [
+            Code(FMT_FG_BLUE),
+            Char(' '),
+            Text(STATUS_BAR_TITLE),
+            Char(' '),
+            Code(FMT_FG_GREEN),
+            Char(' '),
+            Text(&self.file_path),
+            Char(' '),
+            Code(FMT_FG_DEFAULT),
+        ];
+
+        let mut elems_len = 0;
+        for elem in elems {
+            // Don't add the next element if it would make the status bar string too long
+            if (elems_len + elem.len()) > cols {
+                break;
+            }
+
+            // clear_screen();
+            // print!(
+            //     "{}",
+            //     match elem {
+            //         Code(c) => format!("{c}"),
+            //         Text(t) => format!("{t}"),
+            //         Char(c) => format!("{c}"),
+            //     }
+            // );
+            // tlenix_core::thread::sleep(&core::time::Duration::from_secs(1));
+            //
+            match elem {
+                Code(c) => self.rendered.push_str(c),
+                Text(t) => self.rendered.push_str(t),
+                Char(c) => self.rendered.push(c),
+            }
+            elems_len += elem.len();
+        }
+
+        // Fill the remaining space with inverted spaces
+        while elems_len < cols {
+            self.rendered.push(' ');
+            elems_len += 1;
+        }
+
+        self.rendered.push_str(FMT_NORMAL);
+    }
+}
+impl Display for StatusBar {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.rendered)
+    }
+}
+
 /// The current state of the editor.
 #[derive(Debug, Clone)]
 struct EditorState {
     /// The original state of the terminal.
     orig_termios: Termios,
-    /// The size of the terminal window.
+    /// The size of the terminal window (minus the status bar).
     win_size: WinSize,
     /// The individual lines of the text currently being edited.
     editor_rows: Vec<String>,
+    /// The status bar of the editor.
+    status_bar: StatusBar,
     /// Wrapper around a [`String`]. This [`String`] is generated and rendered to the screen every
     /// frame.
     render_buf: RenderBuffer,
@@ -265,11 +382,13 @@ impl EditorState {
         let mut editor_rows = Vec::with_capacity(win_size.rows);
         editor_rows.push(String::new());
         let render_buf = RenderBuffer::new(&win_size);
+        let cols = win_size.cols;
         let mut result = Self {
             orig_termios,
             win_size,
             editor_rows,
             render_buf,
+            status_bar: StatusBar::new("[new file]", cols),
             cursor: Cursor(Point::default()),
             screen_offset: Point::default(),
             should_exit: false,
@@ -285,7 +404,10 @@ impl EditorState {
 
         self.render_buf.0.push_str(HIDE_CURSOR);
         self.render_buf.0.push_str(CURSOR_TOP_LEFT);
+
         self.add_rows();
+        self.add_status_bar();
+
         // Move the cursor to its current position on the screen
         self.render_buf.0.push_str(
             &self
@@ -314,15 +436,18 @@ impl EditorState {
                 self.render_buf.0.push('~');
                 self.render_buf.0.push(' ');
             }
-            self.render_buf.0.push_str(CLEAR_REMAINING_LINE);
 
+            self.render_buf.0.push_str(CLEAR_REMAINING_LINE);
             self.render_buf.0.push('\r');
-            if i < self.win_size.rows - 1 {
-                self.render_buf.0.push('\n');
-            } else {
-                self.render_buf.0.push_str(CURSOR_DOWN_SEQ);
-            }
+            self.render_buf.0.push('\n');
         }
+    }
+
+    /// Adds the status bar to the render buffer.
+    fn add_status_bar(&mut self) {
+        self.render_buf.0.push_str(&self.status_bar.rendered);
+        self.render_buf.0.push('\r');
+        self.render_buf.0.push_str(CURSOR_DOWN_SEQ);
     }
 
     /// Gets the slice of the editor row which is visible on the screen.
@@ -431,7 +556,7 @@ impl EditorState {
         }
     }
 
-    fn read_file<NS: Into<NixString>>(&mut self, path: NS) -> Result<(), Errno> {
+    fn read_file(&mut self, path: &str) -> Result<(), Errno> {
         let file_contents = OpenOptions::new()
             .read_only()
             .open(path)?
@@ -445,6 +570,8 @@ impl EditorState {
 
         self.cursor_up(usize::MAX);
         self.cursor_left(usize::MAX);
+
+        self.status_bar.update_file(path, self.win_size.cols);
 
         Ok(())
     }
@@ -517,12 +644,16 @@ fn get_win_size() -> WinSize {
 
     // Fallback: Move the cursor to the bottom-right and get cursor position
     print!("{CURSOR_BOTTOM_RIGHT}");
-    let win_size = if let Ok(pos) = get_cursor_pos() {
+    let mut win_size = if let Ok(pos) = get_cursor_pos() {
         pos.into()
     } else {
         WinSize::default()
     };
     print!("{CURSOR_TOP_LEFT}");
+    // Shrink the window height by one to make room for the status bar
+    if win_size.rows > 1 {
+        win_size.rows -= 1;
+    }
     win_size
 }
 
