@@ -23,6 +23,7 @@ compile_error!("This crate only functions on x86_64 linux targets.");
 extern crate alloc;
 
 mod allocator;
+pub mod ansi;
 mod args;
 pub mod fs;
 pub mod ipc;
