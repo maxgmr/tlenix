@@ -1,6 +1,6 @@
 //! Module containing the [`super::Termios`] control character indicies.
 
-/// An index corresponding to a particular control character within [`Termios`].
+/// An index corresponding to a particular control character within [`super::Termios`].
 #[repr(usize)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ControlCharIndex {
