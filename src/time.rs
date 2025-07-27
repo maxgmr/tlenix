@@ -64,7 +64,7 @@ impl Ord for Timespec {
 }
 impl Display for Timespec {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}.{}", self.secs, self.nanos)
+        write!(f, "{}.{:09}", self.secs, self.nanos.abs())
     }
 }
 impl Add for Timespec {
