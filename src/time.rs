@@ -1,5 +1,10 @@
 //! Module relating to the measurement of time.
 
+use core::{
+    fmt::Display,
+    ops::{Add, AddAssign, Sub, SubAssign},
+};
+
 use crate::{Errno, SyscallNum, syscall_result};
 
 /// The different clocks which can be used with [`clock_time`].
@@ -55,6 +60,43 @@ impl Ord for Timespec {
         self.secs
             .cmp(&other.secs)
             .then(self.nanos.cmp(&other.nanos))
+    }
+}
+impl Display for Timespec {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}.{}", self.secs, self.nanos)
+    }
+}
+impl Add for Timespec {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            secs: self.secs + rhs.secs,
+            nanos: self.nanos + rhs.nanos,
+        }
+    }
+}
+impl AddAssign for Timespec {
+    fn add_assign(&mut self, rhs: Self) {
+        self.secs += rhs.secs;
+        self.nanos += rhs.nanos;
+    }
+}
+impl Sub for Timespec {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            secs: self.secs - rhs.secs,
+            nanos: self.nanos - rhs.nanos,
+        }
+    }
+}
+impl SubAssign for Timespec {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.secs -= rhs.secs;
+        self.nanos -= rhs.nanos;
     }
 }
 
@@ -127,5 +169,43 @@ mod tests {
         assert!(ts < ts_more_secs);
         assert!(ts > ts_more_nanos);
         assert!(ts == ts_eq);
+    }
+
+    #[test_case]
+    fn timespec_add() {
+        let mut ts1 = Timespec {
+            secs: 67,
+            nanos: 1_234_567,
+        };
+        let ts2 = Timespec {
+            secs: 33,
+            nanos: 8_765_432,
+        };
+        let expected = Timespec {
+            secs: 100,
+            nanos: 9_999_999,
+        };
+        assert_eq!(ts1 + ts2, expected);
+        ts1 += ts2;
+        assert_eq!(ts1, expected);
+    }
+
+    #[test_case]
+    fn timepsec_sub() {
+        let mut ts1 = Timespec {
+            secs: 10,
+            nanos: 1_234,
+        };
+        let ts2 = Timespec {
+            secs: 10,
+            nanos: 2_345,
+        };
+        let expected = Timespec {
+            secs: 0,
+            nanos: -1_111,
+        };
+        assert_eq!(ts1 - ts2, expected);
+        ts1 -= ts2;
+        assert_eq!(ts1, expected);
     }
 }
