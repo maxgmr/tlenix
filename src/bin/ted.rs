@@ -17,13 +17,15 @@ extern crate alloc;
 
 use alloc::{
     string::{String, ToString},
+    vec,
     vec::Vec,
 };
 use core::{fmt::Display, panic::PanicInfo, slice};
 
 use getargs::{Arg, Options};
 use tlenix_core::{
-    EnvVar, Errno, ansi, ansi_cursor_down, ansi_cursor_right, eprintln, format,
+    EnvVar, Errno, ansi, ansi_cursor_down, ansi_cursor_down_col1, ansi_cursor_right, eprintln,
+    format,
     fs::OpenOptions,
     numbers, parse_argv_envp, print,
     process::{self, ExitStatus},
@@ -32,6 +34,7 @@ use tlenix_core::{
         ControlCharIndex, ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags,
         SetTermAttrsCmd, Termios, WinSize,
     },
+    time::{GetTimeClock, Timespec, clock_time},
     try_exit,
 };
 
@@ -281,6 +284,8 @@ impl StatusBarElem<'_> {
 struct StatusBar {
     /// The path of the currently-open file.
     file_path: String,
+    /// The last frame time benchmark, if any.
+    last_frame_time: Option<Timespec>,
     /// The rendered form of the status bar.
     rendered: String,
 }
@@ -288,6 +293,7 @@ impl StatusBar {
     fn new(file_path: &str, cols: usize) -> Self {
         let mut status_bar = Self {
             file_path: file_path.to_string(),
+            last_frame_time: None,
             rendered: String::new(),
         };
         status_bar.update_render(cols);
@@ -300,6 +306,12 @@ impl StatusBar {
     //     self.update_render(cols);
     // }
 
+    /// Updates [`Self::last_frame_time`].
+    fn update_benchmark(&mut self, last_frame_time: Timespec, cols: usize) {
+        self.last_frame_time = Some(last_frame_time);
+        self.update_render(cols);
+    }
+
     /// Updates the rendered state of this [`StatusBar`]. Must be called every time the state is
     /// changed in any way.
     fn update_render(&mut self, cols: usize) {
@@ -308,7 +320,7 @@ impl StatusBar {
         self.rendered.clear();
         self.rendered.push_str(ansi::ANSI_INVERT);
 
-        let elems = [
+        let mut elems = vec![
             Code(ansi::ANSI_FG_BLUE),
             Char(' '),
             Text(STATUS_BAR_TITLE),
@@ -319,6 +331,14 @@ impl StatusBar {
             Char(' '),
             Code(ansi::ANSI_FG_DEFAULT),
         ];
+
+        let formatted_lft = self
+            .last_frame_time
+            .map_or(String::new(), |lft| format!("{lft}"));
+        if !formatted_lft.is_empty() {
+            elems.push(Text("Last frame time: "));
+            elems.push(Text(&formatted_lft));
+        }
 
         let mut elems_len = 0;
         for elem in elems {
@@ -428,6 +448,12 @@ impl EditorState {
 
     /// Refreshes the screen, rendering the current state of the editor.
     fn refresh_screen(&mut self) {
+        let start_time = if self.options.benchmark {
+            clock_time(GetTimeClock::Monotonic).unwrap()
+        } else {
+            Timespec::default()
+        };
+
         self.render_buf.0.clear();
 
         self.render_buf.0.push_str(ansi::ANSI_HIDE_CURSOR);
@@ -445,6 +471,22 @@ impl EditorState {
         self.render_buf.0.push_str(ansi::ANSI_SHOW_CURSOR);
 
         print!("{}", self.render_buf);
+
+        if self.options.benchmark {
+            self.status_bar.update_benchmark(
+                clock_time(GetTimeClock::Monotonic).unwrap() - start_time,
+                self.win_size.cols,
+            );
+            // Re-draw status bar now that benchmarking is done, then move cursor back to proper
+            // place
+            print!(
+                "{}{}{}",
+                ansi_cursor_down_col1!(999),
+                self.status_bar.rendered,
+                self.cursor
+                    .term_seq(self.screen_offset.row, self.screen_offset.col),
+            );
+        }
     }
 
     /// Adds the interface rows to the render buffer.
