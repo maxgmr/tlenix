@@ -7,6 +7,10 @@ use core::{
 
 use crate::{Errno, SyscallNum, syscall_result};
 
+const NANOS_UPPER_BOUND: i64 = 999_999_999;
+const NANOS_LOWER_BOUND: i64 = -(NANOS_UPPER_BOUND);
+const NANOS_IN_SEC: i64 = NANOS_UPPER_BOUND + 1;
+
 /// The different clocks which can be used with [`clock_time`].
 #[repr(usize)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -50,6 +54,27 @@ pub struct Timespec {
     /// The number of nanoseconds which have passed since the last second.
     pub nanos: i64,
 }
+impl Timespec {
+    /// Normalize so that [`Self::nanos`] is always within its proper bounds.
+    fn normalize(mut self) -> Self {
+        if self.nanos > NANOS_UPPER_BOUND || self.nanos < NANOS_LOWER_BOUND {
+            self.secs += self.nanos / NANOS_IN_SEC;
+            self.nanos %= NANOS_IN_SEC;
+        }
+
+        if self.secs.is_positive() && self.nanos.is_negative() {
+            self.secs -= 1;
+            self.nanos += NANOS_IN_SEC;
+        }
+
+        if self.secs.is_negative() && self.nanos.is_positive() {
+            self.secs += 1;
+            self.nanos -= NANOS_IN_SEC;
+        }
+
+        self
+    }
+}
 impl PartialOrd for Timespec {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         Some(self.cmp(other))
@@ -64,7 +89,17 @@ impl Ord for Timespec {
 }
 impl Display for Timespec {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}.{:09}", self.secs, self.nanos.abs())
+        write!(
+            f,
+            "{}{}.{:09}",
+            if self.secs.is_negative() || self.nanos.is_negative() {
+                "-"
+            } else {
+                ""
+            },
+            self.secs.abs(),
+            self.nanos.abs()
+        )
     }
 }
 impl Add for Timespec {
@@ -75,12 +110,12 @@ impl Add for Timespec {
             secs: self.secs + rhs.secs,
             nanos: self.nanos + rhs.nanos,
         }
+        .normalize()
     }
 }
 impl AddAssign for Timespec {
     fn add_assign(&mut self, rhs: Self) {
-        self.secs += rhs.secs;
-        self.nanos += rhs.nanos;
+        *self = *self + rhs;
     }
 }
 impl Sub for Timespec {
@@ -91,12 +126,12 @@ impl Sub for Timespec {
             secs: self.secs - rhs.secs,
             nanos: self.nanos - rhs.nanos,
         }
+        .normalize()
     }
 }
 impl SubAssign for Timespec {
     fn sub_assign(&mut self, rhs: Self) {
-        self.secs -= rhs.secs;
-        self.nanos -= rhs.nanos;
+        *self = *self - rhs;
     }
 }
 
@@ -133,7 +168,7 @@ mod tests {
     use core::time::Duration;
 
     use super::*;
-    use crate::thread::sleep;
+    use crate::{format, thread::sleep};
 
     #[test_case]
     fn cmp_hw_time() {
@@ -191,7 +226,7 @@ mod tests {
     }
 
     #[test_case]
-    fn timepsec_sub() {
+    fn timespec_sub() {
         let mut ts1 = Timespec {
             secs: 10,
             nanos: 1_234,
@@ -207,5 +242,85 @@ mod tests {
         assert_eq!(ts1 - ts2, expected);
         ts1 -= ts2;
         assert_eq!(ts1, expected);
+    }
+
+    #[test_case]
+    fn timespec_add_carry() {
+        let mut ts1 = Timespec {
+            secs: 0,
+            nanos: NANOS_UPPER_BOUND,
+        };
+        let ts2 = Timespec { secs: 0, nanos: 1 };
+        let expected = Timespec { secs: 1, nanos: 0 };
+        assert_eq!(ts1 + ts2, expected);
+        ts1 += ts2;
+        assert_eq!(ts1, expected);
+    }
+
+    #[test_case]
+    fn timespec_sub_carry() {
+        let mut ts1 = Timespec { secs: 1, nanos: 0 };
+        let ts2 = Timespec { secs: 0, nanos: 1 };
+        let expected = Timespec {
+            secs: 0,
+            nanos: NANOS_UPPER_BOUND,
+        };
+        assert_eq!(ts1 - ts2, expected);
+        ts1 -= ts2;
+        assert_eq!(ts1, expected);
+    }
+
+    #[test_case]
+    fn timespec_neg_carry() {
+        let mut ts1 = Timespec {
+            secs: -1,
+            nanos: -800_000_000,
+        };
+        let ts2 = Timespec {
+            secs: 2,
+            nanos: 500_000_000,
+        };
+        let expected = Timespec {
+            secs: 0,
+            nanos: 700_000_000,
+        };
+        assert_eq!(ts1 + ts2, expected);
+        ts1 += ts2;
+        assert_eq!(ts1, expected);
+    }
+
+    #[test_case]
+    #[allow(clippy::zero_prefixed_literal)]
+    fn timespec_display() {
+        assert_eq!(
+            &format!(
+                "{}",
+                Timespec {
+                    secs: 1,
+                    nanos: 234_567_890
+                }
+            ),
+            "1.234567890"
+        );
+        assert_eq!(
+            &format!(
+                "{}",
+                Timespec {
+                    secs: 0,
+                    nanos: -300_000_000
+                }
+            ),
+            "-0.300000000"
+        );
+        assert_eq!(
+            &format!(
+                "{}",
+                Timespec {
+                    secs: -1,
+                    nanos: -000_001_234
+                }
+            ),
+            "-1.000001234"
+        );
     }
 }
