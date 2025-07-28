@@ -21,6 +21,7 @@ use alloc::{
 };
 use core::{fmt::Display, panic::PanicInfo, slice};
 
+use getargs::{Arg, Options};
 use tlenix_core::{
     EnvVar, Errno, ansi, ansi_cursor_down, ansi_cursor_right, eprintln, format,
     fs::OpenOptions,
@@ -36,6 +37,7 @@ use tlenix_core::{
 
 const PANIC_TITLE: &str = "ted";
 const STATUS_BAR_TITLE: &str = "TED";
+const NEW_FILE_STR: &str = "[new file]";
 
 const ESC_CODE: u8 = 0x1b;
 
@@ -69,6 +71,36 @@ core::arch::global_asm! {
 /// Get the byte version of "CTRL + this key".
 const fn ctrl_key(byte: u8) -> u8 {
     byte & 0x1f
+}
+
+/// The various command-line options and arguments which can be passed to this program.
+#[derive(Clone, Debug, Default)]
+struct TedOptions {
+    /// The path to the opened file.
+    path: Option<String>,
+    /// Whether or not to print benchmarks.
+    benchmark: bool,
+}
+impl TryFrom<&[String]> for TedOptions {
+    type Error = Errno;
+
+    fn try_from(value: &[String]) -> Result<Self, Self::Error> {
+        let mut opts = Options::new(value.iter().map(String::as_str).skip(1));
+
+        let mut ted_options = Self::default();
+
+        while let Some(arg) = opts.next_arg().map_err(|_| Errno::Einval)? {
+            match arg {
+                Arg::Short('b') | Arg::Long("benchmark" | "bench") => ted_options.benchmark = true,
+                Arg::Positional(val) if ted_options.path.is_none() => {
+                    ted_options.path = Some(val.to_string());
+                }
+                _ => {}
+            }
+        }
+
+        Ok(ted_options)
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -262,11 +294,11 @@ impl StatusBar {
         status_bar
     }
 
-    /// Updates [`Self::file_path`].
-    fn update_file(&mut self, file: &str, cols: usize) {
-        self.file_path = file.to_string();
-        self.update_render(cols);
-    }
+    // /// Updates [`Self::file_path`].
+    // fn update_file(&mut self, file: &str, cols: usize) {
+    //     self.file_path = file.to_string();
+    //     self.update_render(cols);
+    // }
 
     /// Updates the rendered state of this [`StatusBar`]. Must be called every time the state is
     /// changed in any way.
@@ -323,6 +355,8 @@ impl Display for StatusBar {
 struct EditorState {
     /// The original state of the terminal.
     orig_termios: Termios,
+    /// The options and parameters of this editor.
+    options: TedOptions,
     /// The size of the terminal window (minus the status bar).
     win_size: WinSize,
     /// The individual lines of the text currently being edited.
@@ -342,7 +376,7 @@ struct EditorState {
 impl EditorState {
     /// Start up the editor, setting up the terminal accordingly. The terminal is returned to its
     /// previous state when this [`EditorState`] is dropped.
-    fn start() -> Result<Self, Errno> {
+    fn start(options: TedOptions) -> Result<Self, Errno> {
         let orig_termios = STDIN.lock().termios()?;
 
         enter_raw_mode()?;
@@ -353,16 +387,36 @@ impl EditorState {
         // Shrink the window height by 1 to make room for status bar
         win_size.rows -= 1;
 
-        let mut editor_rows = Vec::with_capacity(win_size.rows);
-        editor_rows.push(String::new());
+        // Read the file (if provided)
+        let editor_rows = if let Some(path) = &options.path {
+            let mut er = Vec::new();
+            for line in OpenOptions::new()
+                .create(true)
+                .open(path)?
+                .read_to_string()?
+                .lines()
+            {
+                er.push(line.to_string());
+            }
+            er
+        } else {
+            let mut er = Vec::with_capacity(win_size.rows);
+            er.push(String::new());
+            er
+        };
+
         let render_buf = RenderBuffer::new(&win_size);
         let cols = win_size.cols;
+
+        let sb_file = options.path.clone().unwrap_or(NEW_FILE_STR.to_string());
+
         let mut result = Self {
             orig_termios,
+            options,
             win_size,
             editor_rows,
             render_buf,
-            status_bar: StatusBar::new("[new file]", cols),
+            status_bar: StatusBar::new(&sb_file, cols),
             cursor: Cursor(Point::default()),
             screen_offset: Point::default(),
             should_exit: false,
@@ -530,26 +584,6 @@ impl EditorState {
             // Move screen right
             self.screen_offset.col = (self.cursor.0.col - self.win_size.cols) + 1;
         }
-    }
-
-    fn read_file(&mut self, path: &str) -> Result<(), Errno> {
-        let file_contents = OpenOptions::new()
-            .read_only()
-            .open(path)?
-            .read_to_string()?;
-
-        self.editor_rows.clear();
-
-        for line in file_contents.lines() {
-            self.editor_rows.push(line.to_string());
-        }
-
-        self.cursor_up(usize::MAX);
-        self.cursor_left(usize::MAX);
-
-        self.status_bar.update_file(path, self.win_size.cols);
-
-        Ok(())
     }
 
     /// Gets the lower bound of the cursor X-coordinate.
@@ -741,11 +775,8 @@ fn read_keypress() -> Result<Key, Errno> {
 }
 
 fn main(args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
-    let mut state = try_exit!(EditorState::start());
-
-    if let Some(path) = args.get(1) {
-        try_exit!(state.read_file(path));
-    }
+    let ted_options = try_exit!(TedOptions::try_from(args));
+    let mut state = try_exit!(EditorState::start(ted_options));
 
     loop {
         state.refresh_screen();
