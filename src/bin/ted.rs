@@ -408,6 +408,8 @@ impl EditorState {
         let mut win_size = get_win_size();
         // Shrink the window height by 1 to make room for status bar
         win_size.rows -= 1;
+        // Set the scrolling region to the top and bottom row.
+        print!("\u{001b}[{};{}r", 1, win_size.rows);
 
         // Read the file (if provided)
         let editor_rows = if let Some(path) = &options.path {
@@ -660,6 +662,8 @@ impl EditorState {
             self.screen_offset.row = self.cursor.0.row;
             // Optimize next frame- shift existing rows
             self.editor_rows_prev.rotate_right(diff % len);
+            // Scroll rows up on terminal
+            print!("\u{001b}[{}T", diff);
         } else if self.cursor.0.row >= (self.screen_offset.row + self.win_size.rows) {
             let diff = self.cursor.0.row - ((self.screen_offset.row + self.win_size.rows) - 1);
             let len = self.editor_rows_prev.len();
@@ -667,6 +671,8 @@ impl EditorState {
             self.screen_offset.row = (self.cursor.0.row - self.win_size.rows) + 1;
             // Optimize next frame- shift existing rows
             self.editor_rows_prev.rotate_left(diff % len);
+            // Scroll rows up down terminal
+            print!("\u{001b}[{}S", diff);
         }
 
         // Handle horizontal scrolling
