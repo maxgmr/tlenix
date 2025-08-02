@@ -513,6 +513,8 @@ impl EditorState {
         for i in row_start..row_finish {
             new_line.clear();
 
+            new_line.push_str(ansi::ANSI_ERASE_LINE);
+
             let index_width = self.row_num_width() - 1;
             if let Some(line) = self.editor_rows.get(i) {
                 let line_num = format!("{:>index_width$} ", i + 1);
@@ -527,8 +529,6 @@ impl EditorState {
                 new_line.push(' ');
                 new_line.push_str(ansi::ANSI_RESET_GRAPHIC);
             }
-
-            new_line.push_str(ansi::ANSI_ERASE_REMAINING_LINE);
 
             let screen_row_index = i - row_start;
             let row_changed = self.editor_rows_prev.get(screen_row_index) != Some(&new_line);
@@ -579,7 +579,8 @@ impl EditorState {
         if slice_start >= current_row.len() {
             return "";
         }
-        let slice_end = (self.win_size.cols + self.screen_offset.col).clamp(0, current_row.len());
+        let slice_end = ((self.win_size.cols - self.row_num_width()) + self.screen_offset.col)
+            .clamp(0, current_row.len());
         if slice_start >= slice_end {
             return "";
         }
