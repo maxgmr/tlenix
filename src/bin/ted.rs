@@ -20,7 +20,7 @@ use alloc::{
     vec,
     vec::Vec,
 };
-use core::{fmt::Display, mem, panic::PanicInfo, slice};
+use core::{cmp, fmt::Display, mem, panic::PanicInfo, slice};
 
 use getargs::{Arg, Options};
 use tlenix_core::{
@@ -207,11 +207,11 @@ struct Cursor(Point);
 impl Cursor {
     /// Converts this position to the cursor position on the visible screen, then produces the
     /// terminal sequence which moves the terminal cursor to that position.
-    fn term_seq(&self, row_offset: usize, col_offset: usize) -> String {
+    fn term_seq(&self, row_offset: usize, col_offset: usize, row_num_width: usize) -> String {
         format!(
             "\u{001b}[{};{}H",
             self.0.row.saturating_sub(row_offset) + 1,
-            self.0.col.saturating_sub(col_offset) + 1
+            self.0.col.saturating_sub(col_offset) + 1 + row_num_width
         )
     }
 }
@@ -472,11 +472,11 @@ impl EditorState {
         self.add_status_bar();
 
         // Move the cursor to its "actual" position on the screen
-        self.render_buf.0.push_str(
-            &self
-                .cursor
-                .term_seq(self.screen_offset.row, self.screen_offset.col),
-        );
+        self.render_buf.0.push_str(&self.cursor.term_seq(
+            self.screen_offset.row,
+            self.screen_offset.col,
+            self.row_num_width(),
+        ));
         self.render_buf.0.push_str(ansi::ANSI_SHOW_CURSOR);
 
         // Render this frame
@@ -493,8 +493,11 @@ impl EditorState {
                 "{}{}{}",
                 ansi_cursor_down_col1!(999),
                 self.status_bar.rendered,
-                self.cursor
-                    .term_seq(self.screen_offset.row, self.screen_offset.col),
+                self.cursor.term_seq(
+                    self.screen_offset.row,
+                    self.screen_offset.col,
+                    self.row_num_width()
+                ),
             );
         }
     }
@@ -510,7 +513,7 @@ impl EditorState {
         for i in row_start..row_finish {
             new_line.clear();
 
-            let index_width = self.col_lower_bound() - 1;
+            let index_width = self.row_num_width() - 1;
             if let Some(line) = self.editor_rows.get(i) {
                 let line_num = format!("{:>index_width$} ", i + 1);
                 new_line.push_str(ansi::ANSI_FG_B_BLACK);
@@ -572,7 +575,10 @@ impl EditorState {
         if current_row.is_empty() {
             return "";
         }
-        let slice_start = self.screen_offset.col.clamp(0, current_row.len() - 1);
+        let slice_start = self.screen_offset.col;
+        if slice_start >= current_row.len() {
+            return "";
+        }
         let slice_end = (self.win_size.cols + self.screen_offset.col).clamp(0, current_row.len());
         if slice_start >= slice_end {
             return "";
@@ -606,36 +612,23 @@ impl EditorState {
     }
 
     fn cursor_left(&mut self, amount: usize) {
-        self.cursor.0.col = self
-            .cursor
-            .0
-            .col
-            .saturating_sub(amount)
-            .clamp(self.col_lower_bound(), usize::MAX);
-
+        self.cursor.0.col = self.cursor.0.col.saturating_sub(amount);
         self.scroll();
     }
 
     fn cursor_right(&mut self, amount: usize) {
-        let upper_bound = (self.col_lower_bound() + core::cmp::max(self.current_line_len(), 1)) - 1;
+        let upper_bound = cmp::max(self.current_line_len(), 1) - 1;
         self.cursor.0.col = self
             .cursor
             .0
             .col
             .saturating_add(amount)
             .clamp(0, upper_bound);
-
         self.scroll();
     }
 
     fn cursor_up(&mut self, amount: usize) {
-        self.cursor.0.row = self
-            .cursor
-            .0
-            .row
-            .saturating_sub(amount)
-            .clamp(0, usize::MAX);
-
+        self.cursor.0.row = self.cursor.0.row.saturating_sub(amount);
         self.cursor_right(0);
         self.scroll();
     }
@@ -647,7 +640,6 @@ impl EditorState {
             .row
             .saturating_add(amount)
             .clamp(0, self.editor_rows.len() - 1);
-
         self.cursor_right(0);
         self.scroll();
     }
@@ -679,14 +671,17 @@ impl EditorState {
         if self.cursor.0.col < self.screen_offset.col {
             // Move screen left
             self.screen_offset.col = self.cursor.0.col;
-        } else if self.cursor.0.col >= (self.screen_offset.col + self.win_size.cols) {
+        } else if self.cursor.0.col
+            >= (self.screen_offset.col + (self.win_size.cols - self.row_num_width()))
+        {
             // Move screen right
-            self.screen_offset.col = (self.cursor.0.col - self.win_size.cols) + 1;
+            self.screen_offset.col =
+                (self.cursor.0.col - (self.win_size.cols - self.row_num_width())) + 1;
         }
     }
 
-    /// Gets the lower bound of the cursor X-coordinate.
-    fn col_lower_bound(&self) -> usize {
+    /// Gets the width of the row number column displayed on the left side of the screen.
+    fn row_num_width(&self) -> usize {
         numbers::num_digits_base10(self.editor_rows.len()) + 1
     }
 
