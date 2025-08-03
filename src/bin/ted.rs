@@ -78,6 +78,18 @@ const fn ctrl_key(byte: u8) -> u8 {
     byte & 0x1f
 }
 
+/// The different modes of the editor.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+enum EditorMode {
+    /// Move around the text, switch between other modes, etc.
+    #[default]
+    Normal,
+    /// Edit the text.
+    Edit,
+    /// Input commands.
+    Command,
+}
+
 /// The various command-line options and arguments which can be passed to this program.
 #[derive(Clone, Debug, Default)]
 struct TedOptions {
@@ -431,6 +443,8 @@ struct EditorState {
     orig_termios: Termios,
     /// The options and parameters of this editor.
     options: TedOptions,
+    /// The current [`EditorMode`].
+    mode: EditorMode,
     /// The size of the terminal window (minus the status bar).
     win_size: WinSize,
     /// The individual lines of the text currently being edited.
@@ -492,6 +506,7 @@ impl EditorState {
         let mut result = Self {
             orig_termios,
             options,
+            mode: EditorMode::default(),
             win_size,
             editor_rows,
             editor_rows_prev,
