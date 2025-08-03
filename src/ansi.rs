@@ -19,81 +19,81 @@ macro_rules! define_ecma_single_consts {
     }
 }
 define_ecma_single_consts![
-    /// Console sequence to reset all graphic attributes to their defaults.
+    /// Reset all graphic attributes to their defaults.
     ANSI_RESET_GRAPHIC = "";
-    /// Console sequence to set bold text.
+    /// Set bold text.
     ANSI_BOLD = "1";
-    /// Console sequence to set half-bright text.
+    /// Set half-bright text.
     ANSI_HALF_BRIGHT = "2";
-    /// Console sequence to set italic text.
+    /// Set italic text.
     ANSI_ITALIC = "3";
-    /// Console sequence to set blinking text.
+    /// Set blinking text.
     ANSI_BLINK = "5";
-    /// Console sequence to invert text colours.
+    /// Invert text colours.
     ANSI_INVERT = "7";
-    /// Console sequence to set underline.
+    /// Set underline.
     ANSI_UNDERLINE = "21";
-    /// Console sequence to set normal intensity.
+    /// Set normal intensity.
     ANSI_NORMAL_INTENSITY = "22";
-    /// Console sequence to turn off italics.
+    /// Turn off italics.
     ANSI_ITALIC_OFF = "23";
-    /// Console sequence to turn off underline.
+    /// Turn off underline.
     ANSI_UNDERLINE_OFF = "24";
-    /// Console sequence to turn off blinking.
+    /// Turn off blinking.
     ANSI_BLINK_OFF = "25";
-    /// Console sequence to turn off inverted text colours.
+    /// Turn off inverted text colours.
     ANSI_INVERT_OFF = "27";
-    /// Console sequence to set the foreground colour to black.
+    /// Set the foreground colour to black.
     ANSI_FG_BLACK = "30";
-    /// Console sequence to set the foreground colour to red.
+    /// Set the foreground colour to red.
     ANSI_FG_RED = "31";
-    /// Console sequence to set the foreground colour to green.
+    /// Set the foreground colour to green.
     ANSI_FG_GREEN = "32";
-    /// Console sequence to set the foreground colour to yellow.
+    /// Set the foreground colour to yellow.
     ANSI_FG_YELLOW = "33";
-    /// Console sequence to set the foreground colour to blue.
+    /// Set the foreground colour to blue.
     ANSI_FG_BLUE = "34";
-    /// Console sequence to set the foreground colour to magenta.
+    /// Set the foreground colour to magenta.
     ANSI_FG_MAGENTA = "35";
-    /// Console sequence to set the foreground colour to cyan.
+    /// Set the foreground colour to cyan.
     ANSI_FG_CYAN = "36";
-    /// Console sequence to set the foreground colour to white.
+    /// Set the foreground colour to white.
     ANSI_FG_WHITE = "37";
-    /// Console sequence to set the default foreground colour.
+    /// Set the default foreground colour.
     ANSI_FG_DEFAULT = "39";
-    /// Console sequence to set the background colour to black.
+    /// Set the background colour to black.
     ANSI_BG_BLACK = "40";
-    /// Console sequence to set the background colour to red.
+    /// Set the background colour to red.
     ANSI_BG_RED = "41";
-    /// Console sequence to set the background colour to green.
+    /// Set the background colour to green.
     ANSI_BG_GREEN = "42";
-    /// Console sequence to set the background colour to yellow.
+    /// Set the background colour to yellow.
     ANSI_BG_YELLOW = "43";
-    /// Console sequence to set the background colour to blue.
+    /// Set the background colour to blue.
     ANSI_BG_BLUE = "44";
-    /// Console sequence to set the background colour to magenta.
+    /// Set the background colour to magenta.
     ANSI_BG_MAGENTA = "45";
-    /// Console sequence to set the background colour to cyan.
+    /// Set the background colour to cyan.
     ANSI_BG_CYAN = "46";
-    /// Console sequence to set the background colour to white.
+    /// Set the background colour to white.
     ANSI_BG_WHITE = "47";
-    /// Console sequence to set the default background colour.
+    /// Set the default background colour.
     ANSI_BG_DEFAULT = "49";
-    /// Console sequence to set the foreground colour to bright black.
+    /// Set the foreground colour to bright black.
     ANSI_FG_B_BLACK = "90";
-    /// Console sequence to set the foreground colour to bright red.
+    /// Set the foreground colour to bright red.
     ANSI_FG_B_RED = "91";
-    /// Console sequence to set the foreground colour to bright green.
+    /// Set the foreground colour to bright green.
     ANSI_FG_B_GREEN = "92";
-    /// Console sequence to set the foreground colour to bright yellow.
+    /// Set the foreground colour to bright yellow.
     ANSI_FG_B_YELLOW = "93";
-    /// Console sequence to set the foreground colour to bright blue.
+    /// Set the foreground colour to bright blue.
     ANSI_FG_B_BLUE = "94";
-    /// Console sequence to set the foreground colour to bright magenta.
+    /// Set the foreground colour to bright magenta.
     ANSI_FG_B_MAGENTA = "95";
-    /// Console sequence to set the foreground colour to bright cyan.
+    /// Set the foreground colour to bright cyan.
     ANSI_FG_B_CYAN = "96";
-    /// Console sequence to set the foreground colour to bright white.
+    /// Set the foreground colour to bright white.
     ANSI_FG_B_WHITE = "97";
 ];
 
@@ -118,25 +118,25 @@ macro_rules! define_ansi_cursors {
 }
 
 define_ansi_cursors![
-    /// Console sequence to move the cursor up the given number of lines.
+    /// Move the cursor up the given number of lines.
     ansi_cursor_up = "A";
-    /// Console sequence to move the cursor down the given number of lines.
+    /// Move the cursor down the given number of lines.
     ansi_cursor_down = "B";
-    /// Console sequence to move the cursor right the given number of lines.
+    /// Move the cursor right the given number of lines.
     ansi_cursor_right = "C";
-    /// Console sequence to move the cursor left the given number of lines.
+    /// Move the cursor left the given number of lines.
     ansi_cursor_left = "D";
-    /// Console sequence to move the cursor down the given number of rows, to column 1.
+    /// Move the cursor down the given number of rows, to column 1.
     ansi_cursor_down_col1 = "E";
-    /// Console sequence to move the cursor up the given number of rows, to column 1.
+    /// Move the cursor up the given number of rows, to column 1.
     ansi_cursor_up_col1 = "F";
-    /// Console sequence to move the cursor to the given column in the current row.
+    /// Move the cursor to the given column in the current row.
     ansi_cursor_to_col = "G";
-    /// Console sequence to move the cursor to the given row in the current column.
+    /// Move the cursor to the given row in the current column.
     ansi_cursor_to_row = "d";
 ];
 
-/// Console sequence to move the cursor to a specified row and column.
+/// Move the cursor to a specified row and column.
 #[macro_export]
 macro_rules! ansi_cursor_to_pos {
     ($row:literal, $col:literal) => {
@@ -144,40 +144,40 @@ macro_rules! ansi_cursor_to_pos {
     };
 }
 
-/// Console sequence to move the cursor to the top left of the display.
+/// Move the cursor to the top left of the display.
 pub const ANSI_CURSOR_TOP_LEFT: &str = "\u{001b}[H";
 
-/// Console sequence to hide the cursor.
+/// Hide the cursor.
 pub const ANSI_HIDE_CURSOR: &str = "\u{001b}[?25l";
-/// Console sequence to show the cursor.
+/// Show the cursor.
 pub const ANSI_SHOW_CURSOR: &str = "\u{001b}[?25h";
 
-/// Console sequence to get the cursor position.
+/// Get the cursor position.
 pub const ANSI_GET_CURSOR_POS: &str = "\u{001b}[6n";
 
-/// Console sequence to erase from the cursor to the end of the display.
+/// Erase from the cursor to the end of the display.
 pub const ANSI_ERASE_CURSOR_TO_END: &str = "\u{001b}[J";
-/// Console sequence to erase from the start of the display to the cursor.
+/// Erase from the start of the display to the cursor.
 pub const ANSI_ERASE_START_TO_CURSOR: &str = "\u{001b}[1J";
-/// Console sequence to erase the whole display.
+/// Erase the whole display.
 pub const ANSI_ERASE_DISPLAY: &str = "\u{001b}[2J";
-/// Console sequence to erase the whole display, along with the scroll-back buffer.
+/// Erase the whole display, along with the scroll-back buffer.
 pub const ANSI_ERASE_DISPLAY_SCROLLBACK: &str = "\u{001b}[3J";
 
-/// Console sequence to erase from the cursor to the end of the line.
+/// Erase from the cursor to the end of the line.
 pub const ANSI_ERASE_REMAINING_LINE: &str = "\u{001b}[K";
-/// Console sequence to erase from the start of the line to the cursor.
+/// Erase from the start of the line to the cursor.
 pub const ANSI_ERASE_LINE_TO_CURSOR: &str = "\u{001b}[1K";
-/// Console sequence to erase the entire line.
+/// Erase the entire line.
 pub const ANSI_ERASE_LINE: &str = "\u{001b}[2K";
 
-/// Console sequence to clear all keyboard LEDs.
+/// Clear all keyboard LEDs.
 pub const ANSI_CLEAR_KB_LEDS: &str = "\u{001b}[0q";
-/// Console sequence to set the scroll lock keyboard LED.
+/// Set the scroll lock keyboard LED.
 pub const ANSI_SCROLL_LOCK_LED: &str = "\u{001b}[1q";
-/// Console sequence to set the num lock keyboard LED.
+/// Set the num lock keyboard LED.
 pub const ANSI_NUM_LOCK_LED: &str = "\u{001b}[2q";
-/// Console sequence to set the caps lock keyboard LED.
+/// Set the caps lock keyboard LED.
 pub const ANSI_CAPS_LOCK_LED: &str = "\u{001b}[3q";
 
 /// Save the current cursor location.
