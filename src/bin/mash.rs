@@ -23,7 +23,7 @@ use core::panic::PanicInfo;
 use num_enum::TryFromPrimitive;
 
 use tlenix_core::{
-    EnvVar, Errno, align_stack_pointer, eprintln,
+    ANSI_TLENIX_DEFAULT_CURSOR, EnvVar, Errno, align_stack_pointer, eprintln,
     fs::{self, FilePermissions},
     print,
     process::{self, ExitStatus},
@@ -79,6 +79,9 @@ extern "C" fn _start() -> ! {
     #[allow(unreachable_code)]
     #[allow(clippy::no_effect)]
     ();
+
+    // Set cursor to default.
+    print!("{}", ANSI_TLENIX_DEFAULT_CURSOR);
 
     loop {
         print_prompt();

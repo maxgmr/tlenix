@@ -68,6 +68,9 @@ pub const ENV_LEN_LIM: usize = PAGE_SIZE;
 /// The limit on the total size of `argv` and `envp` strings.
 pub const ARG_ENV_LIM: usize = PAGE_SIZE * 32;
 
+/// The default cursor console code.
+pub const ANSI_TLENIX_DEFAULT_CURSOR: &str = ansi::ANSI_CURSOR_B_UNDER;
+
 /// Aligns the stack pointer. Intended for use right at the beginning of execution.
 ///
 /// SAFETY: Valid ASM instruction with valid, statically-chosen arguments.

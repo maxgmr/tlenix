@@ -24,8 +24,8 @@ use core::{cmp, fmt::Display, mem, panic::PanicInfo, slice};
 
 use getargs::{Arg, Options};
 use tlenix_core::{
-    EnvVar, Errno, ansi, ansi_cursor_down, ansi_cursor_down_col1, ansi_cursor_right,
-    ansi_cursor_up_col1, eprintln, format,
+    ANSI_TLENIX_DEFAULT_CURSOR, EnvVar, Errno, ansi, ansi_cursor_down, ansi_cursor_down_col1,
+    ansi_cursor_right, ansi_cursor_up_col1, eprintln, format,
     fs::OpenOptions,
     numbers, parse_argv_envp, print,
     process::{self, ExitStatus},
@@ -55,6 +55,9 @@ const KEYPRESS_BUF_LEN: usize = 3;
 const TAB_LEN: usize = 4;
 
 const OPEN_MSG_SECS: i64 = 5;
+
+const NORMAL_MODE_CURSOR: &str = ansi::ANSI_CURSOR_BLOCK;
+const EDIT_MODE_CURSOR: &str = ansi::ANSI_CURSOR_B_UNDER;
 
 // Normal mode controls
 const CURSOR_U: u8 = b'k';
@@ -363,9 +366,9 @@ impl StatusBar {
         }
 
         let mut rendered = String::with_capacity(self.width * 4);
-        rendered.push_str(ansi::ANSI_INVERT);
 
         let mut elems = vec![
+            Code(ansi::ANSI_RESET_GRAPHIC),
             Code(ansi::ANSI_INVERT),
             Code(self.mode.ansi_colour_code()),
             Char(' '),
@@ -407,7 +410,7 @@ impl StatusBar {
             elems_len += 1;
         }
 
-        rendered.push_str(ansi::ANSI_INVERT_OFF);
+        rendered.push_str(ansi::ANSI_RESET_GRAPHIC);
 
         self.must_rerender = false;
         Some(rendered)
@@ -522,6 +525,7 @@ impl EditorState {
         enter_raw_mode()?;
         set_read_timeouts(READ_MIN_BYTES_READ, READ_MAX_TIME_PASSED)?;
         clear_screen();
+        print!("{}", NORMAL_MODE_CURSOR);
 
         let mut win_size = get_win_size();
         // Shrink the window height by 2 to make room for status bar and status message
@@ -779,6 +783,27 @@ impl EditorState {
         Ok(())
     }
 
+    fn update_mode(&mut self, mode: EditorMode) {
+        use EditorMode::{Command, Edit, Normal};
+        match (self.mode, mode) {
+            (Command, Normal) => self.status_message.clear(),
+            (Normal, Command) => {
+                self.status_message.clear();
+                self.status_message.push(ENTER_COMMAND_MODE as char);
+            }
+            (Normal, Edit) => {
+                print!("{}", EDIT_MODE_CURSOR);
+            }
+            (Edit, Normal) => {
+                print!("{}", NORMAL_MODE_CURSOR);
+                self.cursor_left(1);
+            }
+            _ => {}
+        }
+        self.status_bar.update_mode(mode);
+        self.mode = mode;
+    }
+
     fn row_insert_char(&mut self, c: char) {
         let row_index = self.cursor.0.row;
         let mut col_index = self.cursor.0.col;
@@ -837,23 +862,6 @@ impl EditorState {
                 Timespec { secs: 1, nanos: 0 },
             );
         }
-    }
-
-    fn update_mode(&mut self, mode: EditorMode) {
-        use EditorMode::{Command, Edit, Normal};
-        match (self.mode, mode) {
-            (Command, Normal) => self.status_message.clear(),
-            (Normal, Command) => {
-                self.status_message.clear();
-                self.status_message.push(ENTER_COMMAND_MODE as char);
-            }
-            (Edit, Normal) => {
-                self.cursor_left(1);
-            }
-            _ => {}
-        }
-        self.status_bar.update_mode(mode);
-        self.mode = mode;
     }
 
     fn cursor_left(&mut self, amount: usize) {
@@ -1082,6 +1090,7 @@ fn clear_screen() {
 
 /// Restores the terminal to the provided [`Termios`].
 fn restore_terminal(termios: &Termios) -> Result<(), Errno> {
+    print!("{}", ANSI_TLENIX_DEFAULT_CURSOR);
     STDIN.lock().set_termios(SetTermAttrsCmd::Tcsetsf, termios)
 }
 
@@ -1152,6 +1161,7 @@ fn main(args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
     // Attempt to restore the terminal as best as one can given the situation
+    print!("{}", ANSI_TLENIX_DEFAULT_CURSOR);
     print!("{}", ansi::ANSI_RESET_GRAPHIC);
     let _ = STDIN.lock().set_input_mode_flags(
         SetTermAttrsCmd::Tcsetsf,
