@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A collection of common ANSI console control sequences.
 - Time measurement.
 - The Tlenix source code is now included in the installation within `/usr/src/tlenix`.
+- Cursor shape switching.
 
 ### Changed
 
