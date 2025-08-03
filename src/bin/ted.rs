@@ -26,7 +26,7 @@ use getargs::{Arg, Options};
 use tlenix_core::{
     ANSI_TLENIX_DEFAULT_CURSOR, EnvVar, Errno, ansi, ansi_cursor_down, ansi_cursor_down_col1,
     ansi_cursor_right, ansi_cursor_up_col1, eprintln, format,
-    fs::OpenOptions,
+    fs::{self, OpenOptions},
     numbers, parse_argv_envp, print,
     process::{self, ExitStatus},
     streams::STDIN,
@@ -79,6 +79,7 @@ const DELETE_LINE: u8 = b'd';
 
 // Commands
 const CMD_EXIT: char = 'q';
+const CMD_WRITE: char = 'w';
 
 core::arch::global_asm! {
     ".global _start",
@@ -314,7 +315,7 @@ impl StatusBarElem<'_> {
 #[derive(Debug, Clone)]
 struct StatusBar {
     /// The path of the currently-open file.
-    file_path: String,
+    file_path: Option<String>,
     /// The current [`EditorMode`].
     mode: EditorMode,
     /// The last frame time benchmark, if any.
@@ -325,9 +326,9 @@ struct StatusBar {
     must_rerender: bool,
 }
 impl StatusBar {
-    fn new(file_path: &str, mode: EditorMode, width: usize) -> Self {
+    fn new(file_path: Option<&str>, mode: EditorMode, width: usize) -> Self {
         Self {
-            file_path: file_path.to_string(),
+            file_path: file_path.map(str::to_string),
             mode,
             last_frame_time: None,
             width,
@@ -341,11 +342,11 @@ impl StatusBar {
         self.must_rerender = true;
     }
 
-    // /// Updates [`Self::file_path`].
-    // fn update_file(&mut self, file: &str) {
-    //     self.file_path = file.to_string();
-    //     self.must_rerender = true;
-    // }
+    /// Updates [`Self::file_path`].
+    fn update_file(&mut self, file: Option<&str>) {
+        self.file_path = file.map(str::to_string);
+        self.must_rerender = true;
+    }
 
     /// Updates [`Self::last_frame_time`].
     fn update_benchmark(&mut self, last_frame_time: Timespec) {
@@ -379,7 +380,7 @@ impl StatusBar {
             Char(' '),
             Code(ansi::ANSI_FG_B_BLACK),
             Char(' '),
-            Text(&self.file_path),
+            Text(self.file_path.as_deref().unwrap_or(NEW_FILE_STR)),
             Char(' '),
             Code(ansi::ANSI_FG_DEFAULT),
         ];
@@ -545,19 +546,21 @@ impl EditorState {
             {
                 er.push(line.to_string());
             }
+            if er.is_empty() {
+                er.push(String::new());
+            }
             er
         } else {
-            let mut er = Vec::with_capacity(win_size.rows);
-            er.push(String::new());
-            er
+            vec![String::new()]
         };
-        let editor_rows_prev = editor_rows.clone();
+        let editor_rows_prev = Vec::with_capacity(editor_rows.len());
 
         let render_buf = RenderBuffer::new(&win_size);
         let cols = win_size.cols;
 
-        let sb_file = options.path.clone().unwrap_or(NEW_FILE_STR.to_string());
         let mode = EditorMode::default();
+
+        let status_bar = StatusBar::new(options.path.as_deref(), mode, cols);
 
         let mut result = Self {
             orig_termios,
@@ -567,7 +570,7 @@ impl EditorState {
             editor_rows,
             editor_rows_prev,
             render_buf,
-            status_bar: StatusBar::new(&sb_file, mode, cols),
+            status_bar,
             status_message: StatusMessage::new(),
             cursor: Cursor(Point::default()),
             screen_offset: Point::default(),
@@ -940,6 +943,7 @@ impl EditorState {
         for c in command.chars().skip(1) {
             match c {
                 CMD_EXIT => self.should_exit = true,
+                CMD_WRITE => self.write_to_file(),
                 c if invalid_command.is_none() => invalid_command = Some(c),
                 _ => {}
             }
@@ -1019,6 +1023,59 @@ impl EditorState {
     /// has elapsed.
     fn display_status_msg(&mut self, message: &str, duration: Timespec) {
         self.status_message.display_msg(message, duration);
+    }
+
+    /// Writes the current [`Self::editor_rows`] to the provided file path.
+    ///
+    /// Displays an error status message if anything fails.
+    ///
+    /// Prompts the user for the file name if it's a new file.
+    fn write_to_file(&mut self) {
+        let Some(file_path) = self.options.path.clone() else {
+            self.prompt_file_name();
+            return;
+        };
+        let mut temp_file_path = file_path.to_string();
+
+        temp_file_path.push_str(".ted_temp");
+        // Create a temporary file for saving.
+        let temp_file = match OpenOptions::new()
+            .write_only()
+            .create_new(true)
+            .open(&temp_file_path)
+        {
+            Ok(tf) => tf,
+            Err(errno) => {
+                let msg = format!("Error: failed to create backup file: {}", errno,);
+                self.display_status_msg(&msg, Timespec { secs: 5, nanos: 0 });
+                return;
+            }
+        };
+
+        // Write to the temporary file.
+        let mut out_string = self.editor_rows.join("\n");
+        if !out_string.ends_with('\n') {
+            out_string.push('\n');
+        }
+        if let Err(errno) = temp_file.write(out_string.as_bytes()) {
+            let msg = format!("Error: failed to write to `{}`: {}", temp_file_path, errno);
+            self.display_status_msg(&msg, Timespec { secs: 5, nanos: 0 });
+            return;
+        }
+
+        // Overwrite the destination file.
+        if let Err(errno) = fs::rename(temp_file_path, &file_path, fs::RenameFlags::empty()) {
+            let msg = format!("Error: failed to write to `{}`: {}", file_path, errno);
+            self.display_status_msg(&msg, Timespec { secs: 5, nanos: 0 });
+            return;
+        }
+
+        let msg = format!("Wrote {} chars to `{}`.", self.contents_length(), file_path);
+        self.display_status_msg(&msg, Timespec { secs: 5, nanos: 0 });
+    }
+
+    fn prompt_file_name(&mut self) {
+        todo!()
     }
 
     /// Gets the width of the row number column displayed on the left side of the screen.
@@ -1219,15 +1276,10 @@ fn read_keypress() -> Result<Key, Errno> {
 
 fn main(args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
     let ted_options = try_exit!(TedOptions::try_from(args));
-    let file_exists = ted_options.path.is_some();
     let mut state = try_exit!(EditorState::start(ted_options));
 
-    if file_exists {
-        let opened_msg = format!(
-            "Loaded {} chars from `{}`.",
-            state.contents_length(),
-            state.status_bar.file_path
-        );
+    if let Some(path) = &state.options.path {
+        let opened_msg = format!("Loaded {} chars from `{}`.", state.contents_length(), path);
         state.display_status_msg(
             &opened_msg,
             Timespec {
