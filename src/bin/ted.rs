@@ -73,6 +73,9 @@ const INSERT: u8 = b'i';
 const INSERT_START: u8 = b'I';
 const APPEND: u8 = b'a';
 const APPEND_END: u8 = b'A';
+const NEW_LINE: u8 = b'o';
+const NEW_LINE_ABOVE: u8 = b'O';
+const DELETE_LINE: u8 = b'd';
 
 // Commands
 const CMD_EXIT: char = 'q';
@@ -718,6 +721,7 @@ impl EditorState {
 
     /// Handles user input, propagating any [`Errno`]s incurred by underlying syscalls.
     fn handle_input(&mut self) -> Result<(), Errno> {
+        use EditorMode::{Command, Edit, Normal};
         use Key::Ascii;
 
         let keypress = read_keypress()?;
@@ -733,46 +737,58 @@ impl EditorState {
         // }
 
         match self.mode {
-            EditorMode::Normal => match keypress {
-                Ascii(ENTER_COMMAND_MODE) => self.update_mode(EditorMode::Command),
+            Normal => match keypress {
+                Ascii(ENTER_COMMAND_MODE) => self.update_mode(Command),
                 Ascii(CURSOR_U) | Key::UpArrow => self.cursor_up(1),
                 Ascii(CURSOR_TOP) | Key::PageUp => self.cursor_up(usize::MAX),
-                Ascii(CURSOR_D) | Key::DownArrow => self.cursor_down(1),
+                Ascii(CURSOR_D | ENTER_CODE) | Key::DownArrow => self.cursor_down(1),
                 Ascii(CURSOR_BOT) | Key::PageDown => self.cursor_down(usize::MAX),
                 Ascii(CURSOR_L | BACKSP_CODE) | Key::LeftArrow => self.cursor_left(1),
                 Ascii(CURSOR_START) | Key::Home => self.cursor_left(usize::MAX),
                 Ascii(CURSOR_R) | Key::RightArrow => self.cursor_right(1),
                 Ascii(CURSOR_END) | Key::End => self.cursor_right(usize::MAX),
-                Ascii(INSERT) => self.update_mode(EditorMode::Edit),
+                Ascii(INSERT) => self.update_mode(Edit),
                 Ascii(APPEND) => {
-                    self.update_mode(EditorMode::Edit);
+                    self.update_mode(Edit);
                     self.cursor_right(1);
                 }
                 Ascii(INSERT_START) => {
-                    self.update_mode(EditorMode::Edit);
+                    self.update_mode(Edit);
                     self.cursor_left(usize::MAX);
                 }
                 Ascii(APPEND_END) => {
-                    self.update_mode(EditorMode::Edit);
+                    self.update_mode(Edit);
                     self.cursor_right(usize::MAX);
+                }
+                Ascii(NEW_LINE) => {
+                    self.update_mode(Edit);
+                    self.insert_row(String::new());
+                }
+                Ascii(NEW_LINE_ABOVE) => {
+                    self.update_mode(Edit);
+                    self.insert_row_above(String::new());
+                }
+                Ascii(DELETE_LINE) => {
+                    self.delete_row();
                 }
                 _ => {}
             },
-            EditorMode::Edit => match keypress {
-                Ascii(ESC_CODE) => self.update_mode(EditorMode::Normal),
+            Edit => match keypress {
+                Ascii(ESC_CODE) => self.update_mode(Normal),
                 Ascii(BACKSP_CODE) => self.row_delete_char(),
+                Ascii(ENTER_CODE) => self.split_insert_row(),
                 Ascii(c) if !c.is_ascii_control() => {
                     self.row_insert_char(c as char);
                 }
                 _ => {}
             },
-            EditorMode::Command => match keypress {
-                Ascii(ESC_CODE) => self.update_mode(EditorMode::Normal),
+            Command => match keypress {
+                Ascii(ESC_CODE) => self.update_mode(Normal),
                 Ascii(ENTER_CODE) => self.process_command(),
                 Ascii(BACKSP_CODE) => {
                     self.status_message.pop();
                     if self.status_message.contents.is_empty() {
-                        self.update_mode(EditorMode::Normal);
+                        self.update_mode(Normal);
                     }
                 }
                 Ascii(c) if c.is_ascii_graphic() => self.status_message.push(c as char),
@@ -830,6 +846,10 @@ impl EditorState {
             return;
         };
 
+        if row.is_empty() {
+            return self.delete_row();
+        }
+
         let last_char_pos = row.len().saturating_sub(1);
         col_index = col_index.saturating_sub(1).clamp(0, last_char_pos);
 
@@ -840,6 +860,77 @@ impl EditorState {
         }
 
         self.cursor_left(1);
+    }
+
+    fn split_insert_row(&mut self) {
+        let row_index = self.cursor.0.row;
+        let mut col_index = self.cursor.0.col;
+
+        let Some(row) = self.editor_rows.get_mut(row_index) else {
+            return;
+        };
+
+        col_index = col_index.clamp(0, row.len());
+        if col_index == row.len() {
+            return self.insert_row(String::new());
+        }
+
+        let new_row_contents = row.split_off(col_index);
+        self.insert_row(new_row_contents);
+    }
+
+    fn insert_row(&mut self, row_contents: String) {
+        let mut row_index = self.cursor.0.row;
+
+        if self.editor_rows.get(row_index).is_none() {
+            return;
+        }
+
+        row_index = row_index.saturating_add(1).clamp(0, self.editor_rows.len());
+
+        if row_index == self.editor_rows.len() {
+            self.editor_rows.push(row_contents);
+        } else {
+            self.editor_rows.insert(row_index, row_contents);
+        }
+
+        self.cursor_left(usize::MAX);
+        self.cursor_down(1);
+    }
+
+    fn insert_row_above(&mut self, row_contents: String) {
+        let row_index = self.cursor.0.row;
+
+        if self.editor_rows.get(row_index).is_none() {
+            return;
+        }
+
+        self.editor_rows.insert(row_index, row_contents);
+
+        self.cursor_left(usize::MAX);
+    }
+
+    fn delete_row(&mut self) {
+        let row_index = self.cursor.0.row;
+
+        if self.editor_rows.get(row_index).is_none() {
+            return;
+        }
+
+        self.editor_rows.remove(row_index);
+
+        if self.editor_rows.is_empty() {
+            self.editor_rows.push(String::new());
+        }
+
+        if self.mode == EditorMode::Edit {
+            // Move cursor to end of previous line
+            self.cursor_up(1);
+            self.cursor_right(usize::MAX);
+        } else {
+            // This ensures the cursor is in a legal space after deletion
+            self.cursor_down(0);
+        }
     }
 
     fn process_command(&mut self) {
@@ -871,7 +962,7 @@ impl EditorState {
 
     fn cursor_right(&mut self, amount: usize) {
         let mut upper_bound = cmp::max(self.current_line_len(), 1) - 1;
-        if self.mode == EditorMode::Edit {
+        if (self.mode == EditorMode::Edit) && (self.current_line_len() > 0) {
             upper_bound += 1;
         }
         self.cursor.0.col = self
