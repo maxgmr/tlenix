@@ -39,7 +39,6 @@ use tlenix_core::{
 };
 
 const PANIC_TITLE: &str = "ted";
-const STATUS_BAR_TITLE: &str = "TED";
 const NEW_FILE_STR: &str = "[new file]";
 
 const ESC_CODE: u8 = 0x1b;
@@ -88,6 +87,24 @@ enum EditorMode {
     Edit,
     /// Input commands.
     Command,
+}
+impl EditorMode {
+    /// Gets the ansi console fg code associated with the particular mode.
+    const fn ansi_colour_code(self) -> &'static str {
+        match self {
+            Self::Normal => ansi::ANSI_FG_GREEN,
+            Self::Edit => ansi::ANSI_FG_BLUE,
+            Self::Command => ansi::ANSI_FG_YELLOW,
+        }
+    }
+
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Normal => "NORMAL",
+            Self::Edit => "EDIT",
+            Self::Command => "COMMAND",
+        }
+    }
 }
 
 /// The various command-line options and arguments which can be passed to this program.
@@ -298,48 +315,69 @@ impl StatusBarElem<'_> {
 struct StatusBar {
     /// The path of the currently-open file.
     file_path: String,
+    /// The current [`EditorMode`].
+    mode: EditorMode,
     /// The last frame time benchmark, if any.
     last_frame_time: Option<Timespec>,
-    /// The rendered form of the status bar.
-    rendered: String,
+    /// The width of the bar.
+    width: usize,
+    /// Whether or not this status bar mut be redrawn.
+    must_rerender: bool,
 }
 impl StatusBar {
-    fn new(file_path: &str, cols: usize) -> Self {
-        let mut status_bar = Self {
+    fn new(file_path: &str, mode: EditorMode, width: usize) -> Self {
+        Self {
             file_path: file_path.to_string(),
+            mode,
             last_frame_time: None,
-            rendered: String::new(),
-        };
-        status_bar.update_render(cols);
-        status_bar
+            width,
+            must_rerender: true,
+        }
     }
 
-    // /// Updates [`Self::file_path`].
-    // fn update_file(&mut self, file: &str, cols: usize) {
-    //     self.file_path = file.to_string();
-    //     self.update_render(cols);
-    // }
+    /// Updates [`Self::editor_mode`].
+    fn update_mode(&mut self, mode: EditorMode) {
+        self.mode = mode;
+        self.must_rerender = true;
+    }
+
+    /// Updates [`Self::file_path`].
+    fn update_file(&mut self, file: &str) {
+        self.file_path = file.to_string();
+        self.must_rerender = true;
+    }
 
     /// Updates [`Self::last_frame_time`].
-    fn update_benchmark(&mut self, last_frame_time: Timespec, cols: usize) {
+    fn update_benchmark(&mut self, last_frame_time: Timespec) {
         self.last_frame_time = Some(last_frame_time);
-        self.update_render(cols);
+        self.must_rerender = true;
     }
 
-    /// Updates the rendered state of this [`StatusBar`]. Must be called every time the state is
-    /// changed in any way.
-    fn update_render(&mut self, cols: usize) {
+    /// Updates [`Self::width`].
+    fn update_width(&mut self, width: usize) {
+        self.width = width;
+        self.must_rerender = true;
+    }
+
+    /// Gets the rendered text form of this [`StatusBar`]. Returns [`None`] if re-rendering is
+    /// unnecessary.
+    fn render_string(&mut self) -> Option<String> {
         use StatusBarElem::{Char, Code, Text};
 
-        self.rendered.clear();
-        self.rendered.push_str(ansi::ANSI_INVERT);
+        if !self.must_rerender {
+            return None;
+        }
+
+        let mut rendered = String::with_capacity(self.width * 4);
+        rendered.push_str(ansi::ANSI_INVERT);
 
         let mut elems = vec![
-            Code(ansi::ANSI_FG_BLUE),
+            Code(ansi::ANSI_INVERT),
+            Code(self.mode.ansi_colour_code()),
             Char(' '),
-            Text(STATUS_BAR_TITLE),
+            Text(self.mode.as_str()),
             Char(' '),
-            Code(ansi::ANSI_FG_GREEN),
+            Code(ansi::ANSI_FG_B_BLACK),
             Char(' '),
             Text(&self.file_path),
             Char(' '),
@@ -357,30 +395,28 @@ impl StatusBar {
         let mut elems_len = 0;
         for elem in elems {
             // Don't add the next element if it would make the status bar string too long
-            if (elems_len + elem.len()) > cols {
+            if (elems_len + elem.len()) > self.width {
                 break;
             }
 
             match elem {
-                Code(c) => self.rendered.push_str(c),
-                Text(t) => self.rendered.push_str(t),
-                Char(c) => self.rendered.push(c),
+                Code(c) => rendered.push_str(c),
+                Text(t) => rendered.push_str(t),
+                Char(c) => rendered.push(c),
             }
             elems_len += elem.len();
         }
 
         // Fill the remaining space with inverted spaces
-        while elems_len < cols {
-            self.rendered.push(' ');
+        while elems_len < self.width {
+            rendered.push(' ');
             elems_len += 1;
         }
 
-        self.rendered.push_str(ansi::ANSI_INVERT_OFF);
-    }
-}
-impl Display for StatusBar {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.rendered)
+        rendered.push_str(ansi::ANSI_INVERT_OFF);
+
+        self.must_rerender = false;
+        Some(rendered)
     }
 }
 
@@ -502,6 +538,7 @@ impl EditorState {
         let cols = win_size.cols;
 
         let sb_file = options.path.clone().unwrap_or(NEW_FILE_STR.to_string());
+        let mode = EditorMode::default();
 
         let mut result = Self {
             orig_termios,
@@ -511,7 +548,7 @@ impl EditorState {
             editor_rows,
             editor_rows_prev,
             render_buf,
-            status_bar: StatusBar::new(&sb_file, cols),
+            status_bar: StatusBar::new(&sb_file, mode, cols),
             status_message: StatusMessage::new(),
             cursor: Cursor(Point::default()),
             screen_offset: Point::default(),
@@ -537,14 +574,16 @@ impl EditorState {
 
         self.add_rows();
 
-        // Move cursor to bottom left of screen in order to render status bar and status message
-        self.render_buf.0.push_str(ansi_cursor_down_col1!(999));
-        self.render_buf.0.push_str(ansi_cursor_up_col1!(1));
-        self.add_status_bar();
+        if let Some(sb) = self.status_bar.render_string() {
+            self.render_buf.0.push_str(ansi_cursor_down_col1!(999));
+            self.render_buf.0.push_str(ansi_cursor_up_col1!(1));
+            self.render_buf.0.push_str(ansi::ANSI_ERASE_LINE);
+            self.render_buf.0.push_str(&sb);
+        }
 
         self.status_message.update();
         if let Some(msg) = self.status_message.render_str() {
-            self.render_buf.0.push_str(ansi_cursor_down_col1!(1));
+            self.render_buf.0.push_str(ansi_cursor_down_col1!(999));
             self.render_buf.0.push_str(ansi::ANSI_ERASE_LINE);
             self.render_buf.0.push_str(msg);
         }
@@ -561,17 +600,16 @@ impl EditorState {
         print!("{}", self.render_buf);
 
         if self.options.benchmark {
-            self.status_bar.update_benchmark(
-                clock_time(GetTimeClock::Monotonic).unwrap() - start_time,
-                self.win_size.cols,
-            );
+            self.status_bar
+                .update_benchmark(clock_time(GetTimeClock::Monotonic).unwrap() - start_time);
+            let rendered = self.status_bar.render_string().unwrap();
             // Re-draw status bar now that benchmarking is done, then move cursor back to proper
             // place
             print!(
                 "{}{}{}{}",
                 ansi_cursor_down_col1!(999),
                 ansi_cursor_up_col1!(1),
-                self.status_bar.rendered,
+                rendered,
                 self.cursor.term_seq(
                     self.screen_offset.row,
                     self.screen_offset.col,
@@ -642,11 +680,6 @@ impl EditorState {
             }
             self.editor_rows_prev.truncate(self.win_size.rows);
         }
-    }
-
-    /// Adds the status bar to the render buffer.
-    fn add_status_bar(&mut self) {
-        self.render_buf.0.push_str(&self.status_bar.rendered);
     }
 
     /// Gets the slice of the editor row which is visible on the screen.
