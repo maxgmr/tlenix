@@ -329,7 +329,7 @@ impl StatusBar {
         }
     }
 
-    /// Updates [`Self::editor_mode`].
+    /// Updates [`Self::mode`].
     fn update_mode(&mut self, mode: EditorMode) {
         self.mode = mode;
         self.must_rerender = true;
@@ -756,9 +756,9 @@ impl EditorState {
             },
             EditorMode::Edit => match keypress {
                 Ascii(ESC_CODE) => self.update_mode(EditorMode::Normal),
-                Ascii(BACKSP_CODE) => self.row_delete_char(self.cursor.0.row, self.cursor.0.col),
+                Ascii(BACKSP_CODE) => self.row_delete_char(),
                 Ascii(c) if !c.is_ascii_control() => {
-                    self.row_insert_char(self.cursor.0.row, self.cursor.0.col, c as char);
+                    self.row_insert_char(c as char);
                 }
                 _ => {}
             },
@@ -779,34 +779,39 @@ impl EditorState {
         Ok(())
     }
 
-    fn row_insert_char(&mut self, row: usize, mut col: usize, c: char) {
-        let Some(row) = self.editor_rows.get_mut(row) else {
+    fn row_insert_char(&mut self, c: char) {
+        let row_index = self.cursor.0.row;
+        let mut col_index = self.cursor.0.col;
+        let Some(row) = self.editor_rows.get_mut(row_index) else {
             return;
         };
 
-        col = col.clamp(0, row.len());
+        col_index = col_index.clamp(0, row.len());
 
-        if col == row.len() {
+        if col_index == row.len() {
             row.push(c);
         } else {
-            row.insert(col, c);
+            row.insert(col_index, c);
         }
 
         self.cursor_right(1);
     }
 
-    fn row_delete_char(&mut self, row: usize, mut col: usize) {
-        let Some(row) = self.editor_rows.get_mut(row) else {
+    fn row_delete_char(&mut self) {
+        let row_index = self.cursor.0.row;
+        let mut col_index = self.cursor.0.col;
+
+        let Some(row) = self.editor_rows.get_mut(row_index) else {
             return;
         };
 
         let last_char_pos = row.len().saturating_sub(1);
-        col = col.saturating_sub(1).clamp(0, last_char_pos);
+        col_index = col_index.saturating_sub(1).clamp(0, last_char_pos);
 
-        if col == last_char_pos {
+        if col_index == last_char_pos {
             row.pop();
         } else {
-            row.remove(col);
+            row.remove(col_index);
         }
 
         self.cursor_left(1);
