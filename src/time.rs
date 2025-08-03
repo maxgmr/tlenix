@@ -55,7 +55,13 @@ pub struct Timespec {
     pub nanos: i64,
 }
 impl Timespec {
-    /// Normalize so that [`Self::nanos`] is always within its proper bounds.
+    /// Creates a new [`Timespec`] with the given number of seconds.
+    #[must_use]
+    pub const fn from_secs(secs: i64) -> Self {
+        Self { secs, nanos: 0 }
+    }
+
+    /// Normalizes so that [`Self::nanos`] is always within its proper bounds.
     fn normalize(mut self) -> Self {
         if self.nanos > NANOS_UPPER_BOUND || self.nanos < NANOS_LOWER_BOUND {
             self.secs += self.nanos / NANOS_IN_SEC;
