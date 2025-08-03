@@ -24,8 +24,8 @@ use core::{cmp, fmt::Display, mem, panic::PanicInfo, slice};
 
 use getargs::{Arg, Options};
 use tlenix_core::{
-    EnvVar, Errno, ansi, ansi_cursor_down, ansi_cursor_down_col1, ansi_cursor_right, eprintln,
-    format,
+    EnvVar, Errno, ansi, ansi_cursor_down, ansi_cursor_down_col1, ansi_cursor_right,
+    ansi_cursor_up_col1, eprintln, format,
     fs::OpenOptions,
     numbers, parse_argv_envp, print,
     process::{self, ExitStatus},
@@ -52,6 +52,8 @@ const CHECK_TERM_RESPONSE_LIMIT: usize = 64;
 const KEYPRESS_BUF_LEN: usize = 3;
 
 const TAB_LEN: usize = 4;
+
+const OPEN_MSG_SECS: i64 = 5;
 
 // Controls
 const EXIT_CODE: u8 = ctrl_key(b'q');
@@ -370,6 +372,58 @@ impl Display for StatusBar {
     }
 }
 
+/// The message being displayed at the bottom of the screen.
+#[derive(Debug, Clone)]
+struct StatusMessage {
+    contents: Option<String>,
+    time: Timespec,
+    start_time: Timespec,
+    must_rerender: bool,
+}
+impl StatusMessage {
+    fn new() -> Self {
+        Self {
+            contents: None,
+            time: Timespec { secs: 0, nanos: 0 },
+            start_time: Timespec { secs: 0, nanos: 0 },
+            must_rerender: true,
+        }
+    }
+
+    fn display_msg(&mut self, message: &str, time: Timespec) {
+        self.contents = Some(message.to_string());
+        self.time = time;
+        if let Ok(time) = clock_time(GetTimeClock::Monotonic) {
+            self.start_time = time;
+        } else {
+            self.clear();
+        }
+        self.must_rerender = true;
+    }
+
+    fn update(&mut self) {
+        if let Ok(current_time) = clock_time(GetTimeClock::Monotonic) {
+            let elapsed = current_time - self.start_time;
+            if elapsed >= self.time {
+                self.clear();
+            }
+        }
+    }
+
+    fn clear(&mut self) {
+        *self = Self::new();
+        self.must_rerender = true;
+    }
+
+    fn render_str(&mut self) -> Option<&str> {
+        if !self.must_rerender {
+            return None;
+        }
+        self.must_rerender = false;
+        Some(self.contents.as_deref().unwrap_or(""))
+    }
+}
+
 /// The current state of the editor.
 #[derive(Debug, Clone)]
 struct EditorState {
@@ -385,6 +439,8 @@ struct EditorState {
     editor_rows_prev: Vec<String>,
     /// The status bar of the editor.
     status_bar: StatusBar,
+    /// The status message of the editor (if any).
+    status_message: StatusMessage,
     /// Wrapper around a [`String`]. This [`String`] is generated and rendered to the screen every
     /// frame.
     render_buf: RenderBuffer,
@@ -406,8 +462,8 @@ impl EditorState {
         clear_screen();
 
         let mut win_size = get_win_size();
-        // Shrink the window height by 1 to make room for status bar
-        win_size.rows -= 1;
+        // Shrink the window height by 2 to make room for status bar and status message
+        win_size.rows -= 2;
 
         // Read the file (if provided)
         let editor_rows = if let Some(path) = &options.path {
@@ -441,6 +497,7 @@ impl EditorState {
             editor_rows_prev,
             render_buf,
             status_bar: StatusBar::new(&sb_file, cols),
+            status_message: StatusMessage::new(),
             cursor: Cursor(Point::default()),
             screen_offset: Point::default(),
             should_exit: false,
@@ -465,9 +522,17 @@ impl EditorState {
 
         self.add_rows();
 
-        // Move cursor to bottom left of screen in order to render status bar
+        // Move cursor to bottom left of screen in order to render status bar and status message
         self.render_buf.0.push_str(ansi_cursor_down_col1!(999));
+        self.render_buf.0.push_str(ansi_cursor_up_col1!(1));
         self.add_status_bar();
+
+        self.status_message.update();
+        if let Some(msg) = self.status_message.render_str() {
+            self.render_buf.0.push_str(ansi_cursor_down_col1!(1));
+            self.render_buf.0.push_str(ansi::ANSI_ERASE_LINE);
+            self.render_buf.0.push_str(msg);
+        }
 
         // Move the cursor to its "actual" position on the screen
         self.render_buf.0.push_str(&self.cursor.term_seq(
@@ -488,8 +553,9 @@ impl EditorState {
             // Re-draw status bar now that benchmarking is done, then move cursor back to proper
             // place
             print!(
-                "{}{}{}",
+                "{}{}{}{}",
                 ansi_cursor_down_col1!(999),
+                ansi_cursor_up_col1!(1),
                 self.status_bar.rendered,
                 self.cursor.term_seq(
                     self.screen_offset.row,
@@ -667,6 +733,12 @@ impl EditorState {
         }
     }
 
+    /// Displays a status message, cleared after the first keypress after the specified duration
+    /// has elapsed.
+    fn display_status_msg(&mut self, message: &str, duration: Timespec) {
+        self.status_message.display_msg(message, duration);
+    }
+
     /// Gets the width of the row number column displayed on the left side of the screen.
     fn row_num_width(&self) -> usize {
         numbers::num_digits_base10(self.editor_rows.len()) + 1
@@ -682,6 +754,13 @@ impl EditorState {
     /// Gets the length of the current editor line.
     fn current_line_len(&self) -> usize {
         self.current_line().len()
+    }
+
+    /// Gets the length of the text contents.
+    fn contents_length(&self) -> usize {
+        self.editor_rows
+            .iter()
+            .fold(0, |acc, item| acc + item.len())
     }
 }
 impl Drop for EditorState {
@@ -857,7 +936,23 @@ fn read_keypress() -> Result<Key, Errno> {
 
 fn main(args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
     let ted_options = try_exit!(TedOptions::try_from(args));
+    let file_exists = ted_options.path.is_some();
     let mut state = try_exit!(EditorState::start(ted_options));
+
+    if file_exists {
+        let opened_msg = format!(
+            "Loaded {} chars from `{}`.",
+            state.contents_length(),
+            state.status_bar.file_path
+        );
+        state.display_status_msg(
+            &opened_msg,
+            Timespec {
+                secs: OPEN_MSG_SECS,
+                nanos: 0,
+            },
+        );
+    }
 
     loop {
         state.refresh_screen();
