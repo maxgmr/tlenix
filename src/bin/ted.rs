@@ -66,9 +66,13 @@ const CURSOR_BOT: u8 = b'G';
 const CURSOR_START: u8 = b'^';
 const CURSOR_END: u8 = b'$';
 const ENTER_COMMAND_MODE: u8 = b':';
+const INSERT: u8 = b'i';
+const INSERT_START: u8 = b'I';
+const APPEND: u8 = b'a';
+const APPEND_END: u8 = b'A';
 
 // Commands
-const EXIT_CMD: char = 'q';
+const CMD_EXIT: char = 'q';
 
 core::arch::global_asm! {
     ".global _start",
@@ -731,14 +735,31 @@ impl EditorState {
                 Ascii(CURSOR_TOP) | Key::PageUp => self.cursor_up(usize::MAX),
                 Ascii(CURSOR_D) | Key::DownArrow => self.cursor_down(1),
                 Ascii(CURSOR_BOT) | Key::PageDown => self.cursor_down(usize::MAX),
-                Ascii(CURSOR_L) | Key::LeftArrow => self.cursor_left(1),
+                Ascii(CURSOR_L | BACKSP_CODE) | Key::LeftArrow => self.cursor_left(1),
                 Ascii(CURSOR_START) | Key::Home => self.cursor_left(usize::MAX),
                 Ascii(CURSOR_R) | Key::RightArrow => self.cursor_right(1),
                 Ascii(CURSOR_END) | Key::End => self.cursor_right(usize::MAX),
+                Ascii(INSERT) => self.update_mode(EditorMode::Edit),
+                Ascii(APPEND) => {
+                    self.update_mode(EditorMode::Edit);
+                    self.cursor_right(1);
+                }
+                Ascii(INSERT_START) => {
+                    self.update_mode(EditorMode::Edit);
+                    self.cursor_left(usize::MAX);
+                }
+                Ascii(APPEND_END) => {
+                    self.update_mode(EditorMode::Edit);
+                    self.cursor_right(usize::MAX);
+                }
                 _ => {}
             },
             EditorMode::Edit => match keypress {
                 Ascii(ESC_CODE) => self.update_mode(EditorMode::Normal),
+                Ascii(BACKSP_CODE) => self.row_delete_char(self.cursor.0.row, self.cursor.0.col),
+                Ascii(c) if !c.is_ascii_control() => {
+                    self.row_insert_char(self.cursor.0.row, self.cursor.0.col, c as char);
+                }
                 _ => {}
             },
             EditorMode::Command => match keypress {
@@ -758,13 +779,46 @@ impl EditorState {
         Ok(())
     }
 
+    fn row_insert_char(&mut self, row: usize, mut col: usize, c: char) {
+        let Some(row) = self.editor_rows.get_mut(row) else {
+            return;
+        };
+
+        col = col.clamp(0, row.len());
+
+        if col == row.len() {
+            row.push(c);
+        } else {
+            row.insert(col, c);
+        }
+
+        self.cursor_right(1);
+    }
+
+    fn row_delete_char(&mut self, row: usize, mut col: usize) {
+        let Some(row) = self.editor_rows.get_mut(row) else {
+            return;
+        };
+
+        let last_char_pos = row.len().saturating_sub(1);
+        col = col.saturating_sub(1).clamp(0, last_char_pos);
+
+        if col == last_char_pos {
+            row.pop();
+        } else {
+            row.remove(col);
+        }
+
+        self.cursor_left(1);
+    }
+
     fn process_command(&mut self) {
         let command = self.status_message.take_msg();
 
         let mut invalid_command = None;
         for c in command.chars().skip(1) {
             match c {
-                EXIT_CMD => self.should_exit = true,
+                CMD_EXIT => self.should_exit = true,
                 c if invalid_command.is_none() => invalid_command = Some(c),
                 _ => {}
             }
@@ -781,12 +835,15 @@ impl EditorState {
     }
 
     fn update_mode(&mut self, mode: EditorMode) {
-        use EditorMode::{Command, Normal};
+        use EditorMode::{Command, Edit, Normal};
         match (self.mode, mode) {
             (Command, Normal) => self.status_message.clear(),
             (Normal, Command) => {
                 self.status_message.clear();
                 self.status_message.push(ENTER_COMMAND_MODE as char);
+            }
+            (Edit, Normal) => {
+                self.cursor_left(1);
             }
             _ => {}
         }
@@ -800,7 +857,10 @@ impl EditorState {
     }
 
     fn cursor_right(&mut self, amount: usize) {
-        let upper_bound = cmp::max(self.current_line_len(), 1) - 1;
+        let mut upper_bound = cmp::max(self.current_line_len(), 1) - 1;
+        if self.mode == EditorMode::Edit {
+            upper_bound += 1;
+        }
         self.cursor.0.col = self
             .cursor
             .0
