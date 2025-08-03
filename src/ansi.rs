@@ -97,6 +97,33 @@ define_ecma_single_consts![
     ANSI_FG_B_WHITE = "97";
 ];
 
+macro_rules! define_cursor_appearance {
+    [$(
+        $(#[$doc:meta])+
+        $name:ident($num:expr);
+    )*] => {$(
+        $(#[$doc])+
+        pub const $name: &str = concat!("\u{001b}[?", stringify!($num), "c");
+    )*}
+}
+
+define_cursor_appearance![
+    /// Set the cursor to its default blinking appearance.
+    ANSI_CURSOR_B_DEFAULT(0);
+    /// Make the cursor invisible.
+    ANSI_CURSOR_INVIS(1);
+    /// Make the cursor a blinking underline.
+    ANSI_CURSOR_B_UNDER(2);
+    /// Make the cursor a blinking block.
+    ANSI_CURSOR_B_BLOCK(8);
+    /// Set the cursor to its default steady appearance.
+    ANSI_CURSOR_DEFAULT(112);
+    /// Set the cursor to a steady underline.
+    ANSI_CURSOR_UNDER(114);
+    /// Set the cursor to a steady block.
+    ANSI_CURSOR_BLOCK(120);
+];
+
 macro_rules! define_ansi_cursors {
     [$(
         $(#[$doc:meta])+
