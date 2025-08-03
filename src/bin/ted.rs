@@ -42,6 +42,8 @@ const PANIC_TITLE: &str = "ted";
 const NEW_FILE_STR: &str = "[new file]";
 
 const ESC_CODE: u8 = 0x1b;
+const BACKSP_CODE: u8 = 0x7f;
+const ENTER_CODE: u8 = 0x0d;
 
 const READ_MIN_BYTES_READ: u8 = 0;
 const READ_MAX_TIME_PASSED: Deciseconds = Deciseconds(1);
@@ -54,8 +56,7 @@ const TAB_LEN: usize = 4;
 
 const OPEN_MSG_SECS: i64 = 5;
 
-// Controls
-const EXIT_CODE: u8 = ctrl_key(b'q');
+// Normal mode controls
 const CURSOR_U: u8 = b'k';
 const CURSOR_D: u8 = b'j';
 const CURSOR_L: u8 = b'h';
@@ -64,17 +65,16 @@ const CURSOR_TOP: u8 = b'g';
 const CURSOR_BOT: u8 = b'G';
 const CURSOR_START: u8 = b'^';
 const CURSOR_END: u8 = b'$';
+const ENTER_COMMAND_MODE: u8 = b':';
+
+// Commands
+const EXIT_CMD: char = 'q';
 
 core::arch::global_asm! {
     ".global _start",
     "_start:",
     "mov rdi, rsp",
     "call start"
-}
-
-/// Get the byte version of "CTRL + this key".
-const fn ctrl_key(byte: u8) -> u8 {
-    byte & 0x1f
 }
 
 /// The different modes of the editor.
@@ -181,16 +181,6 @@ impl Key {
             (Some(b'F'), _) => Some(Self::End),
             (Some(b'2'), Some(b'~')) => Some(Self::Insert),
             (Some(b'3'), Some(b'~')) => Some(Self::Delete),
-            // // DEBUG ONLY
-            // _ => {
-            //     clear_screen();
-            //     print!(
-            //         "{}",
-            //         String::from_utf8(seq.to_vec()).unwrap()
-            //     );
-            //     tlenix_core::thread::sleep(&core::time::Duration::from_secs(1)).unwrap();
-            //     None
-            // }
             _ => None,
         }
     }
@@ -341,11 +331,11 @@ impl StatusBar {
         self.must_rerender = true;
     }
 
-    /// Updates [`Self::file_path`].
-    fn update_file(&mut self, file: &str) {
-        self.file_path = file.to_string();
-        self.must_rerender = true;
-    }
+    // /// Updates [`Self::file_path`].
+    // fn update_file(&mut self, file: &str) {
+    //     self.file_path = file.to_string();
+    //     self.must_rerender = true;
+    // }
 
     /// Updates [`Self::last_frame_time`].
     fn update_benchmark(&mut self, last_frame_time: Timespec) {
@@ -353,11 +343,11 @@ impl StatusBar {
         self.must_rerender = true;
     }
 
-    /// Updates [`Self::width`].
-    fn update_width(&mut self, width: usize) {
-        self.width = width;
-        self.must_rerender = true;
-    }
+    // /// Updates [`Self::width`].
+    // fn update_width(&mut self, width: usize) {
+    //     self.width = width;
+    //     self.must_rerender = true;
+    // }
 
     /// Gets the rendered text form of this [`StatusBar`]. Returns [`None`] if re-rendering is
     /// unnecessary.
@@ -423,24 +413,24 @@ impl StatusBar {
 /// The message being displayed at the bottom of the screen.
 #[derive(Debug, Clone)]
 struct StatusMessage {
-    contents: Option<String>,
-    time: Timespec,
+    contents: String,
+    time: Option<Timespec>,
     start_time: Timespec,
     must_rerender: bool,
 }
 impl StatusMessage {
     fn new() -> Self {
         Self {
-            contents: None,
-            time: Timespec { secs: 0, nanos: 0 },
+            contents: String::new(),
+            time: None,
             start_time: Timespec { secs: 0, nanos: 0 },
             must_rerender: true,
         }
     }
 
     fn display_msg(&mut self, message: &str, time: Timespec) {
-        self.contents = Some(message.to_string());
-        self.time = time;
+        self.contents = message.to_string();
+        self.time = Some(time);
         if let Ok(time) = clock_time(GetTimeClock::Monotonic) {
             self.start_time = time;
         } else {
@@ -449,10 +439,28 @@ impl StatusMessage {
         self.must_rerender = true;
     }
 
+    fn take_msg(&mut self) -> String {
+        let s = mem::take(&mut self.contents);
+        self.clear();
+        s
+    }
+
+    fn push(&mut self, c: char) {
+        self.contents.push(c);
+        self.must_rerender = true;
+    }
+
+    fn pop(&mut self) {
+        self.contents.pop();
+        self.must_rerender = true;
+    }
+
     fn update(&mut self) {
-        if let Ok(current_time) = clock_time(GetTimeClock::Monotonic) {
+        if let Some(time) = self.time
+            && let Ok(current_time) = clock_time(GetTimeClock::Monotonic)
+        {
             let elapsed = current_time - self.start_time;
-            if elapsed >= self.time {
+            if elapsed >= time {
                 self.clear();
             }
         }
@@ -460,15 +468,15 @@ impl StatusMessage {
 
     fn clear(&mut self) {
         *self = Self::new();
-        self.must_rerender = true;
     }
 
+    /// Returns [`None`] if re-rendering is unnecessary.
     fn render_str(&mut self) -> Option<&str> {
         if !self.must_rerender {
             return None;
         }
         self.must_rerender = false;
-        Some(self.contents.as_deref().unwrap_or(""))
+        Some(self.contents.as_str())
     }
 }
 
@@ -706,22 +714,84 @@ impl EditorState {
 
         let keypress = read_keypress()?;
 
-        match keypress {
-            Ascii(EXIT_CODE) => {
-                self.should_exit = true;
-            }
-            Ascii(CURSOR_U) | Key::UpArrow => self.cursor_up(1),
-            Ascii(CURSOR_TOP) | Key::PageUp => self.cursor_up(usize::MAX),
-            Ascii(CURSOR_D) | Key::DownArrow => self.cursor_down(1),
-            Ascii(CURSOR_BOT) | Key::PageDown => self.cursor_down(usize::MAX),
-            Ascii(CURSOR_L) | Key::LeftArrow => self.cursor_left(1),
-            Ascii(CURSOR_START) | Key::Home => self.cursor_left(usize::MAX),
-            Ascii(CURSOR_R) | Key::RightArrow => self.cursor_right(1),
-            Ascii(CURSOR_END) | Key::End => self.cursor_right(usize::MAX),
-            _ => {}
+        // // DEBUG ONLY
+        // if let Ascii(c) = keypress {
+        //     let msg = if c.is_ascii_graphic() {
+        //         (c as char).to_string()
+        //     } else {
+        //         format!("{:#04x}", c)
+        //     };
+        //     self.display_status_msg(&msg, Timespec { secs: 1, nanos: 0 });
+        // }
+
+        match self.mode {
+            EditorMode::Normal => match keypress {
+                Ascii(ENTER_COMMAND_MODE) => self.update_mode(EditorMode::Command),
+                Ascii(CURSOR_U) | Key::UpArrow => self.cursor_up(1),
+                Ascii(CURSOR_TOP) | Key::PageUp => self.cursor_up(usize::MAX),
+                Ascii(CURSOR_D) | Key::DownArrow => self.cursor_down(1),
+                Ascii(CURSOR_BOT) | Key::PageDown => self.cursor_down(usize::MAX),
+                Ascii(CURSOR_L) | Key::LeftArrow => self.cursor_left(1),
+                Ascii(CURSOR_START) | Key::Home => self.cursor_left(usize::MAX),
+                Ascii(CURSOR_R) | Key::RightArrow => self.cursor_right(1),
+                Ascii(CURSOR_END) | Key::End => self.cursor_right(usize::MAX),
+                _ => {}
+            },
+            EditorMode::Edit => match keypress {
+                Ascii(ESC_CODE) => self.update_mode(EditorMode::Normal),
+                _ => {}
+            },
+            EditorMode::Command => match keypress {
+                Ascii(ESC_CODE) => self.update_mode(EditorMode::Normal),
+                Ascii(ENTER_CODE) => self.process_command(),
+                Ascii(BACKSP_CODE) => {
+                    self.status_message.pop();
+                    if self.status_message.contents.is_empty() {
+                        self.update_mode(EditorMode::Normal);
+                    }
+                }
+                Ascii(c) if c.is_ascii_graphic() => self.status_message.push(c as char),
+                _ => {}
+            },
         }
 
         Ok(())
+    }
+
+    fn process_command(&mut self) {
+        let command = self.status_message.take_msg();
+
+        let mut invalid_command = None;
+        for c in command.chars().skip(1) {
+            match c {
+                EXIT_CMD => self.should_exit = true,
+                c if invalid_command.is_none() => invalid_command = Some(c),
+                _ => {}
+            }
+        }
+
+        self.update_mode(EditorMode::Normal);
+
+        if let Some(c) = invalid_command {
+            self.display_status_msg(
+                &format!("Error: unknown command `{c}`."),
+                Timespec { secs: 1, nanos: 0 },
+            );
+        }
+    }
+
+    fn update_mode(&mut self, mode: EditorMode) {
+        use EditorMode::{Command, Normal};
+        match (self.mode, mode) {
+            (Command, Normal) => self.status_message.clear(),
+            (Normal, Command) => {
+                self.status_message.clear();
+                self.status_message.push(ENTER_COMMAND_MODE as char);
+            }
+            _ => {}
+        }
+        self.status_bar.update_mode(mode);
+        self.mode = mode;
     }
 
     fn cursor_left(&mut self, amount: usize) {
