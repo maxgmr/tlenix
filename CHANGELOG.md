@@ -21,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `rcv`: Convert radices
 - `reset`: Reset terminal
 
+## [0.1.0-beta.5] - UNRELEASED
+
+### Added
+
+### Changed
+
+### Deleted
+
 ## [0.1.0-beta.4] - 2025-08-04
 
 ### Added
@@ -36,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Bumped memory allocator to 256 MiB.
+
+### Removed
 
 ## [0.1.0-beta.3] - 2025-06-12
 
