@@ -44,6 +44,7 @@ const NO_FILE_STR: &str = "[no file chosen]";
 const ESC_CODE: u8 = 0x1b;
 const BACKSP_CODE: u8 = 0x7f;
 const ENTER_CODE: u8 = 0x0d;
+const TAB_CODE: u8 = b'\t';
 
 const READ_MIN_BYTES_READ: u8 = 0;
 const READ_MAX_TIME_PASSED: Deciseconds = Deciseconds(1);
@@ -865,6 +866,11 @@ impl EditorState {
                 Ascii(ESC_CODE) => self.update_mode(EditorMode::default()),
                 Ascii(BACKSP_CODE) => self.row_delete_char(),
                 Ascii(ENTER_CODE) => self.split_insert_row(),
+                Ascii(TAB_CODE) => {
+                    for _ in 0..TAB_LEN {
+                        self.row_insert_char(' ');
+                    }
+                }
                 Ascii(c) if !c.is_ascii_control() => {
                     self.row_insert_char(c as char);
                 }
