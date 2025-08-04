@@ -76,6 +76,13 @@ const APPEND_END: u8 = b'A';
 const NEW_LINE: u8 = b'o';
 const NEW_LINE_ABOVE: u8 = b'O';
 const DELETE_LINE: u8 = b'd';
+const WORD_FWD: u8 = b'w';
+const WORD_END: u8 = b'e';
+const WORD_BKWD: u8 = b'b';
+const JUMP_NEXT: u8 = b'f';
+const JUMP_BEFORE_NEXT: u8 = b't';
+const JUMP_PREV: u8 = b'F';
+const JUMP_BEFORE_PREV: u8 = b'T';
 
 // Commands
 const CMD_EXIT: char = 'q';
@@ -89,11 +96,12 @@ core::arch::global_asm! {
 }
 
 /// The different modes of the editor.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum EditorMode {
     /// Move around the text, switch between other modes, etc.
-    #[default]
-    Normal,
+    ///
+    /// The stored value is the previous command entered (if any).
+    Normal(Option<Key>),
     /// Edit the text.
     Edit,
     /// Input commands.
@@ -103,7 +111,7 @@ impl EditorMode {
     /// Gets the ansi console fg code associated with the particular mode.
     const fn ansi_colour_code(self) -> &'static str {
         match self {
-            Self::Normal => ansi::ANSI_FG_GREEN,
+            Self::Normal(_) => ansi::ANSI_FG_GREEN,
             Self::Edit => ansi::ANSI_FG_BLUE,
             Self::Command => ansi::ANSI_FG_YELLOW,
         }
@@ -111,10 +119,15 @@ impl EditorMode {
 
     const fn as_str(self) -> &'static str {
         match self {
-            Self::Normal => "NORMAL",
+            Self::Normal(_) => "NORMAL",
             Self::Edit => "EDIT",
             Self::Command => "COMMAND",
         }
+    }
+}
+impl Default for EditorMode {
+    fn default() -> Self {
+        Self::Normal(None)
     }
 }
 
@@ -246,6 +259,17 @@ impl Cursor {
             self.0.col.saturating_sub(col_offset) + 1 + row_num_width
         )
     }
+}
+
+/// The various situations which can occur after advancing or reversing the cursor.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum MoveCursorOutcome {
+    /// A boundary was hit, so the cursor didn't move.
+    Boundary,
+    /// A line was crossed.
+    LineCrossed,
+    /// The cursor moved within the same line.
+    Moved,
 }
 
 /// A given row-column point within the screen.
@@ -728,6 +752,7 @@ impl EditorState {
     }
 
     /// Handles user input, propagating any [`Errno`]s incurred by underlying syscalls.
+    #[allow(clippy::too_many_lines)]
     fn handle_input(&mut self) -> Result<(), Errno> {
         use EditorMode::{Command, Edit, Normal};
         use Key::Ascii;
@@ -745,7 +770,41 @@ impl EditorState {
         // }
 
         match self.mode {
-            Normal => match keypress {
+            Normal(Some(Ascii(JUMP_NEXT))) => {
+                if let Ascii(c) = keypress
+                    && !c.is_ascii_control()
+                {
+                    self.cursor_to_char(c as char);
+                }
+                self.update_mode(EditorMode::default());
+            }
+            Normal(Some(Ascii(JUMP_BEFORE_NEXT))) => {
+                if let Ascii(c) = keypress
+                    && !c.is_ascii_control()
+                    && self.cursor_to_char(c as char)
+                {
+                    self.cursor_left(1);
+                }
+                self.update_mode(EditorMode::default());
+            }
+            Normal(Some(Ascii(JUMP_PREV))) => {
+                if let Ascii(c) = keypress
+                    && !c.is_ascii_control()
+                {
+                    self.cursor_to_char_back(c as char);
+                }
+                self.update_mode(EditorMode::default());
+            }
+            Normal(Some(Ascii(JUMP_BEFORE_PREV))) => {
+                if let Ascii(c) = keypress
+                    && !c.is_ascii_control()
+                    && self.cursor_to_char_back(c as char)
+                {
+                    self.cursor_right(1);
+                }
+                self.update_mode(EditorMode::default());
+            }
+            Normal(_) => match keypress {
                 Ascii(ENTER_COMMAND_MODE) => self.update_mode(Command),
                 Ascii(CURSOR_U) | Key::UpArrow => self.cursor_up(1),
                 Ascii(CURSOR_TOP) | Key::PageUp => self.cursor_up(usize::MAX),
@@ -779,10 +838,31 @@ impl EditorState {
                 Ascii(DELETE_LINE) => {
                     self.delete_row();
                 }
+                Ascii(WORD_FWD) => {
+                    self.word_forward();
+                }
+                Ascii(WORD_END) => {
+                    self.word_end();
+                }
+                Ascii(WORD_BKWD) => {
+                    self.word_backward();
+                }
+                Ascii(JUMP_NEXT) => {
+                    self.update_mode(Normal(Some(Ascii(JUMP_NEXT))));
+                }
+                Ascii(JUMP_BEFORE_NEXT) => {
+                    self.update_mode(Normal(Some(Ascii(JUMP_BEFORE_NEXT))));
+                }
+                Ascii(JUMP_PREV) => {
+                    self.update_mode(Normal(Some(Ascii(JUMP_PREV))));
+                }
+                Ascii(JUMP_BEFORE_PREV) => {
+                    self.update_mode(Normal(Some(Ascii(JUMP_BEFORE_PREV))));
+                }
                 _ => {}
             },
             Edit => match keypress {
-                Ascii(ESC_CODE) => self.update_mode(Normal),
+                Ascii(ESC_CODE) => self.update_mode(EditorMode::default()),
                 Ascii(BACKSP_CODE) => self.row_delete_char(),
                 Ascii(ENTER_CODE) => self.split_insert_row(),
                 Ascii(c) if !c.is_ascii_control() => {
@@ -791,12 +871,12 @@ impl EditorState {
                 _ => {}
             },
             Command => match keypress {
-                Ascii(ESC_CODE) => self.update_mode(Normal),
+                Ascii(ESC_CODE) => self.update_mode(EditorMode::default()),
                 Ascii(ENTER_CODE) => self.process_command(),
                 Ascii(BACKSP_CODE) => {
                     self.status_message.pop();
                     if self.status_message.contents.is_empty() {
-                        self.update_mode(Normal);
+                        self.update_mode(EditorMode::default());
                     }
                 }
                 Ascii(c) if c.is_ascii_graphic() => self.status_message.push(c as char),
@@ -810,15 +890,19 @@ impl EditorState {
     fn update_mode(&mut self, mode: EditorMode) {
         use EditorMode::{Command, Edit, Normal};
         match (self.mode, mode) {
-            (Command, Normal) => self.status_message.clear(),
-            (Normal, Command) => {
+            (Normal(x), Normal(y)) if x == y => {
+                // No need to do anything if the mode hasn't changed.
+                return;
+            }
+            (Command, Normal(_)) => self.status_message.clear(),
+            (Normal(_), Command) => {
                 self.status_message.clear();
                 self.status_message.push(ENTER_COMMAND_MODE as char);
             }
-            (Normal, Edit) => {
+            (Normal(_), Edit) => {
                 print!("{}", EDIT_MODE_CURSOR);
             }
-            (Edit, Normal) => {
+            (Edit, Normal(_)) => {
                 print!("{}", NORMAL_MODE_CURSOR);
                 self.cursor_left(1);
             }
@@ -954,7 +1038,7 @@ impl EditorState {
             }
         }
 
-        self.update_mode(EditorMode::Normal);
+        self.update_mode(EditorMode::default());
 
         if let Some(c) = invalid_command {
             self.display_status_msg(
@@ -966,6 +1050,198 @@ impl EditorState {
                 ),
                 Timespec::from_secs(1),
             );
+        }
+    }
+
+    fn word_forward(&mut self) {
+        use MoveCursorOutcome::{Boundary, LineCrossed};
+
+        let Some(starting_char) = self.current_char() else {
+            return;
+        };
+
+        let mut after_word = !is_word_component(starting_char);
+
+        loop {
+            let outcome = self.advance_cursor();
+
+            if outcome == Boundary {
+                break;
+            }
+
+            if outcome == LineCrossed {
+                after_word = true;
+            }
+
+            let Some(c) = self.current_char() else {
+                break;
+            };
+
+            if after_word && is_word_component(c) {
+                // We reached the next word. We're done.
+                break;
+            }
+
+            if !after_word && !is_word_component(c) {
+                // Just reached end of current word. Time to find the next word.
+                after_word = true;
+            }
+        }
+    }
+
+    fn word_end(&mut self) {
+        use MoveCursorOutcome::{Boundary, LineCrossed};
+
+        // Skip through initial non-word chars if necessary
+        while let Some(c) = self.current_char()
+            && !is_word_component(c)
+        {
+            if self.advance_cursor() == Boundary {
+                return;
+            }
+        }
+
+        // Advance until past the word
+        while let Some(c) = self.current_char()
+            && is_word_component(c)
+        {
+            let outcome = self.advance_cursor();
+            if outcome == LineCrossed {
+                break;
+            }
+        }
+
+        // Move back to end of word
+        while let Some(c) = self.current_char()
+            && !is_word_component(c)
+        {
+            self.reverse_cursor();
+        }
+    }
+
+    fn word_backward(&mut self) {
+        use MoveCursorOutcome::{Boundary, LineCrossed};
+
+        let mut in_word = false;
+
+        loop {
+            let outcome = self.reverse_cursor();
+
+            if outcome == Boundary {
+                break;
+            }
+
+            let Some(c) = self.current_char() else {
+                break;
+            };
+
+            if in_word && (!is_word_component(c) || outcome == LineCrossed) {
+                // We've gone before the previous word. Go back and we're done.
+                self.advance_cursor();
+                break;
+            }
+
+            if !in_word && is_word_component(c) {
+                // We've reached the previous word. Time to find the beginning of it.
+                in_word = true;
+            }
+        }
+    }
+
+    /// Returns [`true`] if the character was found and the cursor was moved, [`false`] otherwise.
+    fn cursor_to_char(&mut self, c: char) -> bool {
+        let current_col = self.cursor.0.col;
+        let mut dest_col = current_col;
+        let Some(line) = self.editor_rows.get(self.cursor.0.row) else {
+            return false;
+        };
+
+        let chars: Vec<char> = line.chars().collect();
+
+        loop {
+            dest_col = dest_col.saturating_add(1);
+            if dest_col == line.len() {
+                // End of line
+                return false;
+            }
+
+            let Some(&current_char) = chars.get(dest_col) else {
+                return false;
+            };
+
+            if current_char == c {
+                let diff = dest_col - current_col;
+                self.cursor_right(diff);
+                return true;
+            }
+        }
+    }
+
+    /// Returns [`true`] if the character was found and the cursor was moved, [`false`] otherwise.
+    fn cursor_to_char_back(&mut self, c: char) -> bool {
+        let current_col = self.cursor.0.col;
+        let mut dest_col = current_col;
+        let Some(line) = self.editor_rows.get(self.cursor.0.row) else {
+            return false;
+        };
+
+        let chars: Vec<char> = line.chars().collect();
+
+        loop {
+            if dest_col == 0 {
+                // Start of line
+                return false;
+            }
+
+            dest_col = dest_col.saturating_sub(1);
+
+            let Some(&current_char) = chars.get(dest_col) else {
+                return false;
+            };
+
+            if current_char == c {
+                let diff = current_col - dest_col;
+                self.cursor_left(diff);
+                return true;
+            }
+        }
+    }
+
+    fn advance_cursor(&mut self) -> MoveCursorOutcome {
+        use MoveCursorOutcome::{Boundary, LineCrossed, Moved};
+
+        let Some(row) = self.editor_rows.get(self.cursor.0.row) else {
+            return Boundary;
+        };
+
+        if self.cursor.0.col >= (row.len() - 1) {
+            if self.cursor.0.row >= (self.editor_rows.len() - 1) {
+                // EOF
+                return Boundary;
+            }
+            self.cursor_left(usize::MAX);
+            self.cursor_down(1);
+            LineCrossed
+        } else {
+            self.cursor_right(1);
+            Moved
+        }
+    }
+
+    fn reverse_cursor(&mut self) -> MoveCursorOutcome {
+        use MoveCursorOutcome::{Boundary, LineCrossed, Moved};
+
+        if self.cursor.0.col == 0 {
+            if self.cursor.0.row == 0 {
+                // Start of file.
+                return Boundary;
+            }
+            self.cursor_up(1);
+            self.cursor_right(usize::MAX);
+            LineCrossed
+        } else {
+            self.cursor_left(1);
+            Moved
         }
     }
 
@@ -1117,6 +1393,14 @@ impl EditorState {
         self.display_status_msg(&msg, DEFAULT_MSG_TIME);
     }
 
+    /// Gets the character the cursor is currently on (if any).
+    fn current_char(&self) -> Option<char> {
+        self.editor_rows
+            .get(self.cursor.0.row)?
+            .chars()
+            .nth(self.cursor.0.col)
+    }
+
     /// Gets the width of the row number column displayed on the left side of the screen.
     fn row_num_width(&self) -> usize {
         numbers::num_digits_base10(self.editor_rows.len()) + 1
@@ -1179,6 +1463,11 @@ unsafe extern "C" fn start(stack_top: *const usize) -> ! {
     let exit_code = main(&argv, &envp);
 
     process::exit(exit_code);
+}
+
+/// Returns [`true`] if and only if the given character is a "word" character.
+fn is_word_component(c: char) -> bool {
+    c.is_alphanumeric() || (c == '_')
 }
 
 fn get_win_size() -> WinSize {
