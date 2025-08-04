@@ -6,7 +6,7 @@
   "dynamic-linking": false,
   "target-endian": "little",
   "target-pointer-width": "64",
-  "target-c-int-width": "32",
+  "target-c-int-width": 32,
   "max-atomic-width": 64,
   "metadata": {
     "description": null,
