@@ -1389,13 +1389,7 @@ impl EditorState {
             return;
         }
 
-        let msg = format!(
-            "{}Wrote {} chars to `{}`.{}",
-            ansi::ANSI_FG_RED,
-            self.contents_length(),
-            file_path,
-            ansi::ANSI_RESET_GRAPHIC
-        );
+        let msg = format!("Wrote {} chars to `{}`.", self.contents_length(), file_path,);
         self.display_status_msg(&msg, DEFAULT_MSG_TIME);
     }
 
