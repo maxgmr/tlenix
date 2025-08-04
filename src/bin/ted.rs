@@ -39,7 +39,7 @@ use tlenix_core::{
 };
 
 const PANIC_TITLE: &str = "ted";
-const NEW_FILE_STR: &str = "[new file]";
+const NO_FILE_STR: &str = "[no file chosen]";
 
 const ESC_CODE: u8 = 0x1b;
 const BACKSP_CODE: u8 = 0x7f;
@@ -368,7 +368,7 @@ impl StatusBar {
             Char(' '),
             Code(ansi::ANSI_FG_B_BLACK),
             Char(' '),
-            Text(self.file_path.as_deref().unwrap_or(NEW_FILE_STR)),
+            Text(self.file_path.as_deref().unwrap_or(NO_FILE_STR)),
             Char(' '),
             Code(ansi::ANSI_FG_DEFAULT),
         ];
@@ -958,7 +958,12 @@ impl EditorState {
 
         if let Some(c) = invalid_command {
             self.display_status_msg(
-                &format!("Error: unknown command `{c}`."),
+                &format!(
+                    "{}Error: unknown command `{}`.{}",
+                    ansi::ANSI_FG_RED,
+                    c,
+                    ansi::ANSI_RESET_GRAPHIC
+                ),
                 Timespec::from_secs(1),
             );
         }
@@ -1041,7 +1046,12 @@ impl EditorState {
     /// Prompts the user for the file name if it's a new file.
     fn write_to_file(&mut self) {
         let Some(file_path) = self.options.path.clone() else {
-            self.display_status_msg("Error: no file name", DEFAULT_MSG_TIME);
+            let msg = format!(
+                "{}Error: no file name.{}",
+                ansi::ANSI_FG_RED,
+                ansi::ANSI_RESET_GRAPHIC
+            );
+            self.display_status_msg(&msg, DEFAULT_MSG_TIME);
             return;
         };
         let mut temp_file_path = file_path.to_string();
@@ -1055,7 +1065,12 @@ impl EditorState {
         {
             Ok(tf) => tf,
             Err(errno) => {
-                let msg = format!("Error: failed to create backup file: {}", errno,);
+                let msg = format!(
+                    "{}Error: failed to create backup file: {}{}",
+                    ansi::ANSI_FG_RED,
+                    errno,
+                    ansi::ANSI_RESET_GRAPHIC
+                );
                 self.display_status_msg(&msg, DEFAULT_MSG_TIME);
                 return;
             }
@@ -1068,19 +1083,37 @@ impl EditorState {
 
         // Write to the temporary file.
         if let Err(errno) = temp_file.write(out_string.as_bytes()) {
-            let msg = format!("Error: failed to write to `{}`: {}", temp_file_path, errno);
+            let msg = format!(
+                "{}Error: failed to write to `{}`: {}{}",
+                ansi::ANSI_FG_RED,
+                temp_file_path,
+                errno,
+                ansi::ANSI_RESET_GRAPHIC
+            );
             self.display_status_msg(&msg, DEFAULT_MSG_TIME);
             return;
         }
 
         // Overwrite the destination file.
         if let Err(errno) = fs::rename(temp_file_path, &file_path, fs::RenameFlags::empty()) {
-            let msg = format!("Error: failed to write to `{}`: {}", file_path, errno);
+            let msg = format!(
+                "{}Error: failed to write to `{}`: {}{}",
+                ansi::ANSI_FG_RED,
+                file_path,
+                errno,
+                ansi::ANSI_RESET_GRAPHIC
+            );
             self.display_status_msg(&msg, DEFAULT_MSG_TIME);
             return;
         }
 
-        let msg = format!("Wrote {} chars to `{}`.", self.contents_length(), file_path);
+        let msg = format!(
+            "{}Wrote {} chars to `{}`.{}",
+            ansi::ANSI_FG_RED,
+            self.contents_length(),
+            file_path,
+            ansi::ANSI_RESET_GRAPHIC
+        );
         self.display_status_msg(&msg, DEFAULT_MSG_TIME);
     }
 
