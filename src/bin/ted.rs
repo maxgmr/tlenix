@@ -54,7 +54,7 @@ const KEYPRESS_BUF_LEN: usize = 3;
 
 const TAB_LEN: usize = 4;
 
-const OPEN_MSG_SECS: i64 = 5;
+const DEFAULT_MSG_TIME: Timespec = Timespec::from_secs(5);
 
 const NORMAL_MODE_CURSOR: &str = ansi::ANSI_CURSOR_BLOCK;
 const EDIT_MODE_CURSOR: &str = ansi::ANSI_CURSOR_B_UNDER;
@@ -342,23 +342,11 @@ impl StatusBar {
         self.must_rerender = true;
     }
 
-    /// Updates [`Self::file_path`].
-    fn update_file(&mut self, file: Option<&str>) {
-        self.file_path = file.map(str::to_string);
-        self.must_rerender = true;
-    }
-
     /// Updates [`Self::last_frame_time`].
     fn update_benchmark(&mut self, last_frame_time: Timespec) {
         self.last_frame_time = Some(last_frame_time);
         self.must_rerender = true;
     }
-
-    // /// Updates [`Self::width`].
-    // fn update_width(&mut self, width: usize) {
-    //     self.width = width;
-    //     self.must_rerender = true;
-    // }
 
     /// Gets the rendered text form of this [`StatusBar`]. Returns [`None`] if re-rendering is
     /// unnecessary.
@@ -421,6 +409,13 @@ impl StatusBar {
     }
 }
 
+/// A prepared status message, ready for display when possible.
+#[derive(Debug, Clone)]
+struct QueuedStatusMessage {
+    contents: String,
+    time: Timespec,
+}
+
 /// The message being displayed at the bottom of the screen.
 #[derive(Debug, Clone)]
 struct StatusMessage {
@@ -434,7 +429,7 @@ impl StatusMessage {
         Self {
             contents: String::new(),
             time: None,
-            start_time: Timespec { secs: 0, nanos: 0 },
+            start_time: Timespec::from_secs(0),
             must_rerender: true,
         }
     }
@@ -510,6 +505,8 @@ struct EditorState {
     status_bar: StatusBar,
     /// The status message of the editor (if any).
     status_message: StatusMessage,
+    /// The next message to send to the [`StatusMessage`] when it's possible to display.
+    next_status_message: Option<QueuedStatusMessage>,
     /// Wrapper around a [`String`]. This [`String`] is generated and rendered to the screen every
     /// frame.
     render_buf: RenderBuffer,
@@ -572,6 +569,7 @@ impl EditorState {
             render_buf,
             status_bar,
             status_message: StatusMessage::new(),
+            next_status_message: None,
             cursor: Cursor(Point::default()),
             screen_offset: Point::default(),
             should_exit: false,
@@ -601,6 +599,13 @@ impl EditorState {
             self.render_buf.0.push_str(ansi_cursor_up_col1!(1));
             self.render_buf.0.push_str(ansi::ANSI_ERASE_LINE);
             self.render_buf.0.push_str(&sb);
+        }
+
+        // If not in command mode, get ready to display the queued status message
+        if let Some(q_msg) = mem::take(&mut self.next_status_message)
+            && self.mode != EditorMode::Command
+        {
+            self.status_message.display_msg(&q_msg.contents, q_msg.time);
         }
 
         self.status_message.update();
@@ -736,7 +741,7 @@ impl EditorState {
         //     } else {
         //         format!("{:#04x}", c)
         //     };
-        //     self.display_status_msg(&msg, Timespec { secs: 1, nanos: 0 });
+        //     self.display_status_msg(&msg, Timespec::from_secs(1));
         // }
 
         match self.mode {
@@ -954,7 +959,7 @@ impl EditorState {
         if let Some(c) = invalid_command {
             self.display_status_msg(
                 &format!("Error: unknown command `{c}`."),
-                Timespec { secs: 1, nanos: 0 },
+                Timespec::from_secs(1),
             );
         }
     }
@@ -1020,9 +1025,13 @@ impl EditorState {
     }
 
     /// Displays a status message, cleared after the first keypress after the specified duration
-    /// has elapsed.
+    /// has elapsed. If currently in [`EditorMode::Command`] mode, will wait to display the message
+    /// until command mode is exited.
     fn display_status_msg(&mut self, message: &str, duration: Timespec) {
-        self.status_message.display_msg(message, duration);
+        self.next_status_message = Some(QueuedStatusMessage {
+            contents: message.to_string(),
+            time: duration,
+        });
     }
 
     /// Writes the current [`Self::editor_rows`] to the provided file path.
@@ -1032,7 +1041,7 @@ impl EditorState {
     /// Prompts the user for the file name if it's a new file.
     fn write_to_file(&mut self) {
         let Some(file_path) = self.options.path.clone() else {
-            self.prompt_file_name();
+            self.display_status_msg("Error: no file name", DEFAULT_MSG_TIME);
             return;
         };
         let mut temp_file_path = file_path.to_string();
@@ -1047,35 +1056,32 @@ impl EditorState {
             Ok(tf) => tf,
             Err(errno) => {
                 let msg = format!("Error: failed to create backup file: {}", errno,);
-                self.display_status_msg(&msg, Timespec { secs: 5, nanos: 0 });
+                self.display_status_msg(&msg, DEFAULT_MSG_TIME);
                 return;
             }
         };
 
-        // Write to the temporary file.
         let mut out_string = self.editor_rows.join("\n");
         if !out_string.ends_with('\n') {
             out_string.push('\n');
         }
+
+        // Write to the temporary file.
         if let Err(errno) = temp_file.write(out_string.as_bytes()) {
             let msg = format!("Error: failed to write to `{}`: {}", temp_file_path, errno);
-            self.display_status_msg(&msg, Timespec { secs: 5, nanos: 0 });
+            self.display_status_msg(&msg, DEFAULT_MSG_TIME);
             return;
         }
 
         // Overwrite the destination file.
         if let Err(errno) = fs::rename(temp_file_path, &file_path, fs::RenameFlags::empty()) {
             let msg = format!("Error: failed to write to `{}`: {}", file_path, errno);
-            self.display_status_msg(&msg, Timespec { secs: 5, nanos: 0 });
+            self.display_status_msg(&msg, DEFAULT_MSG_TIME);
             return;
         }
 
         let msg = format!("Wrote {} chars to `{}`.", self.contents_length(), file_path);
-        self.display_status_msg(&msg, Timespec { secs: 5, nanos: 0 });
-    }
-
-    fn prompt_file_name(&mut self) {
-        todo!()
+        self.display_status_msg(&msg, DEFAULT_MSG_TIME);
     }
 
     /// Gets the width of the row number column displayed on the left side of the screen.
@@ -1280,13 +1286,7 @@ fn main(args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
 
     if let Some(path) = &state.options.path {
         let opened_msg = format!("Loaded {} chars from `{}`.", state.contents_length(), path);
-        state.display_status_msg(
-            &opened_msg,
-            Timespec {
-                secs: OPEN_MSG_SECS,
-                nanos: 0,
-            },
-        );
+        state.display_status_msg(&opened_msg, DEFAULT_MSG_TIME);
     }
 
     loop {
