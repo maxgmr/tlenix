@@ -55,7 +55,7 @@ pub struct Output;
 /// Macro to implement the getter and setter [`Termios`] methods for all the mode flags.
 macro_rules! impl_termios_flags_methods {
     [$($flags_t:ty),* $(,)?] => {
-        $(paste::paste! {
+        $(pastey::paste! {
             /// Gets the value of the given
             #[doc = concat!("[`", stringify!($flags_t), "`]")]
             /// flag.
