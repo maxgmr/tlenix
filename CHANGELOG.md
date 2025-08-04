@@ -21,10 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `rcv`: Convert radices
 - `reset`: Reset terminal
 
-## [0.1.0-beta.4] - UNRELEASED
+## [0.1.0-beta.4] - 2025-08-04
 
 ### Added
 
+- `ted`: A basic Vim-style text editor.
 - `codebreaker`: A simple code-guessing game inspired by the "Mastermind" board game.
 - Random number generation.
 - A collection of common ANSI console control sequences.
