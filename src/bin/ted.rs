@@ -1,0 +1,1688 @@
+//! `ted` is a simple text editor.
+
+#![warn(
+    missing_docs,
+    missing_debug_implementations,
+    rust_2018_idioms,
+    clippy::all,
+    clippy::pedantic
+)]
+#![no_std]
+#![no_main]
+#![feature(custom_test_frameworks)]
+#![cfg_attr(test, test_runner(tlenix_core::custom_test_runner))]
+#![cfg_attr(test, reexport_test_harness_main = "test_main")]
+
+extern crate alloc;
+
+use alloc::{
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
+use core::{cmp, fmt::Display, mem, panic::PanicInfo, slice};
+
+use getargs::{Arg, Options};
+use tlenix_core::{
+    ANSI_TLENIX_DEFAULT_CURSOR, EnvVar, Errno, ansi, ansi_cursor_down, ansi_cursor_down_col1,
+    ansi_cursor_right, ansi_cursor_up_col1, eprintln, format,
+    fs::{self, OpenOptions},
+    numbers, parse_argv_envp, print,
+    process::{self, ExitStatus},
+    streams::STDIN,
+    term::{
+        ControlCharIndex, ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags,
+        SetTermAttrsCmd, Termios, WinSize,
+    },
+    time::{GetTimeClock, Timespec, clock_time},
+    try_exit,
+};
+
+const PANIC_TITLE: &str = "ted";
+const NO_FILE_STR: &str = "[no file chosen]";
+
+const ESC_CODE: u8 = 0x1b;
+const BACKSP_CODE: u8 = 0x7f;
+const ENTER_CODE: u8 = 0x0d;
+const TAB_CODE: u8 = b'\t';
+
+const READ_MIN_BYTES_READ: u8 = 0;
+const READ_MAX_TIME_PASSED: Deciseconds = Deciseconds(1);
+
+const CHECK_TERM_RESPONSE_LIMIT: usize = 64;
+
+const KEYPRESS_BUF_LEN: usize = 3;
+
+const TAB_LEN: usize = 4;
+
+const DEFAULT_MSG_TIME: Timespec = Timespec::from_secs(5);
+
+const NORMAL_MODE_CURSOR: &str = ansi::ANSI_CURSOR_BLOCK;
+const EDIT_MODE_CURSOR: &str = ansi::ANSI_CURSOR_B_UNDER;
+
+// Normal mode controls
+const CURSOR_U: u8 = b'k';
+const CURSOR_D: u8 = b'j';
+const CURSOR_L: u8 = b'h';
+const CURSOR_R: u8 = b'l';
+const CURSOR_TOP: u8 = b'g';
+const CURSOR_BOT: u8 = b'G';
+const CURSOR_START: u8 = b'^';
+const CURSOR_END: u8 = b'$';
+const ENTER_COMMAND_MODE: u8 = b':';
+const INSERT: u8 = b'i';
+const INSERT_START: u8 = b'I';
+const APPEND: u8 = b'a';
+const APPEND_END: u8 = b'A';
+const NEW_LINE: u8 = b'o';
+const NEW_LINE_ABOVE: u8 = b'O';
+const DELETE_LINE: u8 = b'd';
+const WORD_FWD: u8 = b'w';
+const WORD_END: u8 = b'e';
+const WORD_BKWD: u8 = b'b';
+const JUMP_NEXT: u8 = b'f';
+const JUMP_BEFORE_NEXT: u8 = b't';
+const JUMP_PREV: u8 = b'F';
+const JUMP_BEFORE_PREV: u8 = b'T';
+
+// Commands
+const CMD_EXIT: char = 'q';
+const CMD_WRITE: char = 'w';
+
+core::arch::global_asm! {
+    ".global _start",
+    "_start:",
+    "mov rdi, rsp",
+    "call start"
+}
+
+/// The different modes of the editor.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum EditorMode {
+    /// Move around the text, switch between other modes, etc.
+    ///
+    /// The stored value is the previous command entered (if any).
+    Normal(Option<Key>),
+    /// Edit the text.
+    Edit,
+    /// Input commands.
+    Command,
+}
+impl EditorMode {
+    /// Gets the ansi console fg code associated with the particular mode.
+    const fn ansi_colour_code(self) -> &'static str {
+        match self {
+            Self::Normal(_) => ansi::ANSI_FG_GREEN,
+            Self::Edit => ansi::ANSI_FG_BLUE,
+            Self::Command => ansi::ANSI_FG_YELLOW,
+        }
+    }
+
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Normal(_) => "NORMAL",
+            Self::Edit => "EDIT",
+            Self::Command => "COMMAND",
+        }
+    }
+}
+impl Default for EditorMode {
+    fn default() -> Self {
+        Self::Normal(None)
+    }
+}
+
+/// The various command-line options and arguments which can be passed to this program.
+#[derive(Clone, Debug, Default)]
+struct TedOptions {
+    /// The path to the opened file.
+    path: Option<String>,
+    /// Whether or not to print benchmarks.
+    benchmark: bool,
+}
+impl TryFrom<&[String]> for TedOptions {
+    type Error = Errno;
+
+    fn try_from(value: &[String]) -> Result<Self, Self::Error> {
+        let mut opts = Options::new(value.iter().map(String::as_str).skip(1));
+
+        let mut ted_options = Self::default();
+
+        while let Some(arg) = opts.next_arg().map_err(|_| Errno::Einval)? {
+            match arg {
+                Arg::Short('b') | Arg::Long("benchmark" | "bench") => ted_options.benchmark = true,
+                Arg::Positional(val) if ted_options.path.is_none() => {
+                    ted_options.path = Some(val.to_string());
+                }
+                _ => {}
+            }
+        }
+
+        Ok(ted_options)
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+enum Key {
+    Ascii(u8),
+    UpArrow,
+    DownArrow,
+    RightArrow,
+    LeftArrow,
+    PageUp,
+    PageDown,
+    F5,
+    F6,
+    F7,
+    F8,
+    F9,
+    F10,
+    F11,
+    F12,
+    Home,
+    End,
+    Insert,
+    Delete,
+}
+impl Key {
+    /// Attempts to match the given escape sequence to a [`Key`] variant.
+    fn try_from_esc(seq: [u8; KEYPRESS_BUF_LEN]) -> Option<Self> {
+        match (seq.get(1), seq.get(2)) {
+            (Some(b'A'), _) => Some(Self::UpArrow),
+            (Some(b'B'), _) => Some(Self::DownArrow),
+            (Some(b'C'), _) => Some(Self::RightArrow),
+            (Some(b'D'), _) => Some(Self::LeftArrow),
+            (Some(b'5'), Some(b'~')) => Some(Self::PageUp),
+            (Some(b'6'), Some(b'~')) => Some(Self::PageDown),
+            (Some(b'1'), Some(b'5')) => Some(Self::F5),
+            (Some(b'1'), Some(b'7')) => Some(Self::F6),
+            (Some(b'1'), Some(b'8')) => Some(Self::F7),
+            (Some(b'1'), Some(b'9')) => Some(Self::F8),
+            (Some(b'2'), Some(b'0')) => Some(Self::F9),
+            (Some(b'2'), Some(b'1')) => Some(Self::F10),
+            (Some(b'2'), Some(b'3')) => Some(Self::F11),
+            (Some(b'2'), Some(b'4')) => Some(Self::F12),
+            (Some(b'H'), _) => Some(Self::Home),
+            (Some(b'F'), _) => Some(Self::End),
+            (Some(b'2'), Some(b'~')) => Some(Self::Insert),
+            (Some(b'3'), Some(b'~')) => Some(Self::Delete),
+            _ => None,
+        }
+    }
+}
+impl From<u8> for Key {
+    fn from(value: u8) -> Self {
+        Self::Ascii(value)
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct Deciseconds(u8);
+
+/// A [`String`] storing all content to be rendered onto the screen every frame.
+#[derive(Debug, Clone)]
+struct RenderBuffer(String);
+impl RenderBuffer {
+    fn new(win_size: &WinSize) -> Self {
+        RenderBuffer(String::with_capacity(
+            // Add a little extra capacity to account for escape codes
+            (win_size.rows * win_size.cols) + 20,
+        ))
+    }
+}
+impl Display for RenderBuffer {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut formatted =
+            String::with_capacity(self.0.len() + self.0.matches('\t').count() * (TAB_LEN - 1));
+        for c in self.0.chars() {
+            if c == '\t' {
+                for _ in 0..TAB_LEN {
+                    formatted.push(' ');
+                }
+            } else {
+                formatted.push(c);
+            }
+        }
+        write!(f, "{formatted}")
+    }
+}
+
+/// The cursor position within the document.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+struct Cursor(Point);
+impl Cursor {
+    /// Converts this position to the cursor position on the visible screen, then produces the
+    /// terminal sequence which moves the terminal cursor to that position.
+    fn term_seq(&self, row_offset: usize, col_offset: usize, row_num_width: usize) -> String {
+        format!(
+            "\u{001b}[{};{}H",
+            self.0.row.saturating_sub(row_offset) + 1,
+            self.0.col.saturating_sub(col_offset) + 1 + row_num_width
+        )
+    }
+}
+
+/// The various situations which can occur after advancing or reversing the cursor.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum MoveCursorOutcome {
+    /// A boundary was hit, so the cursor didn't move.
+    Boundary,
+    /// A line was crossed.
+    LineCrossed,
+    /// The cursor moved within the same line.
+    Moved,
+}
+
+/// A given row-column point within the screen.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+struct Point {
+    row: usize,
+    col: usize,
+}
+impl Point {
+    fn try_from_string_helper(value: &str) -> Option<Self> {
+        // Format: "[<row>;<col>R"
+        let start = value.rfind('[')? + 1;
+        let end = value.find('R')?;
+
+        let (first, second) = &value[start..end].split_once(';')?;
+
+        Some(Self {
+            row: first.parse().ok()?,
+            col: second.parse().ok()?,
+        })
+    }
+}
+impl From<Point> for WinSize {
+    fn from(value: Point) -> Self {
+        Self {
+            rows: value.row,
+            cols: value.col,
+            width: 0,
+            height: 0,
+        }
+    }
+}
+impl TryFrom<&str> for Point {
+    type Error = &'static str;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::try_from_string_helper(value).ok_or("failed to parse Point from string")
+    }
+}
+impl From<&Point> for String {
+    fn from(value: &Point) -> Self {
+        format!("\u{001b}[{};{}H", value.row + 1, value.col + 1)
+    }
+}
+
+/// The different types of elements which can be rendered as part of the [`StatusBar`].
+///
+/// [`StatusBarElem::Code`]s don't take up space, while [`StatusBarElem::Text`]s and
+/// [`StatusBarElem::Char`]s _do_.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+enum StatusBarElem<'a> {
+    Code(&'a str),
+    Text(&'a str),
+    Char(char),
+}
+impl StatusBarElem<'_> {
+    fn len(&self) -> usize {
+        match self {
+            Self::Code(_) => 0,
+            Self::Text(t) => t.len(),
+            Self::Char(_) => 1,
+        }
+    }
+}
+
+/// The editor's status bar, displaying information about the current file.
+#[derive(Debug, Clone)]
+struct StatusBar {
+    /// The path of the currently-open file.
+    file_path: Option<String>,
+    /// The current [`EditorMode`].
+    mode: EditorMode,
+    /// The last frame time benchmark, if any.
+    last_frame_time: Option<Timespec>,
+    /// The width of the bar.
+    width: usize,
+    /// Whether or not this status bar mut be redrawn.
+    must_rerender: bool,
+}
+impl StatusBar {
+    fn new(file_path: Option<&str>, mode: EditorMode, width: usize) -> Self {
+        Self {
+            file_path: file_path.map(str::to_string),
+            mode,
+            last_frame_time: None,
+            width,
+            must_rerender: true,
+        }
+    }
+
+    /// Updates [`Self::mode`].
+    fn update_mode(&mut self, mode: EditorMode) {
+        self.mode = mode;
+        self.must_rerender = true;
+    }
+
+    /// Updates [`Self::last_frame_time`].
+    fn update_benchmark(&mut self, last_frame_time: Timespec) {
+        self.last_frame_time = Some(last_frame_time);
+        self.must_rerender = true;
+    }
+
+    /// Gets the rendered text form of this [`StatusBar`]. Returns [`None`] if re-rendering is
+    /// unnecessary.
+    fn render_string(&mut self) -> Option<String> {
+        use StatusBarElem::{Char, Code, Text};
+
+        if !self.must_rerender {
+            return None;
+        }
+
+        let mut rendered = String::with_capacity(self.width * 4);
+
+        let mut elems = vec![
+            Code(ansi::ANSI_RESET_GRAPHIC),
+            Code(ansi::ANSI_INVERT),
+            Code(self.mode.ansi_colour_code()),
+            Char(' '),
+            Text(self.mode.as_str()),
+            Char(' '),
+            Code(ansi::ANSI_FG_B_BLACK),
+            Char(' '),
+            Text(self.file_path.as_deref().unwrap_or(NO_FILE_STR)),
+            Char(' '),
+            Code(ansi::ANSI_FG_DEFAULT),
+        ];
+
+        let formatted_lft = self
+            .last_frame_time
+            .map_or(String::new(), |lft| format!("{lft}"));
+        if !formatted_lft.is_empty() {
+            elems.push(Text("Last frame time: "));
+            elems.push(Text(&formatted_lft));
+        }
+
+        let mut elems_len = 0;
+        for elem in elems {
+            // Don't add the next element if it would make the status bar string too long
+            if (elems_len + elem.len()) > self.width {
+                break;
+            }
+
+            match elem {
+                Code(c) => rendered.push_str(c),
+                Text(t) => rendered.push_str(t),
+                Char(c) => rendered.push(c),
+            }
+            elems_len += elem.len();
+        }
+
+        // Fill the remaining space with inverted spaces
+        while elems_len < self.width {
+            rendered.push(' ');
+            elems_len += 1;
+        }
+
+        rendered.push_str(ansi::ANSI_RESET_GRAPHIC);
+
+        self.must_rerender = false;
+        Some(rendered)
+    }
+}
+
+/// A prepared status message, ready for display when possible.
+#[derive(Debug, Clone)]
+struct QueuedStatusMessage {
+    contents: String,
+    time: Timespec,
+}
+
+/// The message being displayed at the bottom of the screen.
+#[derive(Debug, Clone)]
+struct StatusMessage {
+    contents: String,
+    time: Option<Timespec>,
+    start_time: Timespec,
+    must_rerender: bool,
+}
+impl StatusMessage {
+    fn new() -> Self {
+        Self {
+            contents: String::new(),
+            time: None,
+            start_time: Timespec::from_secs(0),
+            must_rerender: true,
+        }
+    }
+
+    fn display_msg(&mut self, message: &str, time: Timespec) {
+        self.contents = message.to_string();
+        self.time = Some(time);
+        if let Ok(time) = clock_time(GetTimeClock::Monotonic) {
+            self.start_time = time;
+        } else {
+            self.clear();
+        }
+        self.must_rerender = true;
+    }
+
+    fn take_msg(&mut self) -> String {
+        let s = mem::take(&mut self.contents);
+        self.clear();
+        s
+    }
+
+    fn push(&mut self, c: char) {
+        self.contents.push(c);
+        self.must_rerender = true;
+    }
+
+    fn pop(&mut self) {
+        self.contents.pop();
+        self.must_rerender = true;
+    }
+
+    fn update(&mut self) {
+        if let Some(time) = self.time
+            && let Ok(current_time) = clock_time(GetTimeClock::Monotonic)
+        {
+            let elapsed = current_time - self.start_time;
+            if elapsed >= time {
+                self.clear();
+            }
+        }
+    }
+
+    fn clear(&mut self) {
+        *self = Self::new();
+    }
+
+    /// Returns [`None`] if re-rendering is unnecessary.
+    fn render_str(&mut self) -> Option<&str> {
+        if !self.must_rerender {
+            return None;
+        }
+        self.must_rerender = false;
+        Some(self.contents.as_str())
+    }
+}
+
+/// The current state of the editor.
+#[derive(Debug, Clone)]
+struct EditorState {
+    /// The original state of the terminal.
+    orig_termios: Termios,
+    /// The options and parameters of this editor.
+    options: TedOptions,
+    /// The current [`EditorMode`].
+    mode: EditorMode,
+    /// The size of the terminal window (minus the status bar).
+    win_size: WinSize,
+    /// The individual lines of the text currently being edited.
+    editor_rows: Vec<String>,
+    /// The previous frame's individual lines of the text currently being edited.
+    editor_rows_prev: Vec<String>,
+    /// The status bar of the editor.
+    status_bar: StatusBar,
+    /// The status message of the editor (if any).
+    status_message: StatusMessage,
+    /// The next message to send to the [`StatusMessage`] when it's possible to display.
+    next_status_message: Option<QueuedStatusMessage>,
+    /// Wrapper around a [`String`]. This [`String`] is generated and rendered to the screen every
+    /// frame.
+    render_buf: RenderBuffer,
+    /// The position of the cursor within the text being edited.
+    cursor: Cursor,
+    /// The offset of the screen relative to the start of the file.
+    screen_offset: Point,
+    /// Whether or not the program should exit on the next frame.
+    should_exit: bool,
+}
+impl EditorState {
+    /// Start up the editor, setting up the terminal accordingly. The terminal is returned to its
+    /// previous state when this [`EditorState`] is dropped.
+    fn start(options: TedOptions) -> Result<Self, Errno> {
+        let orig_termios = STDIN.lock().termios()?;
+
+        enter_raw_mode()?;
+        set_read_timeouts(READ_MIN_BYTES_READ, READ_MAX_TIME_PASSED)?;
+        clear_screen();
+        print!("{}", NORMAL_MODE_CURSOR);
+
+        let mut win_size = get_win_size();
+        // Shrink the window height by 2 to make room for status bar and status message
+        win_size.rows -= 2;
+
+        // Read the file (if provided)
+        let editor_rows = if let Some(path) = &options.path {
+            let mut er = Vec::new();
+            for line in OpenOptions::new()
+                .create(true)
+                .open(path)?
+                .read_to_string()?
+                .lines()
+            {
+                er.push(line.to_string());
+            }
+            if er.is_empty() {
+                er.push(String::new());
+            }
+            er
+        } else {
+            vec![String::new()]
+        };
+        let editor_rows_prev = Vec::with_capacity(editor_rows.len());
+
+        let render_buf = RenderBuffer::new(&win_size);
+        let cols = win_size.cols;
+
+        let mode = EditorMode::default();
+
+        let status_bar = StatusBar::new(options.path.as_deref(), mode, cols);
+
+        let mut result = Self {
+            orig_termios,
+            options,
+            mode: EditorMode::default(),
+            win_size,
+            editor_rows,
+            editor_rows_prev,
+            render_buf,
+            status_bar,
+            status_message: StatusMessage::new(),
+            next_status_message: None,
+            cursor: Cursor(Point::default()),
+            screen_offset: Point::default(),
+            should_exit: false,
+        };
+        result.cursor_up(usize::MAX);
+        result.cursor_left(usize::MAX);
+        Ok(result)
+    }
+
+    /// Refreshes the screen, rendering the current state of the editor.
+    fn refresh_screen(&mut self) {
+        let start_time = if self.options.benchmark {
+            clock_time(GetTimeClock::Monotonic).unwrap()
+        } else {
+            Timespec::default()
+        };
+
+        self.render_buf.0.clear();
+
+        self.render_buf.0.push_str(ansi::ANSI_HIDE_CURSOR);
+        self.render_buf.0.push_str(ansi::ANSI_CURSOR_TOP_LEFT);
+
+        self.add_rows();
+
+        if let Some(sb) = self.status_bar.render_string() {
+            self.render_buf.0.push_str(ansi_cursor_down_col1!(999));
+            self.render_buf.0.push_str(ansi_cursor_up_col1!(1));
+            self.render_buf.0.push_str(ansi::ANSI_ERASE_LINE);
+            self.render_buf.0.push_str(&sb);
+        }
+
+        // If not in command mode, get ready to display the queued status message
+        if let Some(q_msg) = mem::take(&mut self.next_status_message)
+            && self.mode != EditorMode::Command
+        {
+            self.status_message.display_msg(&q_msg.contents, q_msg.time);
+        }
+
+        self.status_message.update();
+        if let Some(msg) = self.status_message.render_str() {
+            self.render_buf.0.push_str(ansi_cursor_down_col1!(999));
+            self.render_buf.0.push_str(ansi::ANSI_ERASE_LINE);
+            self.render_buf.0.push_str(msg);
+        }
+
+        // Move the cursor to its "actual" position on the screen
+        self.render_buf.0.push_str(&self.cursor.term_seq(
+            self.screen_offset.row,
+            self.screen_offset.col,
+            self.row_num_width(),
+        ));
+        self.render_buf.0.push_str(ansi::ANSI_SHOW_CURSOR);
+
+        // Render this frame
+        print!("{}", self.render_buf);
+
+        if self.options.benchmark {
+            self.status_bar
+                .update_benchmark(clock_time(GetTimeClock::Monotonic).unwrap() - start_time);
+            let rendered = self.status_bar.render_string().unwrap();
+            // Re-draw status bar now that benchmarking is done, then move cursor back to proper
+            // place
+            print!(
+                "{}{}{}{}",
+                ansi_cursor_down_col1!(999),
+                ansi_cursor_up_col1!(1),
+                rendered,
+                self.cursor.term_seq(
+                    self.screen_offset.row,
+                    self.screen_offset.col,
+                    self.row_num_width()
+                ),
+            );
+        }
+    }
+
+    /// Adds the interface rows to the render buffer.
+    fn add_rows(&mut self) {
+        let row_start = self.screen_offset.row;
+        let row_finish = self.win_size.rows + self.screen_offset.row;
+
+        // Account for ANSI console codes in length
+        let mut new_line = String::with_capacity(self.win_size.cols * 2);
+
+        for i in row_start..row_finish {
+            new_line.clear();
+
+            new_line.push_str(ansi::ANSI_ERASE_LINE);
+
+            let index_width = self.row_num_width() - 1;
+            if let Some(line) = self.editor_rows.get(i) {
+                let line_num = format!("{:>index_width$} ", i + 1);
+                new_line.push_str(ansi::ANSI_FG_B_BLACK);
+                new_line.push_str(&line_num);
+                new_line.push_str(ansi::ANSI_RESET_GRAPHIC);
+                new_line.push_str(self.visible_row_slice(line.as_ref()));
+            } else {
+                // Empty line
+                new_line.push_str(ansi::ANSI_FG_B_BLACK);
+                new_line.push('~');
+                new_line.push(' ');
+                new_line.push_str(ansi::ANSI_RESET_GRAPHIC);
+            }
+
+            let screen_row_index = i - row_start;
+            let row_changed = self.editor_rows_prev.get(screen_row_index) != Some(&new_line);
+
+            if row_changed {
+                // Move cursor to screen index of row
+                self.render_buf.0.push_str("\u{001b}[");
+                self.render_buf
+                    .0
+                    .push_str((screen_row_index + 1).to_string().as_str());
+                self.render_buf.0.push_str(";1H");
+                // Draw line
+                self.render_buf.0.push_str(&new_line);
+
+                // Update `Self::editor_rows_prev`
+                if screen_row_index < self.editor_rows_prev.len() {
+                    self.editor_rows_prev[screen_row_index] = mem::take(&mut new_line);
+                } else {
+                    // Draw row
+                    self.editor_rows_prev.push(mem::take(&mut new_line));
+                }
+            }
+        }
+
+        // Truncate extra lines if the previous frame had more
+        if self.editor_rows_prev.len() > self.win_size.rows {
+            for i in self.win_size.rows..self.editor_rows_prev.len() {
+                // Move to line and clear it
+                self.render_buf.0.push_str("\u{001b}[");
+                self.render_buf.0.push_str((i + 1).to_string().as_str());
+                self.render_buf.0.push_str(";1H\u{001b}[K");
+            }
+            self.editor_rows_prev.truncate(self.win_size.rows);
+        }
+    }
+
+    /// Gets the slice of the editor row which is visible on the screen.
+    fn visible_row_slice<'a>(&self, current_row: &'a str) -> &'a str {
+        if current_row.is_empty() {
+            return "";
+        }
+        let slice_start = self.screen_offset.col;
+        if slice_start >= current_row.len() {
+            return "";
+        }
+        let slice_end = ((self.win_size.cols - self.row_num_width()) + self.screen_offset.col)
+            .clamp(0, current_row.len());
+        if slice_start >= slice_end {
+            return "";
+        }
+
+        &current_row[slice_start..slice_end]
+    }
+
+    /// Handles user input, propagating any [`Errno`]s incurred by underlying syscalls.
+    #[allow(clippy::too_many_lines)]
+    fn handle_input(&mut self) -> Result<(), Errno> {
+        use EditorMode::{Command, Edit, Normal};
+        use Key::Ascii;
+
+        let keypress = read_keypress()?;
+
+        // // DEBUG ONLY
+        // if let Ascii(c) = keypress {
+        //     let msg = if c.is_ascii_graphic() {
+        //         (c as char).to_string()
+        //     } else {
+        //         format!("{:#04x}", c)
+        //     };
+        //     self.display_status_msg(&msg, Timespec::from_secs(1));
+        // }
+
+        match self.mode {
+            Normal(Some(Ascii(JUMP_NEXT))) => {
+                if let Ascii(c) = keypress
+                    && !c.is_ascii_control()
+                {
+                    self.cursor_to_char(c as char);
+                }
+                self.update_mode(EditorMode::default());
+            }
+            Normal(Some(Ascii(JUMP_BEFORE_NEXT))) => {
+                if let Ascii(c) = keypress
+                    && !c.is_ascii_control()
+                    && self.cursor_to_char(c as char)
+                {
+                    self.cursor_left(1);
+                }
+                self.update_mode(EditorMode::default());
+            }
+            Normal(Some(Ascii(JUMP_PREV))) => {
+                if let Ascii(c) = keypress
+                    && !c.is_ascii_control()
+                {
+                    self.cursor_to_char_back(c as char);
+                }
+                self.update_mode(EditorMode::default());
+            }
+            Normal(Some(Ascii(JUMP_BEFORE_PREV))) => {
+                if let Ascii(c) = keypress
+                    && !c.is_ascii_control()
+                    && self.cursor_to_char_back(c as char)
+                {
+                    self.cursor_right(1);
+                }
+                self.update_mode(EditorMode::default());
+            }
+            Normal(_) => match keypress {
+                Ascii(ENTER_COMMAND_MODE) => self.update_mode(Command),
+                Ascii(CURSOR_U) | Key::UpArrow => self.cursor_up(1),
+                Ascii(CURSOR_TOP) | Key::PageUp => self.cursor_up(usize::MAX),
+                Ascii(CURSOR_D | ENTER_CODE) | Key::DownArrow => self.cursor_down(1),
+                Ascii(CURSOR_BOT) | Key::PageDown => self.cursor_down(usize::MAX),
+                Ascii(CURSOR_L | BACKSP_CODE) | Key::LeftArrow => self.cursor_left(1),
+                Ascii(CURSOR_START) | Key::Home => self.cursor_left(usize::MAX),
+                Ascii(CURSOR_R) | Key::RightArrow => self.cursor_right(1),
+                Ascii(CURSOR_END) | Key::End => self.cursor_right(usize::MAX),
+                Ascii(INSERT) => self.update_mode(Edit),
+                Ascii(APPEND) => {
+                    self.update_mode(Edit);
+                    self.cursor_right(1);
+                }
+                Ascii(INSERT_START) => {
+                    self.update_mode(Edit);
+                    self.cursor_left(usize::MAX);
+                }
+                Ascii(APPEND_END) => {
+                    self.update_mode(Edit);
+                    self.cursor_right(usize::MAX);
+                }
+                Ascii(NEW_LINE) => {
+                    self.update_mode(Edit);
+                    self.insert_row(String::new());
+                }
+                Ascii(NEW_LINE_ABOVE) => {
+                    self.update_mode(Edit);
+                    self.insert_row_above(String::new());
+                }
+                Ascii(DELETE_LINE) => {
+                    self.delete_row();
+                }
+                Ascii(WORD_FWD) => {
+                    self.word_forward();
+                }
+                Ascii(WORD_END) => {
+                    self.word_end();
+                }
+                Ascii(WORD_BKWD) => {
+                    self.word_backward();
+                }
+                Ascii(JUMP_NEXT) => {
+                    self.update_mode(Normal(Some(Ascii(JUMP_NEXT))));
+                }
+                Ascii(JUMP_BEFORE_NEXT) => {
+                    self.update_mode(Normal(Some(Ascii(JUMP_BEFORE_NEXT))));
+                }
+                Ascii(JUMP_PREV) => {
+                    self.update_mode(Normal(Some(Ascii(JUMP_PREV))));
+                }
+                Ascii(JUMP_BEFORE_PREV) => {
+                    self.update_mode(Normal(Some(Ascii(JUMP_BEFORE_PREV))));
+                }
+                _ => {}
+            },
+            Edit => match keypress {
+                Ascii(ESC_CODE) => self.update_mode(EditorMode::default()),
+                Ascii(BACKSP_CODE) => self.row_delete_char(),
+                Ascii(ENTER_CODE) => self.split_insert_row(),
+                Ascii(TAB_CODE) => {
+                    for _ in 0..TAB_LEN {
+                        self.row_insert_char(' ');
+                    }
+                }
+                Ascii(c) if !c.is_ascii_control() => {
+                    self.row_insert_char(c as char);
+                }
+                _ => {}
+            },
+            Command => match keypress {
+                Ascii(ESC_CODE) => self.update_mode(EditorMode::default()),
+                Ascii(ENTER_CODE) => self.process_command(),
+                Ascii(BACKSP_CODE) => {
+                    self.status_message.pop();
+                    if self.status_message.contents.is_empty() {
+                        self.update_mode(EditorMode::default());
+                    }
+                }
+                Ascii(c) if c.is_ascii_graphic() => self.status_message.push(c as char),
+                _ => {}
+            },
+        }
+
+        Ok(())
+    }
+
+    fn update_mode(&mut self, mode: EditorMode) {
+        use EditorMode::{Command, Edit, Normal};
+        match (self.mode, mode) {
+            (Normal(x), Normal(y)) if x == y => {
+                // No need to do anything if the mode hasn't changed.
+                return;
+            }
+            (Command, Normal(_)) => self.status_message.clear(),
+            (Normal(_), Command) => {
+                self.status_message.clear();
+                self.status_message.push(ENTER_COMMAND_MODE as char);
+            }
+            (Normal(_), Edit) => {
+                print!("{}", EDIT_MODE_CURSOR);
+            }
+            (Edit, Normal(_)) => {
+                print!("{}", NORMAL_MODE_CURSOR);
+                self.cursor_left(1);
+            }
+            _ => {}
+        }
+        self.status_bar.update_mode(mode);
+        self.mode = mode;
+    }
+
+    fn row_insert_char(&mut self, c: char) {
+        let row_index = self.cursor.0.row;
+        let mut col_index = self.cursor.0.col;
+        let Some(row) = self.editor_rows.get_mut(row_index) else {
+            return;
+        };
+
+        col_index = col_index.clamp(0, row.len());
+
+        if col_index == row.len() {
+            row.push(c);
+        } else {
+            row.insert(col_index, c);
+        }
+
+        self.cursor_right(1);
+    }
+
+    fn row_delete_char(&mut self) {
+        let row_index = self.cursor.0.row;
+        let mut col_index = self.cursor.0.col;
+
+        let Some(row) = self.editor_rows.get_mut(row_index) else {
+            return;
+        };
+
+        if row.is_empty() {
+            return self.delete_row();
+        }
+
+        let last_char_pos = row.len().saturating_sub(1);
+        col_index = col_index.saturating_sub(1).clamp(0, last_char_pos);
+
+        if col_index == last_char_pos {
+            row.pop();
+        } else {
+            row.remove(col_index);
+        }
+
+        self.cursor_left(1);
+    }
+
+    fn split_insert_row(&mut self) {
+        let row_index = self.cursor.0.row;
+        let mut col_index = self.cursor.0.col;
+
+        let Some(row) = self.editor_rows.get_mut(row_index) else {
+            return;
+        };
+
+        col_index = col_index.clamp(0, row.len());
+        if col_index == row.len() {
+            return self.insert_row(String::new());
+        }
+
+        let new_row_contents = row.split_off(col_index);
+        self.insert_row(new_row_contents);
+    }
+
+    fn insert_row(&mut self, row_contents: String) {
+        let mut row_index = self.cursor.0.row;
+
+        if self.editor_rows.get(row_index).is_none() {
+            return;
+        }
+
+        row_index = row_index.saturating_add(1).clamp(0, self.editor_rows.len());
+
+        if row_index == self.editor_rows.len() {
+            self.editor_rows.push(row_contents);
+        } else {
+            self.editor_rows.insert(row_index, row_contents);
+        }
+
+        self.cursor_left(usize::MAX);
+        self.cursor_down(1);
+    }
+
+    fn insert_row_above(&mut self, row_contents: String) {
+        let row_index = self.cursor.0.row;
+
+        if self.editor_rows.get(row_index).is_none() {
+            return;
+        }
+
+        self.editor_rows.insert(row_index, row_contents);
+
+        self.cursor_left(usize::MAX);
+    }
+
+    fn delete_row(&mut self) {
+        let row_index = self.cursor.0.row;
+
+        if self.editor_rows.get(row_index).is_none() {
+            return;
+        }
+
+        self.editor_rows.remove(row_index);
+
+        if self.editor_rows.is_empty() {
+            self.editor_rows.push(String::new());
+        }
+
+        if self.mode == EditorMode::Edit {
+            // Move cursor to end of previous line
+            self.cursor_up(1);
+            self.cursor_right(usize::MAX);
+        } else {
+            // This ensures the cursor is in a legal space after deletion
+            self.cursor_down(0);
+        }
+    }
+
+    fn process_command(&mut self) {
+        let command = self.status_message.take_msg();
+
+        let mut invalid_command = None;
+        for c in command.chars().skip(1) {
+            match c {
+                CMD_EXIT => self.should_exit = true,
+                CMD_WRITE => self.write_to_file(),
+                c if invalid_command.is_none() => invalid_command = Some(c),
+                _ => {}
+            }
+        }
+
+        self.update_mode(EditorMode::default());
+
+        if let Some(c) = invalid_command {
+            self.display_status_msg(
+                &format!(
+                    "{}Error: unknown command `{}`.{}",
+                    ansi::ANSI_FG_RED,
+                    c,
+                    ansi::ANSI_RESET_GRAPHIC
+                ),
+                Timespec::from_secs(1),
+            );
+        }
+    }
+
+    fn word_forward(&mut self) {
+        use MoveCursorOutcome::{Boundary, LineCrossed};
+
+        let Some(starting_char) = self.current_char() else {
+            return;
+        };
+
+        let mut after_word = !is_word_component(starting_char);
+
+        loop {
+            let outcome = self.advance_cursor();
+
+            if outcome == Boundary {
+                break;
+            }
+
+            if outcome == LineCrossed {
+                after_word = true;
+            }
+
+            let Some(c) = self.current_char() else {
+                break;
+            };
+
+            if after_word && is_word_component(c) {
+                // We reached the next word. We're done.
+                break;
+            }
+
+            if !after_word && !is_word_component(c) {
+                // Just reached end of current word. Time to find the next word.
+                after_word = true;
+            }
+        }
+    }
+
+    fn word_end(&mut self) {
+        use MoveCursorOutcome::{Boundary, LineCrossed};
+
+        // Skip through initial non-word chars if necessary
+        while let Some(c) = self.current_char()
+            && !is_word_component(c)
+        {
+            if self.advance_cursor() == Boundary {
+                return;
+            }
+        }
+
+        // Advance until past the word
+        while let Some(c) = self.current_char()
+            && is_word_component(c)
+        {
+            let outcome = self.advance_cursor();
+            if outcome == LineCrossed {
+                break;
+            }
+        }
+
+        // Move back to end of word
+        while let Some(c) = self.current_char()
+            && !is_word_component(c)
+        {
+            self.reverse_cursor();
+        }
+    }
+
+    fn word_backward(&mut self) {
+        use MoveCursorOutcome::{Boundary, LineCrossed};
+
+        let mut in_word = false;
+
+        loop {
+            let outcome = self.reverse_cursor();
+
+            if outcome == Boundary {
+                break;
+            }
+
+            let Some(c) = self.current_char() else {
+                break;
+            };
+
+            if in_word && (!is_word_component(c) || outcome == LineCrossed) {
+                // We've gone before the previous word. Go back and we're done.
+                self.advance_cursor();
+                break;
+            }
+
+            if !in_word && is_word_component(c) {
+                // We've reached the previous word. Time to find the beginning of it.
+                in_word = true;
+            }
+        }
+    }
+
+    /// Returns [`true`] if the character was found and the cursor was moved, [`false`] otherwise.
+    fn cursor_to_char(&mut self, c: char) -> bool {
+        let current_col = self.cursor.0.col;
+        let mut dest_col = current_col;
+        let Some(line) = self.editor_rows.get(self.cursor.0.row) else {
+            return false;
+        };
+
+        let chars: Vec<char> = line.chars().collect();
+
+        loop {
+            dest_col = dest_col.saturating_add(1);
+            if dest_col == line.len() {
+                // End of line
+                return false;
+            }
+
+            let Some(&current_char) = chars.get(dest_col) else {
+                return false;
+            };
+
+            if current_char == c {
+                let diff = dest_col - current_col;
+                self.cursor_right(diff);
+                return true;
+            }
+        }
+    }
+
+    /// Returns [`true`] if the character was found and the cursor was moved, [`false`] otherwise.
+    fn cursor_to_char_back(&mut self, c: char) -> bool {
+        let current_col = self.cursor.0.col;
+        let mut dest_col = current_col;
+        let Some(line) = self.editor_rows.get(self.cursor.0.row) else {
+            return false;
+        };
+
+        let chars: Vec<char> = line.chars().collect();
+
+        loop {
+            if dest_col == 0 {
+                // Start of line
+                return false;
+            }
+
+            dest_col = dest_col.saturating_sub(1);
+
+            let Some(&current_char) = chars.get(dest_col) else {
+                return false;
+            };
+
+            if current_char == c {
+                let diff = current_col - dest_col;
+                self.cursor_left(diff);
+                return true;
+            }
+        }
+    }
+
+    fn advance_cursor(&mut self) -> MoveCursorOutcome {
+        use MoveCursorOutcome::{Boundary, LineCrossed, Moved};
+
+        let Some(row) = self.editor_rows.get(self.cursor.0.row) else {
+            return Boundary;
+        };
+
+        if self.cursor.0.col >= (row.len() - 1) {
+            if self.cursor.0.row >= (self.editor_rows.len() - 1) {
+                // EOF
+                return Boundary;
+            }
+            self.cursor_left(usize::MAX);
+            self.cursor_down(1);
+            LineCrossed
+        } else {
+            self.cursor_right(1);
+            Moved
+        }
+    }
+
+    fn reverse_cursor(&mut self) -> MoveCursorOutcome {
+        use MoveCursorOutcome::{Boundary, LineCrossed, Moved};
+
+        if self.cursor.0.col == 0 {
+            if self.cursor.0.row == 0 {
+                // Start of file.
+                return Boundary;
+            }
+            self.cursor_up(1);
+            self.cursor_right(usize::MAX);
+            LineCrossed
+        } else {
+            self.cursor_left(1);
+            Moved
+        }
+    }
+
+    fn cursor_left(&mut self, amount: usize) {
+        self.cursor.0.col = self.cursor.0.col.saturating_sub(amount);
+        self.scroll();
+    }
+
+    fn cursor_right(&mut self, amount: usize) {
+        let mut upper_bound = cmp::max(self.current_line_len(), 1) - 1;
+        if (self.mode == EditorMode::Edit) && (self.current_line_len() > 0) {
+            upper_bound += 1;
+        }
+        self.cursor.0.col = self
+            .cursor
+            .0
+            .col
+            .saturating_add(amount)
+            .clamp(0, upper_bound);
+        self.scroll();
+    }
+
+    fn cursor_up(&mut self, amount: usize) {
+        self.cursor.0.row = self.cursor.0.row.saturating_sub(amount);
+        self.cursor_right(0);
+        self.scroll();
+    }
+
+    fn cursor_down(&mut self, amount: usize) {
+        self.cursor.0.row = self
+            .cursor
+            .0
+            .row
+            .saturating_add(amount)
+            .clamp(0, self.editor_rows.len() - 1);
+        self.cursor_right(0);
+        self.scroll();
+    }
+
+    /// Moves the screen offset to accomodate the new cursor position (if necessary).
+    fn scroll(&mut self) {
+        // Handle vertical scrolling
+        if self.cursor.0.row < self.screen_offset.row {
+            // Move screen up
+            self.screen_offset.row = self.cursor.0.row;
+        } else if self.cursor.0.row >= (self.screen_offset.row + self.win_size.rows) {
+            // Move screen down
+            self.screen_offset.row = (self.cursor.0.row - self.win_size.rows) + 1;
+        }
+
+        // Handle horizontal scrolling
+        if self.cursor.0.col < self.screen_offset.col {
+            // Move screen left
+            self.screen_offset.col = self.cursor.0.col;
+        } else if self.cursor.0.col
+            >= (self.screen_offset.col + (self.win_size.cols - self.row_num_width()))
+        {
+            // Move screen right
+            self.screen_offset.col =
+                (self.cursor.0.col - (self.win_size.cols - self.row_num_width())) + 1;
+        }
+    }
+
+    /// Displays a status message, cleared after the first keypress after the specified duration
+    /// has elapsed. If currently in [`EditorMode::Command`] mode, will wait to display the message
+    /// until command mode is exited.
+    fn display_status_msg(&mut self, message: &str, duration: Timespec) {
+        self.next_status_message = Some(QueuedStatusMessage {
+            contents: message.to_string(),
+            time: duration,
+        });
+    }
+
+    /// Writes the current [`Self::editor_rows`] to the provided file path.
+    ///
+    /// Displays an error status message if anything fails.
+    ///
+    /// Prompts the user for the file name if it's a new file.
+    fn write_to_file(&mut self) {
+        let Some(file_path) = self.options.path.clone() else {
+            let msg = format!(
+                "{}Error: no file name.{}",
+                ansi::ANSI_FG_RED,
+                ansi::ANSI_RESET_GRAPHIC
+            );
+            self.display_status_msg(&msg, DEFAULT_MSG_TIME);
+            return;
+        };
+        let mut temp_file_path = file_path.to_string();
+
+        temp_file_path.push_str(".ted_temp");
+        // Create a temporary file for saving.
+        let temp_file = match OpenOptions::new()
+            .write_only()
+            .create_new(true)
+            .open(&temp_file_path)
+        {
+            Ok(tf) => tf,
+            Err(errno) => {
+                let msg = format!(
+                    "{}Error: failed to create backup file: {}{}",
+                    ansi::ANSI_FG_RED,
+                    errno,
+                    ansi::ANSI_RESET_GRAPHIC
+                );
+                self.display_status_msg(&msg, DEFAULT_MSG_TIME);
+                return;
+            }
+        };
+
+        let mut out_string = self.editor_rows.join("\n");
+        if !out_string.ends_with('\n') {
+            out_string.push('\n');
+        }
+
+        // Write to the temporary file.
+        if let Err(errno) = temp_file.write(out_string.as_bytes()) {
+            let msg = format!(
+                "{}Error: failed to write to `{}`: {}{}",
+                ansi::ANSI_FG_RED,
+                temp_file_path,
+                errno,
+                ansi::ANSI_RESET_GRAPHIC
+            );
+            self.display_status_msg(&msg, DEFAULT_MSG_TIME);
+            return;
+        }
+
+        // Overwrite the destination file.
+        if let Err(errno) = fs::rename(temp_file_path, &file_path, fs::RenameFlags::empty()) {
+            let msg = format!(
+                "{}Error: failed to write to `{}`: {}{}",
+                ansi::ANSI_FG_RED,
+                file_path,
+                errno,
+                ansi::ANSI_RESET_GRAPHIC
+            );
+            self.display_status_msg(&msg, DEFAULT_MSG_TIME);
+            return;
+        }
+
+        let msg = format!("Wrote {} chars to `{}`.", self.contents_length(), file_path,);
+        self.display_status_msg(&msg, DEFAULT_MSG_TIME);
+    }
+
+    /// Gets the character the cursor is currently on (if any).
+    fn current_char(&self) -> Option<char> {
+        self.editor_rows
+            .get(self.cursor.0.row)?
+            .chars()
+            .nth(self.cursor.0.col)
+    }
+
+    /// Gets the width of the row number column displayed on the left side of the screen.
+    fn row_num_width(&self) -> usize {
+        numbers::num_digits_base10(self.editor_rows.len()) + 1
+    }
+
+    /// Gets the current editor line.
+    fn current_line(&self) -> &str {
+        self.editor_rows
+            .get(self.cursor.0.row)
+            .map_or("", String::as_ref)
+    }
+
+    /// Gets the length of the current editor line.
+    fn current_line_len(&self) -> usize {
+        self.current_line().len()
+    }
+
+    /// Gets the length of the text contents.
+    fn contents_length(&self) -> usize {
+        self.editor_rows
+            .iter()
+            .fold(0, |acc, item| acc + item.len())
+    }
+}
+impl Drop for EditorState {
+    fn drop(&mut self) {
+        // `Self::drop` has to succeed- we unfortunately can't check to see whether or not this was
+        // successful :(
+        let _ = restore_terminal(&self.orig_termios);
+        clear_screen();
+    }
+}
+
+/// A simple text editor.
+///
+/// # Safety
+///
+/// This program must be passed appropriate `execve`-compatible args.
+#[unsafe(no_mangle)]
+#[allow(unused_variables)]
+unsafe extern "C" fn start(stack_top: *const usize) -> ! {
+    #[cfg(test)]
+    {
+        test_main();
+        process::exit(ExitStatus::ExitSuccess);
+    }
+
+    // HACK: This stops the compiler from complaining when building the test/debug target
+    #[allow(unreachable_code)]
+    #[allow(clippy::no_effect)]
+    ();
+
+    // SAFETY: This function is being called right at the start of execution before anything else.
+    // The stack pointer is retrieved directly from the function args.
+    let (argv, envp) = match unsafe { parse_argv_envp(stack_top) } {
+        Ok(argv_envp) => argv_envp,
+        Err(errno) => process::exit(ExitStatus::ExitFailure(errno as i32)),
+    };
+
+    let exit_code = main(&argv, &envp);
+
+    process::exit(exit_code);
+}
+
+/// Returns [`true`] if and only if the given character is a "word" character.
+fn is_word_component(c: char) -> bool {
+    c.is_alphanumeric() || (c == '_')
+}
+
+fn get_win_size() -> WinSize {
+    // Try to get window size from system call
+    if let Ok(ioctl_win_size) = STDIN.lock().win_size()
+        && ioctl_win_size.cols > 0
+        && ioctl_win_size.rows > 0
+    {
+        return ioctl_win_size;
+    }
+
+    // Fallback: Move the cursor to the bottom-right and get cursor position
+    print!("{}{}", ansi_cursor_down!(999), ansi_cursor_right!(999));
+    let win_size = if let Ok(pos) = get_cursor_pos() {
+        pos.into()
+    } else {
+        WinSize::default()
+    };
+    print!("{}", ansi::ANSI_CURSOR_TOP_LEFT);
+    win_size
+}
+
+/// Gets the current position of the cursor on the screen.
+fn get_cursor_pos() -> Result<Point, Errno> {
+    print!("{}", ansi::ANSI_GET_CURSOR_POS);
+    let mut buf = [0; CHECK_TERM_RESPONSE_LIMIT];
+    let mut stdin = STDIN.lock();
+
+    for byte in &mut buf {
+        if stdin.read(slice::from_mut(byte))? != 1 || *byte == b'R' {
+            break;
+        }
+    }
+
+    if buf.first() != Some(&ESC_CODE) || buf.get(1) != Some(&b'[') {
+        return Err(Errno::Enodata);
+    }
+    let response = String::from_utf8_lossy(&buf[1..]);
+    Point::try_from(response.as_ref()).map_err(|_| Errno::Einval)
+}
+
+/// Enters terminal "raw mode".
+///
+/// Makes input available character-by-character, disables echo, and disables all special
+/// processing of terminal input and output characters.
+///
+/// More info: [termios(3)](https://www.man7.org/linux/man-pages/man3/termios.3.html)
+fn enter_raw_mode() -> Result<(), Errno> {
+    STDIN.lock().set_input_mode_flags(
+        SetTermAttrsCmd::Tcsetsf,
+        InputModeFlags::IGNBRK
+            | InputModeFlags::BRKINT
+            | InputModeFlags::PARMRK
+            | InputModeFlags::ISTRIP
+            | InputModeFlags::INLCR
+            | InputModeFlags::ICRNL
+            | InputModeFlags::IXON,
+        false,
+    )?;
+    STDIN
+        .lock()
+        .set_output_mode_flags(SetTermAttrsCmd::Tcsetsf, OutputModeFlags::OPOST, false)?;
+    STDIN.lock().set_local_mode_flags(
+        SetTermAttrsCmd::Tcsetsf,
+        LocalModeFlags::ECHO
+            | LocalModeFlags::ECHONL
+            | LocalModeFlags::ICANON
+            | LocalModeFlags::ISIG
+            | LocalModeFlags::IEXTEN,
+        false,
+    )?;
+    STDIN
+        .lock()
+        .set_control_mode_flags(SetTermAttrsCmd::Tcsetsf, ControlModeFlags::CSIZE, true)?;
+    Ok(())
+}
+
+/// Sets the minimum bytes read and maximum time passed before `read` can return.
+fn set_read_timeouts(min_bytes_read: u8, max_time_passed: Deciseconds) -> Result<(), Errno> {
+    STDIN.lock().set_control_character(
+        SetTermAttrsCmd::Tcsetsf,
+        ControlCharIndex::Min,
+        min_bytes_read,
+    )?;
+    STDIN.lock().set_control_character(
+        SetTermAttrsCmd::Tcsetsf,
+        ControlCharIndex::Time,
+        max_time_passed.0,
+    )
+}
+
+/// Clears the screen.
+fn clear_screen() {
+    print!("{}{}", ansi::ANSI_ERASE_DISPLAY, ansi::ANSI_CURSOR_TOP_LEFT);
+}
+
+/// Restores the terminal to the provided [`Termios`].
+fn restore_terminal(termios: &Termios) -> Result<(), Errno> {
+    print!("{}", ANSI_TLENIX_DEFAULT_CURSOR);
+    STDIN.lock().set_termios(SetTermAttrsCmd::Tcsetsf, termios)
+}
+
+/// Reads a single keypress from `stdin`.
+fn read_keypress() -> Result<Key, Errno> {
+    let mut stdin = STDIN.lock();
+
+    // Try to read a byte from stdin.
+    let first_byte = stdin.await_read_byte()?;
+
+    // If it's not an escape code, return it. Otherwise, continue...
+    if first_byte != ESC_CODE {
+        return Ok(first_byte.into());
+    }
+
+    // Byte is the beginning of an escape sequence. Continue reading.
+    let mut seq_buf = [0; KEYPRESS_BUF_LEN];
+    if stdin.read(slice::from_mut(&mut seq_buf[0]))? != 1
+        || stdin.read(slice::from_mut(&mut seq_buf[1]))? != 1
+    {
+        // Just the escape code or an incomplete escape sequence was sent. Return.
+        return Ok(first_byte.into());
+    }
+
+    stdin.read(slice::from_mut(&mut seq_buf[2]))?;
+
+    // If the char after the escape code _isn't_ `[`, then this isn't an ANSI escape sequence.
+    // Return the escape code itself.
+    if seq_buf.first() != Some(&b'[') {
+        return Ok(first_byte.into());
+    }
+
+    Ok(Key::try_from_esc(seq_buf).unwrap_or(first_byte.into()))
+}
+
+fn main(args: &[String], _env_vars: &[EnvVar]) -> ExitStatus {
+    let ted_options = try_exit!(TedOptions::try_from(args));
+    let mut state = try_exit!(EditorState::start(ted_options));
+
+    if let Some(path) = &state.options.path {
+        let opened_msg = format!("Loaded {} chars from `{}`.", state.contents_length(), path);
+        state.display_status_msg(&opened_msg, DEFAULT_MSG_TIME);
+    }
+
+    loop {
+        state.refresh_screen();
+        try_exit!(state.handle_input());
+
+        if state.should_exit {
+            break;
+        }
+    }
+
+    ExitStatus::ExitSuccess
+}
+
+#[panic_handler]
+fn panic(info: &PanicInfo<'_>) -> ! {
+    // Attempt to restore the terminal as best as one can given the situation
+    print!("{}", ANSI_TLENIX_DEFAULT_CURSOR);
+    print!("{}", ansi::ANSI_RESET_GRAPHIC);
+    let _ = STDIN.lock().set_input_mode_flags(
+        SetTermAttrsCmd::Tcsetsf,
+        InputModeFlags::IGNBRK
+            | InputModeFlags::BRKINT
+            | InputModeFlags::PARMRK
+            | InputModeFlags::ISTRIP
+            | InputModeFlags::INLCR
+            | InputModeFlags::ICRNL
+            | InputModeFlags::IXON,
+        true,
+    );
+    let _ =
+        STDIN
+            .lock()
+            .set_output_mode_flags(SetTermAttrsCmd::Tcsetsf, OutputModeFlags::OPOST, true);
+    let _ = STDIN.lock().set_local_mode_flags(
+        SetTermAttrsCmd::Tcsetsf,
+        LocalModeFlags::ECHO
+            | LocalModeFlags::ECHONL
+            | LocalModeFlags::ICANON
+            | LocalModeFlags::ISIG
+            | LocalModeFlags::IEXTEN,
+        true,
+    );
+    let _ = STDIN.lock().set_control_mode_flags(
+        SetTermAttrsCmd::Tcsetsf,
+        ControlModeFlags::CSIZE,
+        false,
+    );
+    clear_screen();
+    eprintln!("{PANIC_TITLE} {info}");
+    process::exit(ExitStatus::ExitFailure(1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test_case]
+    fn point_from_str_ok() {
+        assert_eq!(
+            Point::try_from("^[[12;34R").unwrap(),
+            Point { row: 12, col: 34 }
+        );
+        assert_eq!(
+            Point::try_from("\u{001b}[2;547R").unwrap(),
+            Point { row: 2, col: 547 }
+        );
+    }
+
+    #[test_case]
+    fn point_from_str_reject_bad() {
+        Point::try_from("\u{001b}[;54R").unwrap_err();
+        Point::try_from("^[[123;BR").unwrap_err();
+        Point::try_from("89;92R").unwrap_err();
+        Point::try_from("^[[12;34").unwrap_err();
+    }
+}

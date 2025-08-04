@@ -4,7 +4,8 @@ set -exuo pipefail
 
 INITRAMFS_DIR="initramfs"
 BINARIES_DIR="target/x86_64-unknown-linux-none/release"
-SRC_BIN_DIR="src/bin"
+SRC_DIR="src"
+SRC_BIN_DIR="$SRC_DIR/bin"
 OS_FILES_DIR="os_files"
 
 KERNEL="bzImage"
@@ -12,16 +13,23 @@ INIT_BIN="${BINARIES_DIR}/init"
 INITRAMFS_OUT="${INITRAMFS_DIR}/initramfs.cpio.gz"
 
 # Build Tlenix binaries
-cargo build --release --all
+RUSTFLAGS="--cfg qemu" cargo build --release --all
 
 # Create initramfs layout
 rm -rf "$INITRAMFS_DIR"
 mkdir -p "$INITRAMFS_DIR"/{bin,sbin,dev,proc,sys,etc,usr,var,root,home,tmp}
+mkdir "$INITRAMFS_DIR/usr/src/"
 chmod 1777 "$INITRAMFS_DIR/tmp"
 
 # Add device nodes
 sudo mknod -m 600 "$INITRAMFS_DIR/dev/console" c 5 1
 sudo mknod -m 666 "$INITRAMFS_DIR/dev/null" c 1 3
+sudo mknod -m 666 "$INITRAMFS_DIR/dev/random" c 1 8
+sudo mknod -m 666 "$INITRAMFS_DIR/dev/urandom" c 1 9
+
+# Copy over Tlenix source code
+mkdir "$INITRAMFS_DIR/usr/src/tlenix"
+cp -r "$SRC_DIR" "$INITRAMFS_DIR/usr/src/tlenix/src"
 
 # Add Tlenix binaries
 cp "$INIT_BIN" "$INITRAMFS_DIR/init"

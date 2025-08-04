@@ -50,6 +50,13 @@ impl File {
         }
     }
 
+    /// Gets the raw internal [`FileDescriptor`] of this file.
+    #[doc(hidden)]
+    #[must_use]
+    pub(crate) fn fd_raw(&self) -> FileDescriptor {
+        self.file_descriptor
+    }
+
     /// Gets information about this [`File`] in the form of a [`FileStats`].
     ///
     /// Internally uses the [`statx`](https://man7.org/linux/man-pages/man2/statx.2.html) Linux

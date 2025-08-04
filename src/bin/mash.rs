@@ -23,10 +23,11 @@ use core::panic::PanicInfo;
 use num_enum::TryFromPrimitive;
 
 use tlenix_core::{
-    Console, EnvVar, Errno, align_stack_pointer, eprintln,
+    ANSI_TLENIX_DEFAULT_CURSOR, EnvVar, Errno, align_stack_pointer, eprintln,
     fs::{self, FilePermissions},
     print,
     process::{self, ExitStatus},
+    streams::STDIN,
     system,
 };
 
@@ -79,12 +80,14 @@ extern "C" fn _start() -> ! {
     #[allow(clippy::no_effect)]
     ();
 
-    let console = Console::open().unwrap();
+    // Set cursor to default.
+    print!("{}", ANSI_TLENIX_DEFAULT_CURSOR);
+
     loop {
         print_prompt();
 
         // Get argv.
-        let line = console.read_line(LINE_MAX).unwrap();
+        let line = STDIN.lock().read_line(LINE_MAX).unwrap();
         let line_string = String::from_utf8(line).unwrap();
         let mut argv: Vec<&str> = line_string.split_whitespace().collect();
 
@@ -94,7 +97,6 @@ extern "C" fn _start() -> ! {
 
         // Do nothing if nothing was typed
         if argv.is_empty() {
-            eprintln!("doing nothin'");
             continue;
         }
 

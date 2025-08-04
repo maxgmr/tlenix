@@ -23,10 +23,11 @@ use core::panic::PanicInfo;
 
 use getargs::{Arg, Options};
 use tlenix_core::{
-    Console, EnvVar, Errno, eprintln,
+    EnvVar, Errno, eprintln,
     fs::{self, FileStats, FileType},
     parse_argv_envp, print, println,
     process::{self, ExitStatus},
+    streams::STDIN,
     try_exit,
 };
 
@@ -233,9 +234,8 @@ fn rename_with_settings(
 ) -> Result<(), Errno> {
     // Check if prompt overwrite is enabled AND if a file exists at the destination.
     if settings.prompt_overwrite && FileStats::try_from_path(destination).is_ok() {
-        let console = Console::open()?;
         print!("Overwrite '{destination}'? [y/N] ");
-        match String::from_utf8(console.read_line(4096)?)
+        match String::from_utf8(STDIN.lock().read_line(4096)?)
             .map_err(|_| Errno::Einval)?
             .to_lowercase()
             .as_str()

@@ -23,26 +23,29 @@ compile_error!("This crate only functions on x86_64 linux targets.");
 extern crate alloc;
 
 mod allocator;
+pub mod ansi;
 mod args;
-mod console;
 pub mod fs;
 pub mod ipc;
 mod nix_bytes;
 mod nix_str;
+pub mod numbers;
 mod print;
 pub mod process;
+pub mod rand;
 pub mod streams;
 mod syscall;
 pub mod system;
+pub mod term;
 mod test_framework;
 pub mod thread;
+pub mod time;
 
 #[cfg(test)]
 pub(crate) mod test_utils;
 
 // RE-EXPORTS
 pub use args::{EnvVar, parse_argv_envp};
-pub use console::Console;
 pub use nix_bytes::NixBytes;
 pub use nix_str::NixString;
 pub use print::{__format, __print_err, __print_str};
@@ -64,6 +67,9 @@ pub const ENV_LEN_LIM: usize = PAGE_SIZE;
 
 /// The limit on the total size of `argv` and `envp` strings.
 pub const ARG_ENV_LIM: usize = PAGE_SIZE * 32;
+
+/// The default cursor console code.
+pub const ANSI_TLENIX_DEFAULT_CURSOR: &str = ansi::ANSI_CURSOR_B_UNDER;
 
 /// Aligns the stack pointer. Intended for use right at the beginning of execution.
 ///

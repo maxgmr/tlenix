@@ -48,6 +48,15 @@ macro_rules! println {
     ($($arg:tt)*) => {{$crate::print!("{}\n", core::format_args!($($arg)*))}};
 }
 
+/// Print, with a `\r\n`, to the standard output using Rust format syntax.
+///
+/// Intended for use in terminal "raw mode", when post-processing of output characters is disabled.
+#[macro_export]
+macro_rules! raw_println {
+    () => ($crate::print!("\r\n"));
+    ($($arg:tt)*) => {{$crate::print!("{}\r\n", core::format_args!($($arg)*))}}
+}
+
 /// Print to the standard error stream using Rust format syntax.
 #[macro_export]
 macro_rules! eprint {
@@ -59,6 +68,15 @@ macro_rules! eprint {
 macro_rules! eprintln {
     () => ($crate::eprint!("\n"));
     ($($arg:tt)*) => {{$crate::eprint!("{}\n", core::format_args!($($arg)*))}};
+}
+
+/// Print, with a `\r\n`, to the standard error stream using Rust format syntax.
+///
+/// Intended for use in terminal "raw mode", when post-processing of output characters is disabled.
+#[macro_export]
+macro_rules! raw_eprintln {
+    () => ($crate::eprint!("\r\n"));
+    ($($arg:tt)*) => {{$crate::eprint!("{}\r\n", core::format_args!($($arg)*))}}
 }
 
 #[cfg(test)]

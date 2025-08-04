@@ -17,6 +17,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Abstract away Tlenix program boilerplate (proc macro?)
 - Add `--help` display to all Tlenix programs
 - `man` pages!
+- `hexe`: Format input bytes as hex
+- `rcv`: Convert radices
+- `reset`: Reset terminal
+
+## [0.1.0-beta.4] - 2025-08-04
+
+### Added
+
+- `ted`: A basic Vim-style text editor.
+- `codebreaker`: A simple code-guessing game inspired by the "Mastermind" board game.
+- Random number generation.
+- A collection of common ANSI console control sequences.
+- Time measurement.
+- The Tlenix source code is now included in the installation within `/usr/src/tlenix`.
+- Cursor shape switching.
+
+### Changed
+
+- Bumped memory allocator to 256 MiB.
 
 ## [0.1.0-beta.3] - 2025-06-12
 

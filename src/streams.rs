@@ -2,14 +2,28 @@
 //! input, standard output, and standard error.
 
 use alloc::{string::String, vec::Vec};
-use core::marker::PhantomData;
+use core::{marker::PhantomData, time::Duration};
 
 use spin::Mutex;
 
 use crate::{
     Errno,
     fs::{File, FileDescriptor},
+    process::setsid,
+    term::{
+        ControlCharIndex, ControlModeFlags, InputModeFlags, LocalModeFlags, OutputModeFlags,
+        SetTermAttrsCmd, Termios, WinSize, get_term_attrs, get_term_size, set_controlling_term,
+        set_term_attrs,
+    },
+    thread,
 };
+
+/// Byte representing a backspace.
+const BACKSPACE_BYTE: u8 = 8;
+/// Byte representing a newline.
+const NEWLINE_BYTE: u8 = b'\n';
+/// Byte representing a backslash.
+const BACKSLASH_BYTE: u8 = b'\\';
 
 /// File descriptor of the standard input stream.
 const STDIN_FILENO: usize = 0;
@@ -18,34 +32,18 @@ const STDOUT_FILENO: usize = 1;
 /// File descriptor of the standard error stream.
 const STDERR_FILENO: usize = 2;
 
-/// Creates the definitions of various static streams.
-macro_rules! define_streams {
-    (
-        $(
-            $(#[$doc:meta])*
-            $stream_name:ident<$direction:ident> = $fd:expr;
-        )*
-    ) =>{
-       $(
-            $(#[$doc])*
-            pub static $stream_name: Mutex<Stream<$direction>> = Mutex::new(Stream::define($fd));
-       )*
-    };
-}
-define_streams!(
-    /// The [standard input stream](
-    /// https://en.wikipedia.org/wiki/Standard_streams#Standard_input_(stdin)),
-    /// from which programs can read input data.
-    STDIN<Input> = STDIN_FILENO;
-    /// The [standard output stream](
-    /// https://en.wikipedia.org/wiki/Standard_streams#Standard_output_(stdout)),
-    /// to which programs can write output data.
-    STDOUT<Output> = STDOUT_FILENO;
-    /// The [standard error stream](
-    /// https://en.wikipedia.org/wiki/Standard_streams#Standard_error_(stderr)),
-    /// to which programs can write error messages or diagnostics.
-    STDERR<Output> = STDERR_FILENO;
-);
+/// The
+/// [standard input stream](https://en.wikipedia.org/wiki/Standard_streams#Standard_input_(stdin)),
+/// from which programs can read input data.
+pub static STDIN: Mutex<Stream<Input>> = Mutex::new(Stream::define(STDIN_FILENO));
+/// The
+/// [standard output stream](https://en.wikipedia.org/wiki/Standard_streams#Standard_output_(stdout)),
+/// to which programs can write output data.
+pub static STDOUT: Mutex<Stream<Output>> = Mutex::new(Stream::define(STDOUT_FILENO));
+/// The
+/// [standard error stream](https://en.wikipedia.org/wiki/Standard_streams#Standard_error_(stderr)),
+/// to which programs can write error messages or diagnostics.
+pub static STDERR: Mutex<Stream<Output>> = Mutex::new(Stream::define(STDERR_FILENO));
 
 /// An input stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -53,6 +51,57 @@ pub struct Input;
 /// An output stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Output;
+
+/// Macro to implement the getter and setter [`Termios`] methods for all the mode flags.
+macro_rules! impl_termios_flags_methods {
+    [$($flags_t:ty),* $(,)?] => {
+        $(pastey::paste! {
+            /// Gets the value of the given
+            #[doc = concat!("[`", stringify!($flags_t), "`]")]
+            /// flag.
+            ///
+            /// If multiple flags are given, then this function will only return `true` if *all*
+            /// the given flags are set.
+            ///
+            /// # Errors
+            ///
+            /// This function propagates any [`Errno`]s incurred by the underlying call to
+            /// [`ioctl(2)`](https://man7.org/linux/man-pages/man2/ioctl.2.html).
+            pub fn [<get_ $flags_t:snake>](&mut self, flag: $flags_t) -> Result<bool, Errno> {
+                let termios = self.termios()?;
+                Ok(termios.[<$flags_t:snake>].contains(flag))
+            }
+
+            /// Sets the value of the given
+            #[doc = concat!("[`", stringify!($flags_t), "`]")]
+            /// flag to the given boolean value.
+            ///
+            /// If multiple flags are given, then *all* given flags will be set to the given
+            /// boolean value.
+            ///
+            /// The given [`SetTermAttrsCmd`] dictates the following:
+            ///
+            /// - Whether or not the system waits to apply changes after all written output has
+            /// been transmitted.
+            /// - Whether or not the system discards unread input before applying changes.
+            ///
+            /// # Errors
+            ///
+            /// This function propagates any [`Errno`]s incurred by the underlying calls to
+            /// [`ioctl(2)`](https://man7.org/linux/man-pages/man2/ioctl.2.html).
+            pub fn [<set_ $flags_t:snake>](
+                &mut self,
+                cmd: SetTermAttrsCmd,
+                flag: $flags_t,
+                value: bool
+            ) -> Result<(), Errno> {
+                let mut termios = self.termios()?;
+                termios.[<$flags_t:snake>].set(flag, value);
+                self.set_termios(cmd, &termios)
+            }
+        })*
+    };
+}
 
 /// A [`File`] corresponding to a particular
 /// [`standard stream`](https://en.wikipedia.org/wiki/Standard_streams).
@@ -80,8 +129,71 @@ impl Stream<Input> {
     /// # Errors
     ///
     /// This function propagates any [`Errno`]s returned from [`File::read`].
-    pub fn read(&self, buffer: &mut [u8]) -> Result<usize, Errno> {
+    pub fn read(&mut self, buffer: &mut [u8]) -> Result<usize, Errno> {
         self.file.read(buffer)
+    }
+
+    /// Loops until a single byte is read from the stream.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any [`Errno`]s incurred by the underlying calls to
+    /// [`File::read_byte`] and [`thread::sleep`].
+    pub fn await_read_byte(&mut self) -> Result<u8, Errno> {
+        let sleep_duration = Duration::from_nanos(thread::PIT_IRQ_PERIOD);
+
+        loop {
+            match self.file.read_byte() {
+                // Nothing read; sleep then try again
+                Ok(None) | Err(Errno::Eagain) => thread::sleep(&sleep_duration)?,
+                // Propagate non-retryable errors
+                Err(e) => return Err(e),
+                // Got a byte! Return it.
+                Ok(Some(b)) => return Ok(b),
+            }
+        }
+    }
+
+    /// Reads a line from the stream (up to a maximum size).
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any [`Errno`]s incurred by the underlying calls to
+    /// [`Self::await_read_byte`].
+    pub fn read_line(&mut self, max: usize) -> Result<Vec<u8>, Errno> {
+        let mut result = Vec::new();
+
+        let mut last_was_backslash = false;
+
+        while result.len() < max {
+            match self.await_read_byte()? {
+                NEWLINE_BYTE => {
+                    if last_was_backslash {
+                        // Escaped newline
+                        result.push(NEWLINE_BYTE);
+                    } else {
+                        // Newline; return right away
+                        return Ok(result);
+                    }
+                }
+                BACKSLASH_BYTE => {
+                    if last_was_backslash {
+                        // Escaped backslash
+                        result.push(BACKSLASH_BYTE);
+                    } else {
+                        // Escape the next byte
+                        last_was_backslash = true;
+                        continue;
+                    }
+                }
+                BACKSPACE_BYTE => {
+                    result.pop();
+                }
+                new_byte => result.push(new_byte),
+            }
+            last_was_backslash = false;
+        }
+        Ok(result)
     }
 
     /// Reads the entire stream, up to EOF, into a [`Vec<u8>`].
@@ -91,7 +203,7 @@ impl Stream<Input> {
     /// # Errors
     ///
     /// This function propagates any [`Errno`]s returned from [`File::read_to_bytes`].
-    pub fn read_to_bytes(&self) -> Result<Vec<u8>, Errno> {
+    pub fn read_to_bytes(&mut self) -> Result<Vec<u8>, Errno> {
         self.file.read_to_bytes()
     }
 
@@ -102,9 +214,91 @@ impl Stream<Input> {
     /// # Errors
     ///
     /// This function propagates any [`Errno`]s returned from [`File::read_to_string`].
-    pub fn read_to_string(&self) -> Result<String, Errno> {
+    pub fn read_to_string(&mut self) -> Result<String, Errno> {
         self.file.read_to_string()
     }
+
+    /// Makes this stream the controlling terminal, becoming the session leader in the process. The
+    /// new session ID is returned.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any [`Errno`]s incurred by the underlying calls to [`setsid`]
+    pub fn make_controlling_terminal(&mut self) -> Result<usize, Errno> {
+        // Become session leader
+        let new_session_id = setsid()?;
+        // Make self the controlling terminal
+        set_controlling_term(self.file.fd_raw())?;
+        Ok(new_session_id)
+    }
+
+    /// Gets the state of the current terminal, in the form of
+    /// [`termios(3)`](https://www.man7.org/linux/man-pages/man3/termios.3.html).
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any [`Errno`]s returned from the underlying
+    /// [`ioctl(2)`](https://man7.org/linux/man-pages/man2/ioctl.2.html) syscall.
+    pub fn termios(&mut self) -> Result<Termios, Errno> {
+        get_term_attrs(self.file.fd_raw())
+    }
+
+    /// Sets the state of the current terminal to the given [`Termios`].
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any [`Errno`]s returned from the underlying
+    /// [`ioctl(2)`](https://man7.org/linux/man-pages/man2/ioctl.2.html) syscalls.
+    pub fn set_termios(&mut self, cmd: SetTermAttrsCmd, termios: &Termios) -> Result<(), Errno> {
+        set_term_attrs(cmd, self.file.fd_raw(), termios)
+    }
+
+    /// Gets the value of the given control character.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any [`Errno`]s returned from the underlying
+    /// [`ioctl(2)`](https://man7.org/linux/man-pages/man2/ioctl.2.html) syscall.
+    pub fn control_character(&mut self, ctrl_char: ControlCharIndex) -> Result<u8, Errno> {
+        let termios = self.termios()?;
+        // OK to index here- the ControlCharIndex enum restricts the index to valid values.
+        Ok(termios.control_characters[ctrl_char as usize])
+    }
+
+    /// Sets the value of the given control character.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any [`Errno`]s returned from the underlying
+    /// [`ioctl(2)`](https://man7.org/linux/man-pages/man2/ioctl.2.html) syscall.
+    pub fn set_control_character(
+        &mut self,
+        cmd: SetTermAttrsCmd,
+        ctrl_char: ControlCharIndex,
+        value: u8,
+    ) -> Result<(), Errno> {
+        let mut termios = self.termios()?;
+        // OK to index here- the ControlCharIndex enum restricts the index to valid values.
+        termios.control_characters[ctrl_char as usize] = value;
+        self.set_termios(cmd, &termios)
+    }
+
+    /// Gets the window size of the terminal.
+    ///
+    /// # Errors
+    ///
+    /// This function propagates any [`Errno`]s returned from the underlying
+    /// [`ioctl(2)`](https://man7.org/linux/man-pages/man2/ioctl.2.html) syscall.
+    pub fn win_size(&mut self) -> Result<WinSize, Errno> {
+        get_term_size(self.file.fd_raw())
+    }
+
+    impl_termios_flags_methods![
+        InputModeFlags,
+        OutputModeFlags,
+        ControlModeFlags,
+        LocalModeFlags,
+    ];
 }
 impl Stream<Output> {
     /// Writes bytes from the provided buffer into the stream, returning the number of bytes
@@ -115,7 +309,7 @@ impl Stream<Output> {
     /// # Errors
     ///
     /// This function propagates any [`Errno`]s returned from [`File::write`].
-    pub fn write(&self, buffer: &[u8]) -> Result<usize, Errno> {
+    pub fn write(&mut self, buffer: &[u8]) -> Result<usize, Errno> {
         self.file.write(buffer)
     }
 }
