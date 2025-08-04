@@ -16,11 +16,17 @@ Written in pure Rust without the standard library or any dependencies on a C sta
 
 `clear`: Clear the terminal screen.
 
+`codebreaker`: Simple game. Guess the mystery code within a certain number of tries.
+
 `hello`: Example Tlenix program. Generates a greeting.
 
 `ls`: Lists the entries within a directory.
 
+`mv`: Move/rename a file.
+
 `printenv`: Prints the current environment variables along with their values.
+
+`ted`: A barebones, Vim-like text editor.
 
 # Setup Guide - Virtual Machine
 
