@@ -8,9 +8,9 @@ pub const DEFAULT_COLS: usize = 80;
 /// The width and height of the terminal window, in both characters and pixels.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct WinSize {
-    /// The width of the terminal in characters.
-    pub rows: usize,
     /// The height of the terminal in characters.
+    pub rows: usize,
+    /// The width of the terminal in characters.
     pub cols: usize,
     /// The width of the terminal in pixels.
     pub width: usize,
