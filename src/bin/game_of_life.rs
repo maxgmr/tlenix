@@ -35,15 +35,30 @@ use tlenix_core::{
 
 const PANIC_TITLE: &str = "hello";
 
+const KEYPRESS_BUF_LEN: usize = 3;
 const READ_MIN_BYTES_READ: u8 = 0;
 const READ_MAX_TIME_PASSED: Deciseconds = Deciseconds(1);
 const CHECK_TERM_RESPONSE_LIMIT: usize = 64;
 
 const ESC_CODE: u8 = 0x1b;
 
+// ======= GRAPHICS =======
+
 const DEAD_CELL: char = ' ';
 const LIVE_CELL: char = '█';
 const CURSOR: char = '▒';
+
+// ======= CONTROLS =======
+
+const EXIT: u8 = ESC_CODE;
+const WASD_U: u8 = b'w';
+const WASD_D: u8 = b's';
+const WASD_L: u8 = b'a';
+const WASD_R: u8 = b'd';
+const VIM_U: u8 = b'k';
+const VIM_D: u8 = b'j';
+const VIM_L: u8 = b'h';
+const VIM_R: u8 = b'l';
 
 core::arch::global_asm! {
     ".global _start",
@@ -54,6 +69,60 @@ core::arch::global_asm! {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Deciseconds(u8);
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+enum Key {
+    Ascii(u8),
+    UpArrow,
+    DownArrow,
+    RightArrow,
+    LeftArrow,
+    PageUp,
+    PageDown,
+    F5,
+    F6,
+    F7,
+    F8,
+    F9,
+    F10,
+    F11,
+    F12,
+    Home,
+    End,
+    Insert,
+    Delete,
+}
+impl Key {
+    /// Attempts to match the given escape sequence to a [`Key`] variant.
+    fn try_from_esc(seq: [u8; KEYPRESS_BUF_LEN]) -> Option<Self> {
+        match (seq.get(1), seq.get(2)) {
+            (Some(b'A'), _) => Some(Self::UpArrow),
+            (Some(b'B'), _) => Some(Self::DownArrow),
+            (Some(b'C'), _) => Some(Self::RightArrow),
+            (Some(b'D'), _) => Some(Self::LeftArrow),
+            (Some(b'5'), Some(b'~')) => Some(Self::PageUp),
+            (Some(b'6'), Some(b'~')) => Some(Self::PageDown),
+            (Some(b'1'), Some(b'5')) => Some(Self::F5),
+            (Some(b'1'), Some(b'7')) => Some(Self::F6),
+            (Some(b'1'), Some(b'8')) => Some(Self::F7),
+            (Some(b'1'), Some(b'9')) => Some(Self::F8),
+            (Some(b'2'), Some(b'0')) => Some(Self::F9),
+            (Some(b'2'), Some(b'1')) => Some(Self::F10),
+            (Some(b'2'), Some(b'3')) => Some(Self::F11),
+            (Some(b'2'), Some(b'4')) => Some(Self::F12),
+            (Some(b'H'), _) => Some(Self::Home),
+            (Some(b'F'), _) => Some(Self::End),
+            (Some(b'2'), Some(b'~')) => Some(Self::Insert),
+            (Some(b'3'), Some(b'~')) => Some(Self::Delete),
+            _ => None,
+        }
+    }
+}
+impl From<u8> for Key {
+    fn from(value: u8) -> Self {
+        Self::Ascii(value)
+    }
+}
 
 /// A position on the game grid.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
@@ -168,6 +237,16 @@ impl Grid {
     fn in_bounds(&self, pos: Pos) -> bool {
         pos.row < self.dimensions.rows && pos.col < self.dimensions.cols
     }
+
+    #[inline]
+    fn row_upper_bound(&self) -> usize {
+        self.dimensions.rows - 1
+    }
+
+    #[inline]
+    fn col_upper_bound(&self) -> usize {
+        self.dimensions.cols - 1
+    }
 }
 
 /// The state of the game.
@@ -178,6 +257,7 @@ struct Game {
     grid: Grid,
     render_buf: String,
     should_exit: bool,
+    prev_cursor: Pos,
     cursor: Pos,
 }
 impl Game {
@@ -194,15 +274,23 @@ impl Game {
         let prev_grid = Grid::with_dimensions(dimensions.clone(), Cell::Dead);
         let grid = Grid::with_dimensions(dimensions, Cell::Dead);
 
+        let prev_cursor = Pos {
+            row: usize::MAX,
+            col: usize::MAX,
+        };
+
         Ok(Self {
             orig_termios,
             prev_grid,
             grid,
             render_buf,
             should_exit: false,
+            prev_cursor,
             cursor: Pos::default(),
         })
     }
+
+    // ======= GRAPHICS =======
 
     fn render(&mut self) {
         self.render_buf.clear();
@@ -228,9 +316,21 @@ impl Game {
             }
         }
 
-        // Render cursor
-        Self::queue_move_cursor(&mut self.render_buf, self.cursor.col, self.cursor.row);
-        self.render_buf.push(CURSOR);
+        if self.prev_cursor != self.cursor {
+            // Re-render cell where old cursor was
+            if let Some(&cell) = self.grid.get(self.prev_cursor) {
+                Self::queue_move_cursor(
+                    &mut self.render_buf,
+                    self.prev_cursor.col,
+                    self.prev_cursor.row,
+                );
+                self.render_buf.push(cell.into());
+            }
+
+            // Render cursor
+            Self::queue_move_cursor(&mut self.render_buf, self.cursor.col, self.cursor.row);
+            self.render_buf.push(CURSOR);
+        }
 
         print!("{}", self.render_buf);
     }
@@ -244,15 +344,69 @@ impl Game {
         render_buf.push('H');
     }
 
-    fn handle_input(&mut self) -> Result<(), Errno> {
-        let byte = poll_input()?;
+    // ======= INPUT HANDLING =======
 
-        match byte {
-            ESC_CODE => self.should_exit = true,
+    fn handle_input(&mut self) -> Result<(), Errno> {
+        use Key::{Ascii, DownArrow, LeftArrow, RightArrow, UpArrow};
+
+        let key = read_keypress()?;
+
+        match key {
+            Ascii(EXIT) => self.should_exit = true,
+            UpArrow | Ascii(VIM_U | WASD_U) => self.cursor_up(),
+            DownArrow | Ascii(VIM_D | WASD_D) => self.cursor_down(),
+            LeftArrow | Ascii(VIM_L | WASD_L) => self.cursor_left(),
+            RightArrow | Ascii(VIM_R | WASD_R) => self.cursor_right(),
             _ => {}
         }
 
         Ok(())
+    }
+
+    // ======= CURSOR MOVEMENT =======
+
+    fn cursor_up(&mut self) {
+        self.prev_cursor = self.cursor;
+
+        if self.cursor.row == 0 {
+            // Wrap to bottom
+            self.cursor.row = self.grid.row_upper_bound();
+        } else {
+            self.cursor.row -= 1;
+        }
+    }
+
+    fn cursor_down(&mut self) {
+        self.prev_cursor = self.cursor;
+
+        if self.cursor.row >= self.grid.row_upper_bound() {
+            // Wrap to top
+            self.cursor.row = 0;
+        } else {
+            self.cursor.row += 1;
+        }
+    }
+
+    fn cursor_left(&mut self) {
+        self.prev_cursor = self.cursor;
+
+        if self.cursor.col == 0 {
+            // Wrap to right
+            self.cursor.col = self.grid.col_upper_bound();
+        } else {
+            self.cursor.col -= 1;
+        }
+    }
+
+    fn cursor_right(&mut self) {
+        self.prev_cursor = self.cursor;
+
+        if self.cursor.col >= self.grid.col_upper_bound() {
+            // Wrap to left
+            self.cursor.col = 0;
+        } else {
+            self.cursor.col += 1;
+        }
     }
 }
 impl Drop for Game {
@@ -294,25 +448,35 @@ unsafe extern "C" fn start(stack_top: *const usize) -> ! {
     process::exit(exit_code);
 }
 
-fn poll_input() -> Result<u8, Errno> {
-    let mut byte_buf = [0];
+fn read_keypress() -> Result<Key, Errno> {
+    let mut stdin = STDIN.lock();
 
     // Try to read a byte from stdin.
-    loop {
-        match STDIN.lock().read(&mut byte_buf) {
-            Ok(0) | Err(Errno::Eagain) => {
-                // Nothing was read. Try again.
-            }
-            Ok(_) => {
-                // A byte was read. Return it.
-                return Ok(byte_buf[0]);
-            }
-            Err(e) => {
-                // Non-retryable error. Return the error.
-                return Err(e);
-            }
-        }
+    let first_byte = stdin.await_read_byte()?;
+
+    // If it's not an escape code, return it. Otherwise, continue...
+    if first_byte != ESC_CODE {
+        return Ok(first_byte.into());
     }
+
+    // Byte is the beginning of an escape sequence. Continue reading.
+    let mut seq_buf = [0; KEYPRESS_BUF_LEN];
+    if stdin.read(slice::from_mut(&mut seq_buf[0]))? != 1
+        || stdin.read(slice::from_mut(&mut seq_buf[1]))? != 1
+    {
+        // Just the escape code or an incomplete escape sequence was sent. Return.
+        return Ok(first_byte.into());
+    }
+
+    stdin.read(slice::from_mut(&mut seq_buf[2]))?;
+
+    // If the char after the escape code _isn't_ `[`, then this isn't an ANSI escape sequence.
+    // Return the escape code itself.
+    if seq_buf.first() != Some(&b'[') {
+        return Ok(first_byte.into());
+    }
+
+    Ok(Key::try_from_esc(seq_buf).unwrap_or(first_byte.into()))
 }
 
 fn get_win_size() -> WinSize {
