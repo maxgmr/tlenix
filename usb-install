@@ -98,7 +98,8 @@ find "${SRC_BIN_DIR}" -maxdepth 1 -name '*.rs' |
     grep -v -E './(init|initramfs_init)\.rs$' |
     sed 's|.*/||; s|\.rs$||' |
     while read -r name; do
-        sudo cp "${BINARIES_DIR}/${name}" "${ROOTFS_DIR}/bin"
+        dest_name="${name//_/-}"
+        sudo cp "${BINARIES_DIR}/${name}" "$INITRAMFS_DIR/bin/${dest_name}"
     done
 
 # Unmount partitions
